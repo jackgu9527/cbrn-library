@@ -1248,20 +1248,27 @@ try:
                     for unit_name in return_df['班隊'].unique():
                         # ✨ 第一層：班隊專屬卡片
                         with st.container(border=True):
-                            # 🚀 終極版標題：置中對齊 + 22px適中大小 + 粗體 + Streamlit主題藍
+                            
+                            # 🚀 終極版標題：自動縮放(Clamp) + 強制不換行(nowrap) + Streamlit主題藍
                             st.markdown(
                                 f"""
-                                <div style="text-align: center; margin-bottom: 10px;">
-                                    <span style="font-size: 20px; font-weight: bold; color: #1C83E1;">
-                                        【{unit_name}】
+                                <div style="text-align: center; margin-bottom: 10px; width: 100%; overflow: hidden;">
+                                    <span style="
+                                        font-size: clamp(14px, 4.5vw, 22px); 
+                                        font-weight: bold; 
+                                        color: #1C83E1;
+                                        white-space: nowrap;
+                                        letter-spacing: -0.5px;
+                                    ">
+                                        🏢 【{unit_name}】
                                     </span>
                                 </div>
                                 """, 
                                 unsafe_allow_html=True
                             )
                             
-                            # 🚀 特殊化：為班隊全收按鈕加上專屬提示與更長的文字
-                            st.markdown("**🎯 班隊批次快捷操作：**")
+                            # 🚀 特殊化：為班隊全收按鈕加上專屬提示
+                            st.caption("🎯 **班隊批次快捷操作：**")
                             unit_actions[unit_name] = st.radio(
                                 f"【{unit_name}】批次處理",
                                 ["🔽展開","✅全審核","❌全踢退"],
