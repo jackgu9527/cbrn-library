@@ -692,8 +692,9 @@ try:
                 if st.button("🚀 送出借閱申請", type="primary"):
                     now_time = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S")
                     for b_name, qty in borrow_requests.items():
-                        c.execute("INSERT INTO borrow_requests (login_id, unit, book_name, quantity, status, request_time) VALUES (%s, %s, %s, %s, %s, %s)", 
-                                  (st.session_state.login_id, st.session_state.unit, b_name, qty, '待審核', now_time))
+                        # 已經移除不存在的 request_time 欄位，回歸原本設定
+                        c.execute("INSERT INTO borrow_requests (login_id, unit, book_name, quantity, status) VALUES (%s, %s, %s, %s, %s)", 
+                                  (st.session_state.login_id, st.session_state.unit, b_name, qty, '待審核'))
                         c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)",
                                   (now_time, st.session_state.login_id, "申請借閱", f"申請 {b_name} {qty} 本"))
                     conn.commit()
