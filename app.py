@@ -1087,583 +1087,395 @@ try:
                     st.info("目前無資料可發放權限。")
 
         elif st.session_state.role == 'L4':
-            is_doc = "人事" in st.session_state.title or "文書" in st.session_state.title
-            tabs = st.tabs(["註冊開通", "準則借閱核准", "準則歸還", "結訓日與帳密修改", "💬 line借還書回報"]) if is_doc else st.tabs(["註冊開通", "準則歸還", "結訓日與帳密修改", "💬 Line借還書回報"])
             sq_list = [s.strip() for s in st.session_state.squadron.split(',')]
             sq_in_clause = "'" + "','".join(sq_list) + "'"
+            is_doc = "人事" in st.session_state.title or "文書" in st.session_state.title
+
+            if menu == "👥 帳號管理":
+                st.subheader("👥 人事與帳號管理中心")
+                acc_tabs = st.tabs(["📝 新進班隊開通", "👤 結訓日與復權救援"])
                 
-            with tabs[0]:
-                st.subheader("📝 班隊註冊開通")
-                reg_df = pd.read_sql_query(f"SELECT id, squadron as 中隊, unit as 班隊, login_id as 帳號, discharge_date as 結訓日 FROM users WHERE status='待審核' AND squadron IN ({sq_in_clause})", conn)
-                if not reg_df.empty:
-                    reg_df.insert(0, "核准", False)
-                    edited_reg = st.data_editor(reg_df, hide_index=True)
-                    sel_reg = edited_reg[edited_reg["核准"] == True]["id"].tolist()
-                    if st.button("✅ 批次開通勾選帳號") and sel_reg:
-                        c = conn.cursor()
-                        c.execute(f"UPDATE users SET status='啟用' WHERE id IN ({','.join(map(str, sel_reg))})")
-                        conn.commit()
-                        st.success("已成功開通！")
-                        st.rerun()
-                else:
-                    st.info("目前無待審核的註冊。")
-                    
-            if is_doc:
-                with tabs[1]:
-                    st.subheader("📚 借閱準則審核")
-                    req_df = pd.read_sql_query(f"SELECT br.id as 單號, br.login_id as 帳號, br.unit as 班隊, br.book_name as 書名, br.quantity as 申請數量 FROM borrow_requests br JOIN users u ON br.login_id = u.login_id WHERE br.status='待審核' AND u.squadron IN ({sq_in_clause}) ORDER BY br.unit, br.book_name, br.id", conn)
-                    
-                    if not req_df.empty:
-                        # 預先計算持有數量，避免在 UI 迴圈中拖慢效能
-                        owned_counts = []
-                        c = conn.cursor()
-                        for _, row in req_df.iterrows():
-                            c.execute(f"SELECT COUNT(*) FROM books WHERE owner_id='{row['帳號']}' AND book_name='{row['書名']}' AND status IN ('借閱中', '保留待領取', '少領異常')")
-                            owned_counts.append(c.fetchone()[0])
-                        req_df['已持有數'] = owned_counts
-                        
-                        st.caption("**【快捷核准】**：班隊「✅全核准」或準則「✅核准」\n**【單筆修改】**：選擇「📋自訂」，修改核准發放的數量(填 0 即為踢退)。")
-                        
-                        unit_actions = {}
-                        book_actions = {}
-                        final_decisions = {} # 系統大腦：自動蒐集畫面上所有單號的最終核准數量
-                        
-                        for unit_name in req_df['班隊'].unique():
-                            # ✨ 第一層：班隊專屬卡片
-                            with st.container(border=True):
-                                # 🚀 終極版標題：自動縮放 + 強制不換行 + Streamlit主題藍
-                                st.markdown(
-                                    f"""
-                                    <div style="text-align: center; margin-bottom: 10px; width: 100%; overflow: hidden;">
-                                        <span style="
-                                            font-size: clamp(14px, 4.5vw, 22px); 
-                                            font-weight: bold; 
-                                            color: #1C83E1;
-                                            white-space: nowrap;
-                                            letter-spacing: -0.5px;
-                                        ">
-                                            【{unit_name}】
-                                        </span>
-                                    </div>
-                                    """, 
-                                    unsafe_allow_html=True
-                                )
-                                
-                                st.caption("🎯 **班隊快捷核准操作：**")
-                                unit_actions[unit_name] = st.radio(
-                                    f"【{unit_name}】批次處理",
-                                    ["🔽展開", "✅全核准", "❌全踢退"],
-                                    horizontal=True,
-                                    key=f"u_req_{unit_name}",
-                                    label_visibility="collapsed"
-                                )
-                                
-                                unit_df = req_df[req_df['班隊'] == unit_name]
-                                
-                                if unit_actions[unit_name] == "✅全核准":
-                                    st.success(f"✨ 將全數核准發放【{unit_name}】申請的所有準則！")
-                                    for _, row in unit_df.iterrows():
-                                        final_decisions[row['單號']] = row['申請數量']
-                                elif unit_actions[unit_name] == "❌全踢退":
-                                    st.error(f"🚨 將全數踢退【{unit_name}】申請的所有準則！")
-                                    for _, row in unit_df.iterrows():
-                                        final_decisions[row['單號']] = 0
-                                else:
-                                    st.divider() # 畫一條線，隔開班隊總開關與底下書本明細
-                                    for _, row in unit_df.iterrows():
-                                        req_id = row['單號']
-                                        b_name = row['書名']
-                                        req_qty = row['申請數量']
-                                        owned = row['已持有數']
-                                        
-                                        st.markdown(f"**📘 {b_name}** (申請: **{req_qty}** 本 | 已持有: {owned} 本)")
-                                        
-                                        # 🚀 降維打擊：將表格降級為三個簡單按鈕
-                                        book_actions[req_id] = st.radio(
-                                            f"處理 {req_id}",
-                                            ["📋自訂", "✅核准", "❌踢退"],
-                                            horizontal=True,
-                                            key=f"b_req_rad_{req_id}",
-                                            label_visibility="collapsed"
-                                        )
-                                        
-                                        if book_actions[req_id] == "✅核准":
-                                            st.success(f"✨ 核准發放 {req_qty} 本")
-                                            final_decisions[req_id] = req_qty
-                                        elif book_actions[req_id] == "❌踢退":
-                                            st.error(f"🚨 踢退此項申請")
-                                            final_decisions[req_id] = 0
-                                        else:
-                                            # 📋 展開無邊框微型輸入框，專門處理砍單
-                                            approve_qty = st.number_input(
-                                                f"設定核准數量", 
-                                                min_value=0, 
-                                                max_value=int(req_qty), 
-                                                value=int(req_qty), 
-                                                key=f"num_{req_id}",
-                                                help="輸入 0 視同踢退此項目"
-                                            )
-                                            final_decisions[req_id] = approve_qty
-                                        st.write("") # 增加項目間距
+                with acc_tabs[0]:
+                    st.markdown("#### 待審核名單")
+                    reg_df = pd.read_sql_query(f"SELECT id, squadron as 中隊, unit as 班隊, login_id as 帳號, discharge_date as 結訓日 FROM users WHERE status='待審核' AND squadron IN ({sq_in_clause})", conn)
+                    if not reg_df.empty:
+                        reg_df.insert(0, "✅ 開通", False)
+                        reg_df.insert(1, "❌ 否決(刪除)", False)
+                        edited_reg = st.data_editor(reg_df, hide_index=True)
+                        if st.button("🚀 送出審核結果", type="primary"):
+                            c = conn.cursor()
+                            to_approve = edited_reg[edited_reg["✅ 開通"] == True]["id"].tolist()
+                            to_reject = edited_reg[edited_reg["❌ 否決(刪除)"] == True]["id"].tolist()
+                            if to_approve:
+                                c.execute(f"UPDATE users SET status='啟用' WHERE id IN ({','.join(map(str, to_approve))})")
+                            if to_reject:
+                                c.execute(f"DELETE FROM users WHERE id IN ({','.join(map(str, to_reject))})")
+                            conn.commit()
+                            st.success(f"已處理 {len(to_approve)} 筆開通，{len(to_reject)} 筆刪除！")
+                            import time; time.sleep(1.5); st.rerun()
+                    else:
+                        st.info("目前無待審核的註冊申請。")
+
+                with acc_tabs[1]:
+                    st.markdown("#### 結訓日修改與凍結救援")
+                    l5_users = pd.read_sql_query(f"SELECT id, squadron as 中隊, unit as 班隊, login_id as 訓員帳號, discharge_date as 結訓日, status as 狀態 FROM users WHERE role='L5' AND status IN ('啟用', '結訓凍結') AND squadron IN ({sq_in_clause})", conn)
+                    if not l5_users.empty:
+                        l5_users['結訓日'] = pd.to_datetime(l5_users['結訓日'], errors='coerce').dt.date
+                        edited_date = st.data_editor(
+                            l5_users, hide_index=True, disabled=["id", "中隊", "班隊", "訓員帳號", "狀態"], 
+                            column_config={"id": None, "結訓日": st.column_config.DateColumn("新結訓日期", format="YYYY-MM-DD")}
+                        )
+                        if st.button("💾 儲存變更 (凍結帳號將自動復權)"):
+                            c = conn.cursor()
+                            has_err = False
+                            for index, row in edited_date.iterrows():
+                                if pd.notna(row['結訓日']):
+                                    try:
+                                        u_id = int(row['id'])
+                                        new_date = str(row['結訓日'])
+                                        new_status = '啟用' if row['狀態'] == '結訓凍結' else row['狀態']
+                                        c.execute("UPDATE users SET discharge_date=%s, status=%s WHERE id=%s", (new_date, new_status, u_id))
+                                    except Exception:
+                                        has_err = True
+                            if not has_err:
+                                conn.commit()
+                                st.success("✅ 結訓日期已更新！若有凍結帳號也已一併復權。")
+                                import time; time.sleep(1.5); st.rerun()
+                            else:
+                                st.error("❌ 更新結訓日發生異常！")
                         
                         st.markdown("---")
-                        # ✨ 單一送出按鈕：直接搜集畫面上所有的決定寫入資料庫
-                        if st.button("💾 送出核准結果", type="primary", use_container_width=True):
+                        # 密碼重置區塊
+                        reset_df = l5_users[['id', '中隊', '班隊', '訓員帳號']].copy()
+                        reset_df.insert(0, "選取", False)
+                        st.markdown("#### 🔄 密碼救援")
+                        edited_u = st.data_editor(reset_df, hide_index=True, column_config={"id": None})
+                        sel_reset = edited_u[edited_u["選取"] == True]["id"].tolist()
+                        if st.button("🔄 勾選批次重置為 army1234") and sel_reset:
                             c = conn.cursor()
-                            processed_count = 0
-                            
-                            for _, row in req_df.iterrows():
-                                req_id = row['單號']
-                                req_login = row['帳號']
-                                req_book = row['書名']
-                                req_qty = row['申請數量']
-                                req_unit = row['班隊']
-                                
-                                # 系統大腦精準抓取幹部的最終決定數字
-                                approve_qty = final_decisions.get(req_id, 0)
-                                if approve_qty > req_qty: approve_qty = req_qty
-                                if approve_qty < 0: approve_qty = 0
-                                
-                                # 原汁原味的資料庫更新邏輯，絕對安全
-                                c.execute(f"SELECT id FROM books WHERE book_name='{req_book}' AND status='審核中(已圈存)' AND owner_id='{req_login}' LIMIT {req_qty}")
-                                reserved_ids = [b[0] for b in c.fetchall()]
-                                approved_ids = reserved_ids[:approve_qty]
-                                rejected_ids = reserved_ids[approve_qty:]
-                                
-                                if approved_ids: c.execute(f"UPDATE books SET status='保留待領取' WHERE id IN ({','.join(map(str, approved_ids))})")
-                                if rejected_ids: c.execute(f"UPDATE books SET status='在庫', owner_id='在庫' WHERE id IN ({','.join(map(str, rejected_ids))})")
-                                    
-                                now_time = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S")
-                                if approve_qty > 0:
-                                    c.execute(f"UPDATE borrow_requests SET status='已核准(實發{approve_qty}本)' WHERE id={req_id}")
-                                    c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", (now_time, st.session_state.login_id, "核准借閱", f"核准 {req_book} {approve_qty} 本給 {req_unit}"))
-                                else:
-                                    c.execute(f"UPDATE borrow_requests SET status='已踢退(砍單退件)' WHERE id={req_id}")
-                                    c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", (now_time, st.session_state.login_id, "踢退借閱", f"全數踢退 {req_unit} 的 {req_book} 申請"))
-                                    
-                                processed_count += 1
-                                
+                            c.execute(f"UPDATE users SET password='army1234', setup_count=1 WHERE id IN ({','.join(map(str, sel_reset))})")
                             conn.commit()
-                            st.success(f"✅ 批次審核完成！共處理 {processed_count} 筆申請。")
-                            import time
-                            time.sleep(1.5)
+                            st.success("✅ 已成功重置密碼為 army1234，並恢復 1 次修改權限！")
                             st.rerun()
                     else:
-                        st.info("目前無待核准的準則。")
+                        st.info("目前無可管理的訓員資料。")
 
-                    st.markdown("---")
-                    st.subheader("🔴 領取異常警示")
-                    abnormal_df = pd.read_sql_query(f"SELECT b.id, u.unit as 班隊, b.book_name as 書名, b.serial_number as 序號 FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.status='少領異常' AND u.squadron IN ({sq_in_clause}) ORDER BY u.unit, b.book_name", conn)
-                    
-                    if not abnormal_df.empty:
-                        st.error("⚠️ 發現訓員回報少領準則！請確認實體無誤後，將未領之額度釋放回庫房。")
-                        edited_abn_dfs = {}
-                        abn_checks = {}
-                        for unit_name in abnormal_df['班隊'].unique():
-                            st.markdown(f"### 🏢 異常單位：【{unit_name}】")
-                            unit_df = abnormal_df[abnormal_df['班隊'] == unit_name]
-                            for b_name in unit_df['書名'].unique():
-                                b_df = unit_df[unit_df['書名'] == b_name].reset_index(drop=True)
-                                qty = len(b_df)
-                                u_key = f"abn_{unit_name}_{b_name}"
-                                col_chk, col_exp = st.columns([1.5, 8.5])
-                                with col_chk:
-                                    st.write("")
-                                    abn_checks[u_key] = st.checkbox(f"☑️ 全結案 ({qty}本)", key=f"abn_all_{u_key}")
-                                with col_exp:
-                                    with st.expander(f"📘 {b_name} (待釋放 {qty} 本)"):
-                                        if abn_checks[u_key]:
-                                            st.success(f"✨ 已勾選全數結案！這 {qty} 本準則將釋放回庫房。")
-                                            edited_abn_dfs[u_key] = None
-                                        else:
-                                            b_df.insert(0, "✅ 結案", False)
-                                            edited_abn_dfs[u_key] = st.data_editor(b_df, hide_index=True, disabled=["id", "班隊", "書名", "序號"], width='stretch', column_config={"✅ 結案": st.column_config.CheckboxColumn("✅ 結案(退庫)"), "id": None, "班隊": None, "書名": None}, key=f"abn_chk_{u_key}")
-                            st.markdown("---")
-
-                        if st.button("🔄 批次釋放勾選的異常庫存", type="primary"):
-                            resolved_ids = []
-                            for unit_name in abnormal_df['班隊'].unique():
-                                unit_df = abnormal_df[abnormal_df['班隊'] == unit_name]
-                                for b_name in unit_df['書名'].unique():
-                                    u_key = f"abn_{unit_name}_{b_name}"
-                                    if abn_checks[u_key]:
-                                        full_b_df = unit_df[unit_df['書名'] == b_name]
-                                        resolved_ids.extend(full_b_df["id"].tolist())
-                                    elif edited_abn_dfs[u_key] is not None:
-                                        checked_rows = edited_abn_dfs[u_key][edited_abn_dfs[u_key]["✅ 結案"] == True]
-                                        resolved_ids.extend(checked_rows["id"].tolist())
-                            if resolved_ids:
-                                c = conn.cursor()
-                                c.execute(f"UPDATE books SET status='在庫', owner_id='在庫' WHERE id IN ({','.join(map(str, resolved_ids))})")
-                                now_time = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S")
-                                c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", (now_time, st.session_state.login_id, "異常處理", f"將少領的 {len(resolved_ids)} 本額度釋放回庫房"))
-                                conn.commit()
-                                st.success(f"✅ 成功結案！已釋放 {len(resolved_ids)} 本準則回大庫房。")
-                                import time
-                                time.sleep(1.5)
-                                st.rerun()
-                            else:
-                                st.warning("⚠️ 尚未勾選任何處理項目！")
-                    else:
-                        st.success("目前無異常少領通報。")
-
-            return_tab = tabs[2] if is_doc else tabs[1]
-            with return_tab:
-                st.subheader("📥 準則歸還")
-                return_df = pd.read_sql_query(f"SELECT b.id, u.unit as 班隊, b.book_name as 書名, b.serial_number as 序號, b.owner_id FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.status='歸還中' AND u.squadron IN ({sq_in_clause}) ORDER BY u.unit, b.book_name", conn)
+            elif menu == "📤 準則借閱核准" and is_doc:
+                st.subheader("📚 借閱準則審核")
+                req_df = pd.read_sql_query(f"SELECT br.id as 單號, br.login_id as 帳號, br.unit as 班隊, br.book_name as 書名, br.quantity as 申請數量 FROM borrow_requests br JOIN users u ON br.login_id = u.login_id WHERE br.status='待審核' AND u.squadron IN ({sq_in_clause}) ORDER BY br.unit, br.book_name, br.id", conn)
                 
-                if not return_df.empty:
-                    st.caption("**【快捷審核】**：班隊「✅ 全審核」或準則「✅ 審核」\n**【單筆審核】**：點擊「🔽 展開序號」，勾選序號。")
+                if not req_df.empty:
+                    owned_counts = []
+                    c = conn.cursor()
+                    for _, row in req_df.iterrows():
+                        c.execute(f"SELECT COUNT(*) FROM books WHERE owner_id='{row['帳號']}' AND book_name='{row['書名']}' AND status IN ('借閱中', '保留待領取', '少領異常')")
+                        owned_counts.append(c.fetchone()[0])
+                    req_df['已持有數'] = owned_counts
+                    
+                    st.caption("**【快捷核准】**：班隊「✅全核准」或準則「✅核准」\n**【單筆修改】**：選擇「📋自訂」，修改核准發放的數量(填 0 即為踢退)。")
                     
                     unit_actions = {}
                     book_actions = {}
-                    edited_receive_dfs = {}
+                    final_decisions = {}
                     
-                    for unit_name in return_df['班隊'].unique():
-                        # ✨ 第一層：班隊專屬卡片
+                    for unit_name in req_df['班隊'].unique():
                         with st.container(border=True):
-                            
-                            # 🚀 終極版標題：自動縮放(Clamp) + 強制不換行(nowrap) + Streamlit主題藍
                             st.markdown(
-                                f"""
-                                <div style="text-align: center; margin-bottom: 10px; width: 100%; overflow: hidden;">
-                                    <span style="
-                                        font-size: clamp(14px, 4.5vw, 22px); 
-                                        font-weight: bold; 
-                                        color: #1C83E1;
-                                        white-space: nowrap;
-                                        letter-spacing: -0.5px;
-                                    ">
-                                        【{unit_name}】
-                                    </span>
-                                </div>
-                                """, 
-                                unsafe_allow_html=True
+                                f"""<div style="text-align: center; margin-bottom: 10px; width: 100%; overflow: hidden;">
+                                    <span style="font-size: clamp(14px, 4.5vw, 22px); font-weight: bold; color: #1C83E1; white-space: nowrap; letter-spacing: -0.5px;">【{unit_name}】</span>
+                                </div>""", unsafe_allow_html=True
                             )
                             
-                            # 🚀 特殊化：為班隊全收按鈕加上專屬提示
-                            st.caption("🎯 **班隊快捷審核操作：**")
-                            unit_actions[unit_name] = st.radio(
-                                f"【{unit_name}】批次處理",
-                                ["🔽展開","✅全審核","❌全踢退"],
-                                horizontal=True,
-                                key=f"u_rad_{unit_name}",
-                                label_visibility="collapsed"
-                            )
+                            unit_actions[unit_name] = st.radio(f"【{unit_name}】批次處理", ["🔽展開", "✅全核准", "❌全踢退"], horizontal=True, key=f"u_req_{unit_name}", label_visibility="collapsed")
+                            unit_df = req_df[req_df['班隊'] == unit_name]
                             
-                            if unit_actions[unit_name] == "✅ 全審核":
-                                st.success(f"✨ 將全數審核【{unit_name}】所有歸還準則！")
-                            elif unit_actions[unit_name] == "❌ 全踢退":
-                                st.error(f"🚨 將全數踢退【{unit_name}】所有歸還準則！")
+                            if unit_actions[unit_name] == "✅全核准":
+                                st.success(f"✨ 將全數核准發放【{unit_name}】申請的所有準則！")
+                                for _, row in unit_df.iterrows(): final_decisions[row['單號']] = row['申請數量']
+                            elif unit_actions[unit_name] == "❌全踢退":
+                                st.error(f"🚨 將全數踢退【{unit_name}】申請的所有準則！")
+                                for _, row in unit_df.iterrows(): final_decisions[row['單號']] = 0
                             else:
-                                st.divider() # 畫一條線，隔開班隊總開關與底下書本📋明細
-                                unit_df = return_df[return_df['班隊'] == unit_name]
-                                for b_name in unit_df['書名'].unique():
-                                    b_df = unit_df[unit_df['書名'] == b_name].reset_index(drop=True)
-                                    qty = len(b_df)
-                                    u_b_key = f"{unit_name}_{b_name}"
+                                st.divider()
+                                for _, row in unit_df.iterrows():
+                                    req_id, b_name, req_qty, owned = row['單號'], row['書名'], row['申請數量'], row['已持有數']
+                                    st.markdown(f"**📘 {b_name}** (申請: **{req_qty}** 本 | 已持有: {owned} 本)")
+                                    book_actions[req_id] = st.radio(f"處理 {req_id}", ["📋自訂", "✅核准", "❌踢退"], horizontal=True, key=f"b_req_rad_{req_id}", label_visibility="collapsed")
                                     
-                                    # 🚀 降級：拿掉標題符號，改用普通粗體字，讓準則名稱不要太大
-                                    st.markdown(f"**📘 {b_name}** (待處理 {qty} 本)")
-                                    
-                                    # 書本層級的按鈕維持精簡
-                                    book_actions[u_b_key] = st.radio(
-                                        f"{b_name} 處理",
-                                        ["📋明細", "✅ 審核", "❌ 踢退"],
-                                        horizontal=True,
-                                        key=f"b_rad_{u_b_key}",
-                                        label_visibility="collapsed"
-                                    )
-                                    
-                                    if book_actions[u_b_key] == "✅ 審核":
-                                        st.success(f"✨ 將全審核此項 {qty} 本！")
-                                    elif book_actions[u_b_key] == "❌ 踢退":
-                                        st.error(f"🚨 將全踢退此項 {qty} 本！")
+                                    if book_actions[req_id] == "✅核准":
+                                        st.success(f"✨ 核准發放 {req_qty} 本"); final_decisions[req_id] = req_qty
+                                    elif book_actions[req_id] == "❌踢退":
+                                        st.error(f"🚨 踢退此項申請"); final_decisions[req_id] = 0
                                     else:
-                                        with st.expander("🔽 展開序號"):
-                                            b_df.insert(0, "❌踢退", False)
-                                            b_df.insert(0, "✅審核", False)
-                                            edited_receive_dfs[u_b_key] = st.data_editor(
-                                                b_df, 
-                                                hide_index=True, 
-                                                disabled=["id", "班隊", "書名", "序號", "owner_id"], 
-                                                use_container_width=True, 
-                                                column_config={
-                                                    "✅審核": st.column_config.CheckboxColumn("✅審核"), 
-                                                    "❌踢退": st.column_config.CheckboxColumn("❌踢退"), 
-                                                    "id": None, "班隊": None, "書名": None, "owner_id": None
-                                                }, 
-                                                key=f"editor_{u_b_key}"
-                                            )
-                                    st.write("") # 增加項目間距
+                                        approve_qty = st.number_input(f"設定核准數量", min_value=0, max_value=int(req_qty), value=int(req_qty), key=f"num_{req_id}", help="輸入 0 視同踢退此項目")
+                                        final_decisions[req_id] = approve_qty
+                                    st.write("")
                     
                     st.markdown("---")
-                    if st.button("💾 送出審核結果", type="primary", use_container_width=True):
-                        received_ids = []
-                        rejected_ids = []
-                        
-                        for unit_name in return_df['班隊'].unique():
-                            if unit_actions[unit_name] == "✅ 全審核":
-                                unit_df = return_df[return_df['班隊'] == unit_name]
-                                received_ids.extend(unit_df['id'].tolist())
-                            elif unit_actions[unit_name] == "❌ 全踢退":
-                                unit_df = return_df[return_df['班隊'] == unit_name]
-                                rejected_ids.extend(unit_df['id'].tolist())
-                            else:
-                                unit_df = return_df[return_df['班隊'] == unit_name]
-                                for b_name in unit_df['書名'].unique():
-                                    u_b_key = f"{unit_name}_{b_name}"
-                                    if book_actions.get(u_b_key) == "✅ 審核":
-                                        b_df = unit_df[unit_df['書名'] == b_name]
-                                        received_ids.extend(b_df['id'].tolist())
-                                    elif book_actions.get(u_b_key) == "❌ 踢退":
-                                        b_df = unit_df[unit_df['書名'] == b_name]
-                                        rejected_ids.extend(b_df['id'].tolist())
-                                    elif edited_receive_dfs.get(u_b_key) is not None:
-                                        edited_df = edited_receive_dfs[u_b_key]
-                                        recv_rows = edited_df[edited_df["✅審核"] == True]
-                                        received_ids.extend(recv_rows["id"].tolist())
-                                        rej_rows = edited_df[edited_df["❌踢退"] == True]
-                                        rejected_ids.extend(rej_rows["id"].tolist())
-                        
-                        has_action = False
+                    if st.button("💾 送出核准結果", type="primary", use_container_width=True):
                         c = conn.cursor()
-                        now_time = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S")
-                        
-                        if received_ids:
-                            id_list_str = ','.join(map(str, received_ids))
-                            c.execute(f"SELECT u.unit, b.book_name, COUNT(b.id) FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.id IN ({id_list_str}) GROUP BY u.unit, b.book_name")
-                            recv_details = c.fetchall()
+                        processed_count = 0
+                        for _, row in req_df.iterrows():
+                            req_id, req_login, req_book, req_qty, req_unit = row['單號'], row['帳號'], row['書名'], row['申請數量'], row['班隊']
+                            approve_qty = final_decisions.get(req_id, 0)
+                            if approve_qty > req_qty: approve_qty = req_qty
+                            if approve_qty < 0: approve_qty = 0
                             
-                            c.execute(f"UPDATE books SET status='在庫', owner_id='在庫' WHERE id IN ({id_list_str})")
+                            c.execute(f"SELECT id FROM books WHERE book_name='{req_book}' AND status='在庫' LIMIT {req_qty}")
+                            reserved_ids = [b[0] for b in c.fetchall()]
+                            if not reserved_ids:
+                                c.execute(f"SELECT id FROM books WHERE book_name='{req_book}' AND status='審核中(已圈存)' AND owner_id='{req_login}' LIMIT {req_qty}")
+                                reserved_ids = [b[0] for b in c.fetchall()]
+                                
+                            approved_ids, rejected_ids = reserved_ids[:approve_qty], reserved_ids[approve_qty:]
                             
-                            for u_name, b_name, qty in recv_details:
-                                c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", 
-                                          (now_time, st.session_state.login_id, "歸還審核", f"核准 {u_name} 歸還 {b_name} {qty} 本"))
-                            has_action = True
-                            
-                        if rejected_ids:
-                            id_list_str = ','.join(map(str, rejected_ids))
-                            c.execute(f"SELECT u.unit, b.book_name, COUNT(b.id) FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.id IN ({id_list_str}) GROUP BY u.unit, b.book_name")
-                            rej_details = c.fetchall()
-                            
-                            c.execute(f"UPDATE books SET status='借閱中' WHERE id IN ({id_list_str})")
-                            
-                            for u_name, b_name, qty in rej_details:
-                                c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", 
-                                          (now_time, st.session_state.login_id, "踢退歸還", f"踢退 {u_name} 歸還 {b_name} {qty} 本"))
-                            has_action = True
-                            
-                        if has_action:
-                            conn.commit()
-                            st.success(f"✅ 審核作業完成！收訖 {len(received_ids)} 本，踢退退回 {len(rejected_ids)} 本。")
-                            import time
-                            time.sleep(1.5)
-                            st.rerun()
-                        else:
-                            st.warning("⚠️ 您尚未選擇任何審核或踢退動作！")
+                            if approved_ids: c.execute(f"UPDATE books SET status='保留待領取', owner_id='{req_login}' WHERE id IN ({','.join(map(str, approved_ids))})")
+                            if rejected_ids: c.execute(f"UPDATE books SET status='在庫', owner_id='在庫' WHERE id IN ({','.join(map(str, rejected_ids))})")
+                                
+                            now_time = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S")
+                            if approve_qty > 0:
+                                c.execute(f"UPDATE borrow_requests SET status='已核准(實發{approve_qty}本)' WHERE id={req_id}")
+                                c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", (now_time, st.session_state.login_id, "核准借閱", f"核准 {req_book} {approve_qty} 本給 {req_unit}"))
+                            else:
+                                c.execute(f"UPDATE borrow_requests SET status='已踢退(砍單退件)' WHERE id={req_id}")
+                                c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", (now_time, st.session_state.login_id, "踢退借閱", f"全數踢退 {req_unit} 的 {req_book} 申請"))
+                            processed_count += 1
+                        conn.commit()
+                        st.success(f"✅ 批次審核完成！共處理 {processed_count} 筆申請。")
+                        import time; time.sleep(1.5); st.rerun()
                 else:
-                    st.success("目前各班隊皆無待歸還準則！")
+                    st.info("目前無待核准的準則。")
 
                 st.markdown("---")
-                st.subheader("🚨 結訓準則未繳")
-                st.info("💡 這裡顯示已結訓、帳號凍結清單。\n準則都已歸還，請勾選並點擊「已歸還」。")
+                st.subheader("🔴 領取異常警示 (少領退庫)")
+                abnormal_df = pd.read_sql_query(f"SELECT b.id, u.unit as 班隊, b.book_name as 書名, b.serial_number as 序號 FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.status='少領異常' AND u.squadron IN ({sq_in_clause}) ORDER BY u.unit, b.book_name", conn)
+                if not abnormal_df.empty:
+                    st.error("⚠️ 發現訓員回報少領準則！請確認實體無誤後，將未領之額度釋放回庫房。")
+                    edited_abn_dfs, abn_checks = {}, {}
+                    for unit_name in abnormal_df['班隊'].unique():
+                        st.markdown(f"### 🏢 異常單位：【{unit_name}】")
+                        unit_df = abnormal_df[abnormal_df['班隊'] == unit_name]
+                        for b_name in unit_df['書名'].unique():
+                            b_df = unit_df[unit_df['書名'] == b_name].reset_index(drop=True)
+                            u_key = f"abn_{unit_name}_{b_name}"
+                            col_chk, col_exp = st.columns([1.5, 8.5])
+                            with col_chk:
+                                st.write(""); abn_checks[u_key] = st.checkbox(f"☑️ 全結案 ({len(b_df)}本)", key=f"abn_all_{u_key}")
+                            with col_exp:
+                                with st.expander(f"📘 {b_name} (待釋放 {len(b_df)} 本)"):
+                                    if abn_checks[u_key]:
+                                        st.success(f"✨ 已勾選全數結案！這 {len(b_df)} 本準則將釋放回庫房。")
+                                        edited_abn_dfs[u_key] = None
+                                    else:
+                                        b_df.insert(0, "✅ 結案", False)
+                                        edited_abn_dfs[u_key] = st.data_editor(b_df, hide_index=True, disabled=["id", "班隊", "書名", "序號"], width='stretch', column_config={"✅ 結案": st.column_config.CheckboxColumn("✅ 結案(退庫)"), "id": None, "班隊": None, "書名": None}, key=f"abn_chk_{u_key}")
+                        st.markdown("---")
+                    if st.button("🔄 批次釋放勾選的異常庫存", type="primary"):
+                        resolved_ids = []
+                        for unit_name in abnormal_df['班隊'].unique():
+                            unit_df = abnormal_df[abnormal_df['班隊'] == unit_name]
+                            for b_name in unit_df['書名'].unique():
+                                u_key = f"abn_{unit_name}_{b_name}"
+                                if abn_checks[u_key]: resolved_ids.extend(unit_df[unit_df['書名'] == b_name]["id"].tolist())
+                                elif edited_abn_dfs[u_key] is not None: resolved_ids.extend(edited_abn_dfs[u_key][edited_abn_dfs[u_key]["✅ 結案"] == True]["id"].tolist())
+                        if resolved_ids:
+                            c = conn.cursor()
+                            c.execute(f"UPDATE books SET status='在庫', owner_id='在庫' WHERE id IN ({','.join(map(str, resolved_ids))})")
+                            now_time = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S")
+                            c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", (now_time, st.session_state.login_id, "異常處理", f"將少領的 {len(resolved_ids)} 本額度釋放回庫房"))
+                            conn.commit()
+                            st.success(f"✅ 成功結案！已釋放 {len(resolved_ids)} 本準則回大庫房。")
+                            import time; time.sleep(1.5); st.rerun()
+                        else:
+                            st.warning("⚠️ 尚未勾選任何處理項目！")
+                else:
+                    st.success("目前無異常少領通報。")
+
+            elif menu == "📥 準則歸還核准":
+                st.subheader("📥 歸還點收與遺失追查")
+                ret_tabs = st.tabs(["📥 待點收清單", "🚨 遺失裝備追查榜"])
                 
-                cbrn_df = pd.read_sql_query(f"SELECT b.id, u.login_id as 扣押帳號, u.unit as 原班隊, b.book_name as 書名, b.serial_number as 序號 FROM books b JOIN users u ON b.owner_id = u.login_id WHERE u.login_id LIKE 'cbrn%' AND u.squadron IN ({sq_in_clause}) ORDER BY u.login_id, b.book_name", conn)
-                
-                if not cbrn_df.empty:
-                    cbrn_df.insert(0, "✅ 已歸還", False)
-                    edited_cbrn = st.data_editor(cbrn_df, hide_index=True, disabled=["id", "扣押帳號", "原班隊", "書名", "序號"], width='stretch', column_config={"✅ 已歸還": st.column_config.CheckboxColumn("✅ 已歸還"), "id": None}, key="cbrn_recovery_table")
-                    
-                    if st.button("🚔 批次執行已歸還", type="primary"):
-                        recovered_rows = edited_cbrn[edited_cbrn["✅ 已歸還"] == True]
-                        recovered_ids = recovered_rows["id"].tolist()
+                with ret_tabs[0]:
+                    return_df = pd.read_sql_query(f"SELECT b.id, u.unit as 班隊, b.book_name as 書名, b.serial_number as 序號, b.owner_id FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.status='歸還中' AND u.squadron IN ({sq_in_clause}) ORDER BY u.unit, b.book_name", conn)
+                    if not return_df.empty:
+                        st.caption("**【快捷審核】**：班隊「✅ 全收」或準則「✅ 審核」\n**【踢退為遺失】**：若實體短少，請點「❌ 踢退」，該裝備將轉入『遺失追查榜』。")
+                        unit_actions, book_actions, edited_receive_dfs = {}, {}, {}
                         
-                        if recovered_ids:
+                        for unit_name in return_df['班隊'].unique():
+                            with st.container(border=True):
+                                st.markdown(
+                                    f"""<div style="text-align: center; margin-bottom: 10px; width: 100%; overflow: hidden;">
+                                        <span style="font-size: clamp(14px, 4.5vw, 22px); font-weight: bold; color: #1C83E1; white-space: nowrap; letter-spacing: -0.5px;">【{unit_name}】</span>
+                                    </div>""", unsafe_allow_html=True
+                                )
+                                unit_actions[unit_name] = st.radio(f"【{unit_name}】批次處理", ["🔽展開","✅全審核","❌全踢退"], horizontal=True, key=f"u_rad_{unit_name}", label_visibility="collapsed")
+                                
+                                if unit_actions[unit_name] == "✅全審核":
+                                    st.success(f"✨ 將全數審核【{unit_name}】所有歸還準則！")
+                                elif unit_actions[unit_name] == "❌全踢退":
+                                    st.error(f"🚨 將全數踢退並列為遺失！")
+                                else:
+                                    st.divider()
+                                    unit_df = return_df[return_df['班隊'] == unit_name]
+                                    for b_name in unit_df['書名'].unique():
+                                        b_df = unit_df[unit_df['書名'] == b_name].reset_index(drop=True)
+                                        u_b_key = f"{unit_name}_{b_name}"
+                                        st.markdown(f"**📘 {b_name}** (待處理 {len(b_df)} 本)")
+                                        book_actions[u_b_key] = st.radio(f"{b_name} 處理", ["📋明細", "✅ 審核", "❌ 踢退"], horizontal=True, key=f"b_rad_{u_b_key}", label_visibility="collapsed")
+                                        
+                                        if book_actions[u_b_key] == "✅ 審核": st.success(f"✨ 將全審核此項 {len(b_df)} 本！")
+                                        elif book_actions[u_b_key] == "❌ 踢退": st.error(f"🚨 將全踢退此項 {len(b_df)} 本為遺失！")
+                                        else:
+                                            with st.expander("🔽 展開序號"):
+                                                b_df.insert(0, "❌踢退", False); b_df.insert(0, "✅審核", False)
+                                                edited_receive_dfs[u_b_key] = st.data_editor(
+                                                    b_df, hide_index=True, disabled=["id", "班隊", "書名", "序號", "owner_id"], use_container_width=True, 
+                                                    column_config={"✅審核": st.column_config.CheckboxColumn("✅審核"), "❌踢退": st.column_config.CheckboxColumn("❌踢退(轉遺失)"), "id": None, "班隊": None, "書名": None, "owner_id": None}, 
+                                                    key=f"editor_{u_b_key}"
+                                                )
+                                        st.write("")
+                        
+                        st.markdown("---")
+                        if st.button("💾 送出點收結果", type="primary", use_container_width=True):
+                            received_ids, rejected_ids = [], []
+                            for unit_name in return_df['班隊'].unique():
+                                if unit_actions[unit_name] == "✅全審核": received_ids.extend(return_df[return_df['班隊'] == unit_name]['id'].tolist())
+                                elif unit_actions[unit_name] == "❌全踢退": rejected_ids.extend(return_df[return_df['班隊'] == unit_name]['id'].tolist())
+                                else:
+                                    unit_df = return_df[return_df['班隊'] == unit_name]
+                                    for b_name in unit_df['書名'].unique():
+                                        u_b_key = f"{unit_name}_{b_name}"
+                                        if book_actions.get(u_b_key) == "✅ 審核": received_ids.extend(unit_df[unit_df['書名'] == b_name]['id'].tolist())
+                                        elif book_actions.get(u_b_key) == "❌ 踢退": rejected_ids.extend(unit_df[unit_df['書名'] == b_name]['id'].tolist())
+                                        elif edited_receive_dfs.get(u_b_key) is not None:
+                                            edited_df = edited_receive_dfs[u_b_key]
+                                            received_ids.extend(edited_df[edited_df["✅審核"] == True]["id"].tolist())
+                                            rejected_ids.extend(edited_df[edited_df["❌踢退"] == True]["id"].tolist())
+                            
+                            has_action = False
                             c = conn.cursor()
                             now_time = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S")
                             
-                            c.execute(f"UPDATE books SET status='在庫', owner_id='在庫' WHERE id IN ({','.join(map(str, recovered_ids))})")
-                            c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", (now_time, st.session_state.login_id, "準則尋獲", f"從扣押帳號中尋獲並退庫共 {len(recovered_ids)} 本準則"))
-                            
-                            unique_cbrn_accounts = recovered_rows["扣押帳號"].unique()
-                            for cbrn_acc in unique_cbrn_accounts:
-                                c.execute(f"SELECT COUNT(*) FROM books WHERE owner_id='{cbrn_acc}' AND status!='在庫'")
-                                if int(c.fetchone()[0]) == 0:
-                                    c.execute(f"DELETE FROM users WHERE login_id='{cbrn_acc}'")
-                                    c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", (now_time, "SYSTEM", "欠單結案", f"扣押帳號 {cbrn_acc} 欠裝已全數追回，帳號徹底銷毀。"))
-                            
-                            conn.commit()
-                            st.success(f"✅ 成功追回 {len(recovered_ids)} 本準則並退回大庫房！")
-                            import time
-                            time.sleep(1.5)
-                            st.rerun()
-                        else:
-                            st.warning("⚠️ 請先勾選已歸還的準則！")
-                else:
-                    st.success("✨ 目前沒有任何結訓欠準則扣押帳號！")
-
-            rescue_tab = tabs[3] if is_doc else tabs[2]
-            with rescue_tab:
-                st.subheader("👤 訓員結訓日修改與帳密救援")
-                # 修正 1 & 2：補上 SELECT 並且保留 id，拿掉多餘的逗號
-                l5_users = pd.read_sql_query(f"SELECT id, squadron as 中隊, unit as 班隊, login_id as 訓員帳號, discharge_date as 結訓日 FROM users WHERE role='L5' AND status='啟用' AND squadron IN ({sq_in_clause})", conn)
-                
-                if not l5_users.empty:
-                    l5_users['結訓日'] = pd.to_datetime(l5_users['結訓日'], errors='coerce').dt.date
-                    
-                    # 修正 3：利用 "id": None 讓 id 在畫面上隱形，但底層仍保留資料
-                    edited_date = st.data_editor(
-                        l5_users, 
-                        hide_index=True, 
-                        disabled=["id", "中隊", "班隊", "訓員帳號"], 
-                        column_config={
-                            "id": None,  # 隱藏身分證
-                            "結訓日": st.column_config.DateColumn("結訓日期", format="YYYY-MM-DD")
-                        }
-                    )
-                    
-                    if st.button("💾 儲存結訓日變更"):
-                        c = conn.cursor()
-                        has_err = False
-                        for index, row in edited_date.iterrows():
-                            if pd.notna(row['結訓日']):
-                                try:
-                                    u_id = int(row['id']) # 這裡需要用到 id
-                                    new_date = str(row['結訓日'])
-                                    c.execute("UPDATE users SET discharge_date=%s WHERE id=%s", (new_date, u_id))
-                                except Exception:
-                                    has_err = True
-                        if not has_err:
-                            conn.commit()
-                            st.success("✅ 結訓日期已成功更新！")
-                            import time
-                            time.sleep(1)
-                            st.rerun()
-                        else:
-                            st.error("❌ 更新結訓日發生異常！")
-                        
-                    # 修正 4：重置密碼的表格，同樣把 'id' 抓進來但隱藏顯示
-                    reset_df = l5_users[['id', '中隊', '班隊', '訓員帳號']].copy()
-                    reset_df.insert(0, "選取", False)
-                    
-                    edited_u = st.data_editor(
-                        reset_df, 
-                        hide_index=True,
-                        column_config={"id": None} # 隱藏身分證
-                    )
-                    
-                    sel_reset = edited_u[edited_u["選取"] == True]["id"].tolist() # 這裡需要用到 id
-                    if st.button("🔄 勾選批次重置為 army1234") and sel_reset:
-                        c = conn.cursor()
-                        c.execute(f"UPDATE users SET password='army1234', setup_count=1 WHERE id IN ({','.join(map(str, sel_reset))})")
-                        conn.commit()
-                        st.success("✅ 已成功重置密碼為 army1234，並恢復 1 次修改權限！")
-                        st.rerun()
-                else:
-                    st.info("目前無可管理的訓員資料。")
-
-                st.markdown("---")
-                st.subheader("🤖 結訓日逾期帳號自動清查引擎")
-                st.success("""✨ **系統全自動警戒中**：大隊部主機已接管清查作業。
-
-每日過 24:00 後，系統將自動於背景掃描：
-1. 直接註銷無欠裝之結訓帳號。
-2. 自動扣押欠裝帳號，強制改名為 `cbrn` 系列並鎖定。
-3. 自動清運 7 日前已被註銷之無效日誌。
-
-💡 **您無需再進行任何手動掃描操作！**""")
-
-            # ==========================================
-            # 💬 Line 借還書對話自動生成器 (中隊彙總版 + 三格選單)
-            # ==========================================
-            with tabs[-1]:
-                st.subheader("💬 Line 借還書對話自動生成器")
-                st.info("💡 選擇您管轄的「中隊」，系統會自動統整該中隊底下所有班隊的借還書目。")
-                
-                # 升級：改為下拉選擇「中隊」，自動支援跨中隊管轄的文書兵
-                sq_list = [s.strip() for s in st.session_state.squadron.split(',')]
-                target_squadron = st.selectbox("請選擇要匯出的中隊", sq_list)
-                
-                # 🚀 升級為三格選單：稱呼、日期月曆、時間滾輪 (切成 3 欄)
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    contact_person = st.text_input("開頭稱呼", value="劉姐")
-                with col2:
-                    tz_tw = timezone(timedelta(hours=8))
-                    sel_date = st.date_input("預計日期", value=datetime.now(tz_tw).date())
-                with col3:
-                    # 預設下午 16:30，方便部隊作息
-                    sel_time = st.time_input("預計時間", value=datetime.strptime("16:30", "%H:%M").time())
-                    
-                # 系統自動將選單結果，無縫接軌融合成軍規文字格式 (例：3/10（二）1630)
-                tw_wd = ["一", "二", "三", "四", "五", "六", "日"][sel_date.weekday()]
-                borrow_time_str = f"{sel_date.month}/{sel_date.day}（{tw_wd}）{sel_time.strftime('%H%M')}"
-                    
-                if st.button("🚀 生成中隊彙總報表", type="primary"):
-                    c = conn.cursor()
-                    # 1. 抓取該中隊下「所有班隊」的借閱清單
-                    borrow_query = f"""
-                        SELECT u.unit, b.book_name, COUNT(b.id) as qty
-                         FROM books b
-                        JOIN users u ON b.owner_id = u.login_id 
-                        WHERE u.squadron='{target_squadron}' AND b.status='保留待領取' 
-                        GROUP BY u.unit, b.book_name
-                    """
-                    borrow_df = pd.read_sql_query(borrow_query, conn)
-                    
-                    # 2. 抓取該中隊下「所有班隊」的歸還清單
-                    return_query = f"""
-                        SELECT u.unit, b.book_name, COUNT(b.id) as qty 
-                        FROM books b 
-                        JOIN users u ON b.owner_id = u.login_id 
-                        WHERE u.squadron='{target_squadron}' AND b.status='歸還中' 
-                        GROUP BY u.unit, b.book_name
-                    """
-                    return_df = pd.read_sql_query(return_query, conn)
-                    
-                    # 3. 組合文字
-                    msg = f"{contact_person}好，{target_squadron}借書清單\n"
-                    msg += f"借閱時間：{borrow_time_str}\n\n"
-                    
-                    # 找出所有今天有借還動作的班隊
-                    all_units = set()
-                    if not borrow_df.empty: all_units.update(borrow_df['unit'].tolist())
-                    if not return_df.empty: all_units.update(return_df['unit'].tolist())
-                    
-                    if not all_units:
-                        msg += "今日無任何班隊送出借還書申請。\n"
-                    else:
-                        for unit in sorted(list(all_units)):
-                            msg += f"==== 【{unit}】 ====\n"
-                            
-                            # 借閱區塊
-                            msg += "借閱書目：\n"
-                            if not borrow_df.empty:
-                                unit_borrow = borrow_df[borrow_df['unit'] == unit]
-                                if not unit_borrow.empty:
-                                    for _, row in unit_borrow.iterrows():
-                                        msg += f"{row['book_name']}*{int(row['qty'])}\n"
-                                else:
-                                    msg += "無\n"
-                            else:
-                                msg += "無\n"
+                            if received_ids:
+                                id_list_str = ','.join(map(str, received_ids))
+                                c.execute(f"SELECT u.unit, b.book_name, COUNT(b.id) FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.id IN ({id_list_str}) GROUP BY u.unit, b.book_name")
+                                recv_details = c.fetchall()
+                                c.execute(f"UPDATE books SET status='在庫', owner_id='在庫' WHERE id IN ({id_list_str})")
+                                for u_name, b_name, qty in recv_details:
+                                    c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", (now_time, st.session_state.login_id, "歸還點收", f"收訖 {u_name} 歸還 {b_name} {qty} 本"))
+                                has_action = True
                                 
-                            # 歸還區塊
-                            msg += "\n歸還書目：\n"
-                            if not return_df.empty:
-                                unit_return = return_df[return_df['unit'] == unit]
-                                if not unit_return.empty:
-                                    for _, row in unit_return.iterrows():
-                                        msg += f"{row['book_name']}*{int(row['qty'])}\n"
-                                else:
-                                    msg += "無\n"
+                            if rejected_ids:
+                                id_list_str = ','.join(map(str, rejected_ids))
+                                c.execute(f"SELECT u.unit, b.book_name, COUNT(b.id) FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.id IN ({id_list_str}) GROUP BY u.unit, b.book_name")
+                                rej_details = c.fetchall()
+                                c.execute(f"UPDATE books SET status='遺失待賠' WHERE id IN ({id_list_str})")
+                                for u_name, b_name, qty in rej_details:
+                                    c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", (now_time, st.session_state.login_id, "歸還踢退", f"踢退 {u_name} 歸還 {b_name} {qty} 本，轉列遺失追查"))
+                                has_action = True
+                                
+                            if has_action:
+                                conn.commit()
+                                st.success(f"✅ 審核完成！收訖退庫 {len(received_ids)} 本，踢退列遺失 {len(rejected_ids)} 本。")
+                                import time; time.sleep(1.5); st.rerun()
                             else:
-                                msg += "無\n"
-                            msg += "\n"
-                            
-                    st.success("✨ 中隊彙總報表生成完畢！請點擊框框內全選複製：")
-                    st.text_area("複製區", value=msg.strip(), height=400)
+                                st.warning("⚠️ 您尚未選擇任何審核或踢退動作！")
+                    else:
+                        st.success("目前各班隊皆無待歸還準則！")
+
+                with ret_tabs[1]:
+                    st.markdown("#### 🚨 遺失裝備追查榜")
+                    st.info("💡 遭踢退之準則將列管於此，若尋獲實體書或完成賠償，請勾選結案退庫。")
+                    lost_df = pd.read_sql_query(f"SELECT b.id, u.unit as 班隊, b.book_name as 書名, b.serial_number as 序號 FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.status='遺失待賠' AND u.squadron IN ({sq_in_clause}) ORDER BY u.unit, b.book_name", conn)
+                    
+                    if not lost_df.empty:
+                        lost_df.insert(0, "✅ 尋獲/賠償結案", False)
+                        edited_lost = st.data_editor(lost_df, hide_index=True, disabled=["id", "班隊", "書名", "序號"], width='stretch', column_config={"✅ 尋獲/賠償結案": st.column_config.CheckboxColumn("✅ 尋獲/賠償結案"), "id": None}, key="lost_recovery_table")
+                        if st.button("🚔 批次執行結案退庫", type="primary"):
+                            resolved_rows = edited_lost[edited_lost["✅ 尋獲/賠償結案"] == True]
+                            resolved_ids = resolved_rows["id"].tolist()
+                            if resolved_ids:
+                                c = conn.cursor()
+                                now_time = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S")
+                                c.execute(f"UPDATE books SET status='在庫', owner_id='在庫' WHERE id IN ({','.join(map(str, resolved_ids))})")
+                                c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", (now_time, st.session_state.login_id, "遺失結案", f"尋獲或完成賠償，退庫共 {len(resolved_ids)} 本準則"))
+                                conn.commit()
+                                st.success(f"✅ 成功結案 {len(resolved_ids)} 本準則並退回大庫房！")
+                                import time; time.sleep(1.5); st.rerun()
+                            else:
+                                st.warning("⚠️ 請先勾選結案的準則！")
+                    else:
+                        st.success("✨ 裝備妥善率 100%！目前中隊無任何遺失待賠之準則！")
+
+            elif menu == "💬 Line 報表專區":
+                st.subheader("💬 Line 報表自動生成器")
+                line_tabs = st.tabs(["🚚 借還動態彙總", "📦 裝備總清點(含遺失)"])
+                sq_list = [s.strip() for s in st.session_state.squadron.split(',')]
+                
+                with line_tabs[0]:
+                    st.info("💡 產出今日「待領取」與「歸還中」之包裹物流清單。")
+                    target_squadron_dyn = st.selectbox("請選擇中隊 (動態彙總)", sq_list, key="dyn_sq")
+                    col1, col2, col3 = st.columns(3)
+                    with col1: dyn_contact = st.text_input("開頭稱呼", value="劉姐", key="dyn_contact")
+                    with col2: 
+                        tz_tw = timezone(timedelta(hours=8))
+                        dyn_date = st.date_input("預計日期", value=datetime.now(tz_tw).date(), key="dyn_date")
+                    with col3: dyn_time = st.time_input("預計時間", value=datetime.strptime("16:30", "%H:%M").time(), key="dyn_time")
+                        
+                    if st.button("🚀 生成借還動態報表", type="primary"):
+                        c = conn.cursor()
+                        borrow_df = pd.read_sql_query(f"SELECT u.unit, b.book_name, COUNT(b.id) as qty FROM books b JOIN users u ON b.owner_id = u.login_id WHERE u.squadron='{target_squadron_dyn}' AND b.status IN ('審核中(已圈存)', '保留待領取') GROUP BY u.unit, b.book_name", conn)
+                        return_df = pd.read_sql_query(f"SELECT u.unit, b.book_name, COUNT(b.id) as qty FROM books b JOIN users u ON b.owner_id = u.login_id WHERE u.squadron='{target_squadron_dyn}' AND b.status='歸還中' GROUP BY u.unit, b.book_name", conn)
+                        
+                        tw_wd = ["一", "二", "三", "四", "五", "六", "日"][dyn_date.weekday()]
+                        b_time_str = f"{dyn_date.month}/{dyn_date.day}（{tw_wd}）{dyn_time.strftime('%H%M')}"
+                        msg = f"{dyn_contact}好，{target_squadron_dyn}借還書清單\n時間：{b_time_str}\n\n"
+                        
+                        all_units = set()
+                        if not borrow_df.empty: all_units.update(borrow_df['unit'].tolist())
+                        if not return_df.empty: all_units.update(return_df['unit'].tolist())
+                        
+                        if not all_units: msg += "今日無待辦物流。\n"
+                        else:
+                            for unit in sorted(list(all_units)):
+                                msg += f"==== 【{unit}】 ====\n借閱書目：\n"
+                                if not borrow_df.empty and not borrow_df[borrow_df['unit'] == unit].empty:
+                                    for _, r in borrow_df[borrow_df['unit'] == unit].iterrows(): msg += f"{r['book_name']}*{int(r['qty'])}\n"
+                                else: msg += "無\n"
+                                msg += "\n歸還書目：\n"
+                                if not return_df.empty and not return_df[return_df['unit'] == unit].empty:
+                                    for _, r in return_df[return_df['unit'] == unit].iterrows(): msg += f"{r['book_name']}*{int(r['qty'])}\n"
+                                else: msg += "無\n"
+                                msg += "\n"
+                        st.text_area("複製區", value=msg.strip(), height=350, key="dyn_area")
+
+                with line_tabs[1]:
+                    st.info("💡 拉出中隊下所有「借閱中」、「歸還中」、「遺失待賠」之準則清單，供每日高裝檢清點使用。")
+                    target_squadron_inv = st.selectbox("請選擇中隊 (總清點)", sq_list, key="inv_sq")
+                    if st.button("🚀 生成中隊裝備總清點報表", type="primary"):
+                        inv_df = pd.read_sql_query(f"SELECT u.unit, b.book_name, b.serial_number, b.status FROM books b JOIN users u ON b.owner_id = u.login_id WHERE u.squadron='{target_squadron_inv}' AND b.status IN ('借閱中', '歸還中', '遺失待賠') ORDER BY u.unit, b.book_name", conn)
+                        
+                        inv_msg = f"【{target_squadron_inv}】裝備清點總表\n日期：{datetime.now(timezone(timedelta(hours=8))).strftime('%Y/%m/%d')}\n\n"
+                        
+                        if inv_df.empty:
+                            inv_msg += "目前中隊外散之準則數量為 0。\n"
+                        else:
+                            for unit in inv_df['unit'].unique():
+                                inv_msg += f"🏢 班隊：{unit}\n"
+                                u_df = inv_df[inv_df['unit'] == unit]
+                                for b_name in u_df['book_name'].unique():
+                                    b_df = u_df[u_df['book_name'] == b_name]
+                                    inv_msg += f"📘 {b_name} * {len(b_df)}\n"
+                                    serials = []
+                                    for _, r in b_df.iterrows():
+                                        s_text = str(r['serial_number']).strip()
+                                        if r['status'] == '遺失待賠': s_text += " (遺失)"
+                                        elif r['status'] == '歸還中': s_text += " (待退庫)"
+                                        serials.append(s_text)
+                                    inv_msg += f"[{', '.join(serials)}]\n"
+                                inv_msg += "-------------------\n"
+                                
+                        st.text_area("清點複製區", value=inv_msg.strip(), height=400, key="inv_area")
 
     elif menu in ["綜合查詢", "🔍 綜合查詢", "📊 中隊持有現況"]:
         st.header("🔍綜合查詢")
