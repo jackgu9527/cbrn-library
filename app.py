@@ -1477,70 +1477,66 @@ try:
                                 
                         st.text_area("清點複製區", value=inv_msg.strip(), height=400, key="inv_area")
 
-    elif menu in ["綜合查詢", "🔍 綜合查詢", "📊 中隊持有現況"]:
-        st.header("🔍綜合查詢")
-        # 依照階級給予不同的查詢權限
-        if st.session_state.role == 'L5':
-            search_type = st.radio("查詢模式", ["查書名", "查序號"], horizontal=True)
+    elif menu in ["綜合查詢", "🔍 綜合查詢"]:
+        st.header("🔍 綜合查詢")
+        # 拆分後，這裡只剩下最純粹的書名與序號查詢，全階級通用
+        search_type = st.radio("查詢模式", ["查書名", "查序號"], horizontal=True)
+
+        keyword = st.text_input("請輸入關鍵字")
+        if st.button("搜尋") and keyword:
+            if "書名" in search_type:
+                query = "SELECT u.squadron as 中隊, u.unit as 班隊, COUNT(b.id) as 數量 FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.book_name LIKE %s GROUP BY u.squadron, u.unit"
+                res = pd.read_sql_query(query, conn, params=(f"%{keyword}%",))
+                st.dataframe(res, use_container_width=True)
+            else:
+                query = "SELECT u.squadron as 中隊, u.unit as 班隊, b.book_name as 書名, b.status as 狀態 FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.serial_number = %s"
+                res = pd.read_sql_query(query, conn, params=(keyword,))
+                st.dataframe(res, use_container_width=True)
+
+    elif menu == "📊 中隊持有現況":
+        st.header(f"📊 【{st.session_state.squadron}】所屬班隊準則持有現況")
+        st.info("💡 點擊下方各班隊名稱，即可展開查看該班隊目前持有的所有準則與詳細序號。")
+        
+        if st.session_state.role in ['L1', 'L2']:
+            unit_query = "SELECT DISTINCT u.unit FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.status IN ('借閱中', '保留待領取', '少領異常', '歸還中')"
         else:
-            search_type = st.radio("查詢模式", ["查書名", "查序號", "中隊持有現況"], horizontal=True)
-
-        if search_type == "查書名" or search_type == "查序號":
-            keyword = st.text_input("請輸入關鍵字")
-            if st.button("搜尋") and keyword:
-                if "書名" in search_type:
-                    query = "SELECT u.squadron as 中隊, u.unit as 班隊, COUNT(b.id) as 數量 FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.book_name LIKE %s GROUP BY u.squadron, u.unit"
-                    res = pd.read_sql_query(query, conn, params=(f"%{keyword}%",))
-                    st.dataframe(res, use_container_width=True)
-                else:
-                    query = "SELECT u.squadron as 中隊, u.unit as 班隊, b.book_name as 書名, b.status as 狀態 FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.serial_number = %s"
-                    res = pd.read_sql_query(query, conn, params=(keyword,))
-                    st.dataframe(res, use_container_width=True)
-
-        elif search_type == "中隊持有現況":
-            st.subheader(f"🗂️ 【{st.session_state.squadron}】所屬班隊準則持有現況")
-            st.info("💡 點擊下方各班隊名稱，即可展開查看該班隊目前持有的所有準則與詳細序號。")
+            sq_list = [s.strip() for s in st.session_state.squadron.split(',')]
+            sq_in_clause = "'" + "','".join(sq_list) + "'"
+            unit_query = f"SELECT DISTINCT u.unit FROM books b JOIN users u ON b.owner_id = u.login_id WHERE u.squadron IN ({sq_in_clause}) AND b.status IN ('借閱中', '保留待領取', '少領異常', '歸還中')"
             
-            if st.session_state.role in ['L1', 'L2']:
-                unit_query = "SELECT DISTINCT u.unit FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.status IN ('借閱中', '保留待領取', '少領異常', '歸還中')"
-            else:
-                sq_list = [s.strip() for s in st.session_state.squadron.split(',')]
-                sq_in_clause = "'" + "','".join(sq_list) + "'"
-                unit_query = f"SELECT DISTINCT u.unit FROM books b JOIN users u ON b.owner_id = u.login_id WHERE u.squadron IN ({sq_in_clause}) AND b.status IN ('借閱中', '保留待領取', '少領異常', '歸還中')"
-                
-            units_df = pd.read_sql_query(unit_query, conn)
-            if units_df.empty:
-                st.success("目前所屬中隊無任何班隊持有準則 (皆已歸還或無借閱)。")
-            else:
-                for unit_name in units_df['unit']:
-                    with st.expander(f"🏢 班隊：【{unit_name}】"):
-                        books_df = pd.read_sql_query(f"SELECT b.book_name, COUNT(b.id) as qty FROM books b JOIN users u ON b.owner_id = u.login_id WHERE u.unit='{unit_name}' AND b.status IN ('借閱中', '保留待領取', '少領異常', '歸還中') GROUP BY b.book_name", conn)
+        units_df = pd.read_sql_query(unit_query, conn)
+        if units_df.empty:
+            st.success("✨ 目前所屬中隊無任何班隊持有準則 (皆已歸還或無借閱)。")
+        else:
+            for unit_name in units_df['unit']:
+                with st.expander(f"🏢 班隊：【{unit_name}】"):
+                    books_df = pd.read_sql_query(f"SELECT b.book_name, COUNT(b.id) as qty FROM books b JOIN users u ON b.owner_id = u.login_id WHERE u.unit='{unit_name}' AND b.status IN ('借閱中', '保留待領取', '少領異常', '歸還中') GROUP BY b.book_name", conn)
+                    
+                    for _, book_row in books_df.iterrows():
+                        book_title = book_row['book_name']
+                        b_qty = book_row['qty']
+                        st.markdown(f"**📘 {book_title}** (共 **{b_qty}** 本)")
+                        serials_df = pd.read_sql_query(f"SELECT b.serial_number, b.status FROM books b JOIN users u ON b.owner_id = u.login_id WHERE u.unit='{unit_name}' AND b.book_name='{book_title}' AND b.status IN ('借閱中', '保留待領取', '少領異常', '歸還中')", conn)
                         
-                        for _, book_row in books_df.iterrows():
-                            book_title = book_row['book_name']
-                            b_qty = book_row['qty']
-                            st.markdown(f"**📘 {book_title}** (共 **{b_qty}** 本)")
-                            serials_df = pd.read_sql_query(f"SELECT b.serial_number, b.status FROM books b JOIN users u ON b.owner_id = u.login_id WHERE u.unit='{unit_name}' AND b.book_name='{book_title}' AND b.status IN ('借閱中', '保留待領取', '少領異常', '歸還中')", conn)
-                            
-                            display_serials = []
-                            for _, s_row in serials_df.iterrows():
-                                sn = s_row['serial_number']
-                                st_val = s_row['status']
-                                if st_val == '借閱中':
-                                    display_serials.append(f"{sn}")
-                                else:
-                                    display_serials.append(f"{sn} ({st_val})")
-                                    
-                            serials_text = ", ".join(display_serials)
-                            nested_html = f"""
-                            <details style="margin-left: 20px; margin-bottom: 15px;">
-                                <summary style="cursor: pointer; color: #A0A0A0; font-size: 0.9em; outline: none;">🔖 點擊展開詳細序號清單</summary>
-                                <div style="margin-top: 8px; padding: 10px; border-left: 3px solid #4CAF50; background-color: rgba(255,255,255,0.05); color: #E0E0E0; font-family: monospace; word-wrap: break-word; border-radius: 0 5px 5px 0;">
-                                    {serials_text}
-                                </div>
-                            </details>
-                            """
-                            st.markdown(nested_html, unsafe_allow_html=True)
+                        display_serials = []
+                        for _, s_row in serials_df.iterrows():
+                            sn = s_row['serial_number']
+                            st_val = s_row['status']
+                            if st_val == '借閱中':
+                                display_serials.append(f"{sn}")
+                            else:
+                                display_serials.append(f"{sn} ({st_val})")
+                                
+                        serials_text = ", ".join(display_serials)
+                        nested_html = f"""
+                        <details style="margin-left: 20px; margin-bottom: 15px;">
+                            <summary style="cursor: pointer; color: #A0A0A0; font-size: 0.9em; outline: none;">🔖 點擊展開詳細序號清單</summary>
+                            <div style="margin-top: 8px; padding: 10px; border-left: 3px solid #4CAF50; background-color: rgba(255,255,255,0.05); color: #E0E0E0; font-family: monospace; word-wrap: break-word; border-radius: 0 5px 5px 0;">
+                                {serials_text}
+                            </div>
+                        </details>
+                        """
+                        st.markdown(nested_html, unsafe_allow_html=True)
 
     elif menu in ["操作紀錄", "🗂️ 操作紀錄"] and st.session_state.role in ['L1', 'L2', 'L3', 'L4']:
         st.header("🗂️ 操作紀錄")
