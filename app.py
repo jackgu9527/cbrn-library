@@ -352,6 +352,39 @@ try:
         st.header("📊 首頁")
         
         if st.session_state.role == 'L5':
+            # === 🎯 智慧引導：新進/更換人員強制修改帳密 ===
+            if st.session_state.setup_count > 0:
+                with st.container(border=True):
+                    st.error("🆕 **新人員/新帳號登入：請先設定您的專屬帳號與密碼**")
+                    st.info("💡 為確保帳號安全與資料正確，請修改預設帳密。修改完成後此視窗將自動關閉。")
+                    col_id, col_pw, col_btn = st.columns([3, 3, 2])
+                    with col_id:
+                        new_id = st.text_input("設定新帳號", value=st.session_state.login_id, key="setup_new_id")
+                    with col_pw:
+                        new_pwd = st.text_input("設定新密碼", type="password", placeholder="建議至少8碼", key="setup_new_pw")
+                    with col_btn:
+                        st.write(" ")
+                        if st.button("🚀 確認修改並開通", type="primary", use_container_width=True):
+                            if not new_pwd:
+                                st.warning("請輸入密碼！")
+                            else:
+                                c = conn.cursor()
+                                # 檢查帳號重複
+                                c.execute("SELECT COUNT(*) FROM users WHERE login_id=%s AND id!=%s", (new_id, int(st.session_state.id)))
+                                if c.fetchone()[0] > 0:
+                                    st.error("❌ 此帳號已被佔用！")
+                                else:
+                                    old_id = st.session_state.login_id
+                                    # 更新資料並歸零次數
+                                    c.execute("UPDATE users SET login_id=%s, password=%s, setup_count=0 WHERE id=%s", (new_id, new_pwd, int(st.session_state.id)))
+                                    # 同步過戶所有關連資料
+                                    c.execute("UPDATE books SET owner_id=%s WHERE owner_id=%s", (new_id, old_id))
+                                    c.execute("UPDATE borrow_requests SET login_id=%s WHERE login_id=%s", (new_id, old_id))
+                                    conn.commit()
+                                    log_action(new_id, "新進設定", "完成首次登入帳密修改，功能已解鎖")
+                                    st.success("✅ 設定成功！請重新登入。")
+                                    import time; time.sleep(1.5); st.session_state.clear(); st.rerun()
+                st.markdown("---") # 分隔線
             col1, col2 = st.columns([2, 1])
             with col1:
                 st.markdown(f"**所屬單位：** {st.session_state.squadron} - {st.session_state.unit}")
@@ -1107,18 +1140,34 @@ try:
                                 st.error("❌ 更新結訓日發生異常！")
                         
                         st.markdown("---")
-                        # 密碼重置區塊
-                        reset_df = l5_users[['id', '中隊', '班隊', '訓員帳號']].copy()
+                        # === 🔄 權限與密碼救援中心 ===
+                        st.markdown("#### 🔄 權限發放與帳密救援")
+                        st.info("💡 若班隊人員更換或忘記帳密，請勾選後執行。這將會重置密碼並讓訓員首頁再次彈出修改視窗。")
+                        
+                        reset_df = l5_users[['id', '中隊', '班隊', '訓員帳號', '狀態']].copy()
                         reset_df.insert(0, "選取", False)
-                        st.markdown("#### 🔄 密碼救援")
-                        edited_u = st.data_editor(reset_df, hide_index=True, column_config={"id": None})
+                        edited_u = st.data_editor(reset_df, hide_index=True, disabled=["id","中隊","班隊","訓員帳號","狀態"], column_config={"id": None})
+                        
                         sel_reset = edited_u[edited_u["選取"] == True]["id"].tolist()
-                        if st.button("🔄 勾選批次重置為 army1234") and sel_reset:
-                            c = conn.cursor()
-                            c.execute(f"UPDATE users SET password='army1234', setup_count=1 WHERE id IN ({','.join(map(str, sel_reset))})")
-                            conn.commit()
-                            st.success("✅ 已成功重置密碼為 army1234，並恢復 1 次修改權限！")
-                            st.rerun()
+                        
+                        col_r1, col_r2 = st.columns(2)
+                        with col_r1:
+                            if st.button("🔓 重置修改權限 (供人員更換時使用)", use_container_width=True):
+                                if sel_reset:
+                                    c = conn.cursor()
+                                    # 重置為 1 次，讓訓員登入時首頁跳出修改視窗
+                                    c.execute(f"UPDATE users SET setup_count=1 WHERE id IN ({','.join(map(str, sel_reset))})")
+                                    conn.commit()
+                                    st.success("✅ 權限已下放！訓員下次登入首頁將自動跳出修改視窗。")
+                                    st.rerun()
+                        with col_r2:
+                            if st.button("🔑 強制重置密碼為 army1234", use_container_width=True):
+                                if sel_reset:
+                                    c = conn.cursor()
+                                    c.execute(f"UPDATE users SET password='army1234' WHERE id IN ({','.join(map(str, sel_reset))})")
+                                    conn.commit()
+                                    st.success("✅ 密碼已重置！請告知訓員使用預設密碼登入後自行修改。")
+                                    st.rerun()
                     else:
                         st.info("目前無可管理的訓員資料。")
 
