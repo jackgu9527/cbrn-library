@@ -1248,8 +1248,17 @@ try:
                     for unit_name in return_df['班隊'].unique():
                         # ✨ 第一層：班隊專屬卡片
                         with st.container(border=True):
-                            # 🚀 修復：### 後面加上空白，讓它變成真正的大標題！
-                            st.markdown(f'<div style="text-align: center;"><h6>【{unit_name}】</h6></div>', unsafe_allow_html=True)
+                            # 🚀 終極版標題：置中對齊 + 22px適中大小 + 粗體 + Streamlit主題藍
+                            st.markdown(
+                                f"""
+                                <div style="text-align: center; margin-bottom: 10px;">
+                                    <span style="font-size: 22px; font-weight: bold; color: #1C83E1;">
+                                        【{unit_name}】
+                                    </span>
+                                </div>
+                                """, 
+                                unsafe_allow_html=True
+                            )
                             
                             # 🚀 特殊化：為班隊全收按鈕加上專屬提示與更長的文字
                             st.markdown("**🎯 班隊批次快捷操作：**")
