@@ -1249,7 +1249,7 @@ try:
                         # ✨ 第一層：班隊專屬卡片
                         with st.container(border=True):
                             # 🚀 修復：### 後面加上空白，讓它變成真正的大標題！
-                            st.markdown(f"#####【{unit_name}】")
+                            st.markdown(f"##### 【{unit_name}】")
                             
                             # 🚀 特殊化：為班隊全收按鈕加上專屬提示與更長的文字
                             st.markdown("**🎯 班隊批次快捷操作：**")
