@@ -237,7 +237,8 @@ if 'logged_in' not in st.session_state:
         if st.button("登入"):
             conn = get_db_connection()
             try:
-                user = pd.read_sql_query(f"SELECT * FROM users WHERE login_id='{login_id}' AND password='{password}'", conn)
+                # 🛡️ 參數化查詢：將帳號密碼作為 tuple 傳入 params，防禦 SQL Injection
+                user = pd.read_sql_query("SELECT * FROM users WHERE login_id=%s AND password=%s", conn, params=(login_id, password))
                 if not user.empty:
                     if user.iloc[0]['status'] == '待審核':
                         st.warning("⚠️ 您的帳號尚未開通，請等待幹部審核。")
@@ -511,9 +512,9 @@ try:
                                 old_login_id = st.session_state.login_id 
                                 try:
                                     c.execute("UPDATE users SET login_id=%s, password=%s, setup_count=0 WHERE id=%s", (new_id, new_pwd, int(st.session_state.id)))
-                                    c.execute(f"UPDATE books SET owner_id='{new_id}' WHERE owner_id='{old_login_id}'")
-                                    c.execute(f"UPDATE borrow_requests SET login_id='{new_id}' WHERE login_id='{old_login_id}'")
-                                    c.execute(f"UPDATE action_logs SET user_id='{new_id}' WHERE user_id='{old_login_id}'")
+                                    c.execute("UPDATE books SET owner_id=%s WHERE owner_id=%s", (new_id, old_login_id))
+                                    c.execute("UPDATE borrow_requests SET login_id=%s WHERE login_id=%s", (new_id, old_login_id))
+                                    c.execute("UPDATE action_logs SET user_id=%s WHERE user_id=%s", (new_id, old_login_id))
                                     
                                     conn.commit() 
                                     
@@ -1553,10 +1554,12 @@ try:
             keyword = st.text_input("請輸入關鍵字")
             if st.button("搜尋") and keyword:
                 if "書名" in search_type:
-                    res = pd.read_sql_query(f"SELECT u.squadron as 中隊, u.unit as 班隊, COUNT(b.id) as 數量 FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.book_name LIKE '%%{keyword}%%' GROUP BY u.squadron, u.unit", conn)
+                    query = "SELECT u.squadron as 中隊, u.unit as 班隊, COUNT(b.id) as 數量 FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.book_name LIKE %s GROUP BY u.squadron, u.unit"
+                    res = pd.read_sql_query(query, conn, params=(f"%{keyword}%",))
                     st.dataframe(res, use_container_width=True)
                 else:
-                    res = pd.read_sql_query(f"SELECT u.squadron as 中隊, u.unit as 班隊, b.book_name as 書名, b.status as 狀態 FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.serial_number = '{keyword}'", conn)
+                    query = "SELECT u.squadron as 中隊, u.unit as 班隊, b.book_name as 書名, b.status as 狀態 FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.serial_number = %s"
+                    res = pd.read_sql_query(query, conn, params=(keyword,))
                     st.dataframe(res, use_container_width=True)
 
         elif search_type == "中隊持有現況":
