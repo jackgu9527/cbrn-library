@@ -678,29 +678,56 @@ try:
         if not available_books:
             st.warning("目前庫房沒有可借閱的準則。")
         else:
+            # === ✨ 升級功能：全域預設借閱數量 ===
+            st.markdown("#### 🎯 第一步：設定預設數量")
+            default_req_qty = st.number_input("請輸入欲借閱的數量 (例如：貴班隊人數)", min_value=1, value=1, help="設定後，下方所有選取的準則都會自動帶入此數量")
+            st.markdown("---")
+            
+            st.markdown("#### 📚 第二步：選擇準則")
             book_options = [f"{b[0]} (庫存: {b[1]}本)" for b in available_books]
             selected_books = st.multiselect("選擇要借閱的準則", book_options)
             
             if selected_books:
                 borrow_requests = {}
+                can_submit = True  # 🟢 總提交開關
+                
                 for selection in selected_books:
-                    b_name = selection.split(" (")[0]
-                    max_qty = int(selection.split("庫存: ")[1].replace("本)", ""))
-                    qty = st.number_input(f"欲借閱【{b_name}】的數量", min_value=1, max_value=max_qty, value=1, key=f"req_{b_name}")
-                    borrow_requests[b_name] = qty
-                    
-                if st.button("🚀 送出借閱申請", type="primary"):
-                    now_time = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S")
-                    for b_name, qty in borrow_requests.items():
-                        # 已經移除不存在的 request_time 欄位，回歸原本設定
-                        c.execute("INSERT INTO borrow_requests (login_id, unit, book_name, quantity, status) VALUES (%s, %s, %s, %s, %s)", 
-                                  (st.session_state.login_id, st.session_state.unit, b_name, qty, '待審核'))
-                        c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)",
-                                  (now_time, st.session_state.login_id, "申請借閱", f"申請 {b_name} {qty} 本"))
-                    conn.commit()
-                    st.success("✅ 申請已送出！請等待幹部核准。")
-                    import time; time.sleep(1.5); st.rerun()
-
+                    with st.container(border=True):
+                        b_name = selection.split(" (")[0]
+                        max_qty = int(selection.split("庫存: ")[1].replace("本)", ""))
+                        
+                        # 🔍 啟動防呆偵測雷達：檢查是否已經持有
+                        c.execute(f"SELECT COUNT(*) FROM books WHERE owner_id='{st.session_state.login_id}' AND book_name='{b_name}' AND status!='在庫'")
+                        total_existing = int(c.fetchone()[0])
+                        
+                        # === ✨ 智慧帶入預設數量 (若庫存不足，則安全帶入最大庫存) ===
+                        auto_val = min(default_req_qty, max_qty)
+                        
+                        qty = st.number_input(f"欲借閱【{b_name}】的數量", min_value=1, max_value=max_qty, value=auto_val, key=f"req_{b_name}")
+                        borrow_requests[b_name] = qty
+                        
+                        # 🚨 觸發重複借閱防呆機制
+                        if total_existing > 0:
+                            st.warning(f"⚠️ 系統偵測到您名下已有 **{total_existing}** 本【{b_name}】。")
+                            confirm_extra = st.checkbox(f"☑️ 我確認此為「缺少數量再額外申請」", key=f"chk_extra_{b_name}")
+                            if not confirm_extra:
+                                can_submit = False
+                
+                st.markdown("---")
+                # 🛡️ 根據防呆結果決定是否顯示按鈕
+                if can_submit:
+                    if st.button("🚀 送出借閱申請", type="primary", use_container_width=True):
+                        now_time = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S")
+                        for b_name, qty in borrow_requests.items():
+                            c.execute("INSERT INTO borrow_requests (login_id, unit, book_name, quantity, status) VALUES (%s, %s, %s, %s, %s)", 
+                                      (st.session_state.login_id, st.session_state.unit, b_name, qty, '待審核'))
+                            c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)",
+                                      (now_time, st.session_state.login_id, "申請借閱", f"申請 {b_name} {qty} 本"))
+                        conn.commit()
+                        st.success("✅ 申請已送出！請等待幹部核准。")
+                        import time; time.sleep(1.5); st.rerun()
+                else:
+                    st.error("🚨 發現重複借閱項目！請勾選上方確認框後，才能送出申請。")
     elif menu == "💬 Line 報表專區" and st.session_state.role == 'L5':
         st.header("💬 Line 借還書回報")
         st.info("💡 請複製以下格式，至 Line 群組回報借還狀況。")
