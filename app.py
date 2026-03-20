@@ -1239,7 +1239,7 @@ try:
                 return_df = pd.read_sql_query(f"SELECT b.id, u.unit as 班隊, b.book_name as 書名, b.serial_number as 序號, b.owner_id FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.status='歸還中' AND u.squadron IN ({sq_in_clause}) ORDER BY u.unit, b.book_name", conn)
                 
                 if not return_df.empty:
-                    st.caption("**【快捷審核】**：班隊「✅ 全審核」或準則「✅ 審核」按鈕\n* **【單筆審核】**：點擊「🔽 展開序號」，勾選序號。")
+                    st.caption("**【快捷審核】**：班隊「✅ 全審核」或準則「✅ 審核」\n**【單筆審核】**：點擊「🔽 展開序號」，勾選序號。")
                     
                     unit_actions = {}
                     book_actions = {}
@@ -1266,7 +1266,7 @@ try:
                             elif unit_actions[unit_name] == "❌ 全踢退":
                                 st.error(f"🚨 將全數踢退【{unit_name}】所有歸還準則！")
                             else:
-                                st.divider() # 畫一條線，隔開班隊總開關與底下書本明細
+                                st.divider() # 畫一條線，隔開班隊總開關與底下書本📋明細
                                 unit_df = return_df[return_df['班隊'] == unit_name]
                                 for b_name in unit_df['書名'].unique():
                                     b_df = unit_df[unit_df['書名'] == b_name].reset_index(drop=True)
@@ -1279,7 +1279,7 @@ try:
                                     # 書本層級的按鈕維持精簡
                                     book_actions[u_b_key] = st.radio(
                                         f"{b_name} 處理",
-                                        ["明細", "✅ 審核", "❌ 踢退"],
+                                        ["📋明細", "✅ 審核", "❌ 踢退"],
                                         horizontal=True,
                                         key=f"b_rad_{u_b_key}",
                                         label_visibility="collapsed"
