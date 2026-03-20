@@ -482,13 +482,13 @@ try:
                             st.rerun()
 
                 st.markdown("---")
-                st.markdown("#### 📤 待幹部點收清單 (歸還中)")
+                st.markdown("#### 📤 待幹部審核清單 (歸還中)")
                 returning_books = pd.read_sql_query(f"SELECT book_name as 書名, serial_number as 序號 FROM books WHERE owner_id='{st.session_state.login_id}' AND status='歸還中'", conn)
                 if not returning_books.empty:
-                    st.info("⏳ 以下準則已送出歸還申請，正等待幹部點收。在點收完成前，請妥善保管實體準則。")
+                    st.info("⏳ 以下準則已送出歸還申請，正等待幹部審核。在審核完成前，請妥善保管實體準則。")
                     st.dataframe(returning_books, hide_index=True, use_container_width=True)
                 else:
-                    st.success("目前沒有等待幹部點收的準則。")
+                    st.success("目前沒有等待幹部審核的準則。")
 
             # ======== 🟢 L5：訓員 (帳號安全，嚴格限制修改次數) ========
             with col2:
@@ -549,7 +549,7 @@ try:
                 c1, c2, c3, c4 = st.columns(4)
                 c1.metric("📝 待開通帳號", f"{pending_reg} 件")
                 c2.metric("📥 待核准借閱", f"{pending_bor} 件")
-                c3.metric("📤 待點收準則", f"{pending_ret} 件")
+                c3.metric("📤 待審核準則", f"{pending_ret} 件")
                 c4.metric("🔴 領取異常警示", f"{pending_abn} 件")
             
             with col2:
@@ -863,7 +863,7 @@ try:
                     if 'l5_partial_return_memory' in st.session_state: 
                         del st.session_state['l5_partial_return_memory']
                         
-                    st.success(f"✅ 已送出 {len(selected_ids)} 本歸還申請！等待幹部點收。")
+                    st.success(f"✅ 已送出 {len(selected_ids)} 本歸還申請！等待幹部審核。")
                     import time
                     time.sleep(1.5)
                     st.rerun()
@@ -872,7 +872,7 @@ try:
                     if 'l5_partial_return_memory' in st.session_state: 
                         del st.session_state['l5_partial_return_memory']
                         
-                    st.success(f"✅ 已送出 {len(selected_ids)} 本歸還申請！等待幹部點收。")
+                    st.success(f"✅ 已送出 {len(selected_ids)} 本歸還申請！等待幹部審核。")
                     import time
                     time.sleep(1.5)
                     st.rerun()
@@ -1010,11 +1010,11 @@ try:
                             time.sleep(1.5)
                             st.rerun()
                     with colB:
-                        if st.button("❌ 駁回", key=f"rej_{row['id']}"):
+                        if st.button("❌踢退", key=f"rej_{row['id']}"):
                             c = conn.cursor()
                             c.execute("UPDATE users SET pending_name=NULL WHERE id=%s", (int(row['id']),))
                             conn.commit()
-                            st.success("✅ 已駁回該交接申請。")
+                            st.success("✅ 已踢退該交接申請。")
                             st.rerun()
                 st.markdown("---")
             else:
@@ -1106,7 +1106,7 @@ try:
                         req_df.insert(4, "已持有數", owned_counts)
                         
                         col_info, col_chk = st.columns([3, 1])
-                        with col_info: st.info("💡 提示：若需「砍單」，請修改【核准數量】(填 0 代表駁回)。")
+                        with col_info: st.info("💡 提示：若需「砍單」，請修改【核准數量】(填 0 代表踢退)。")
                         with col_chk:
                             st.write("") 
                             select_all = st.checkbox("☑️ 全選所有準則")
@@ -1157,8 +1157,8 @@ try:
                                         c.execute(f"UPDATE borrow_requests SET status='已核准(實發{approve_qty}本)' WHERE id={req_id}")
                                         c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", (now_time, st.session_state.login_id, "核准借閱", f"核准 {req_book} {approve_qty} 本給 {row['班隊']}"))
                                     else:
-                                        c.execute(f"UPDATE borrow_requests SET status='已駁回(砍單退件)' WHERE id={req_id}")
-                                        c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", (now_time, st.session_state.login_id, "駁回借閱", f"全數駁回 {row['班隊']} 的 {req_book} 申請"))
+                                        c.execute(f"UPDATE borrow_requests SET status='已踢退(砍單退件)' WHERE id={req_id}")
+                                        c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", (now_time, st.session_state.login_id, "踢退借閱", f"全數踢退 {row['班隊']} 的 {req_book} 申請"))
                                 
                                 conn.commit()
                                 
@@ -1239,7 +1239,7 @@ try:
                 return_df = pd.read_sql_query(f"SELECT b.id, u.unit as 班隊, b.book_name as 書名, b.serial_number as 序號, b.owner_id FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.status='歸還中' AND u.squadron IN ({sq_in_clause}) ORDER BY u.unit, b.book_name", conn)
                 
                 if not return_df.empty:
-                    st.info("💡 【快捷點收】：直接切換班隊或書名下方的「✅ 全收」按鈕。\n💡 【單筆處理】：選擇「✍️ 展開單筆」，再點開面板勾選序號。")
+                    st.info("【快捷審核】：班隊或書名下方的「✅全審核」按鈕。\n【單筆審核】：點擊「🔽展開單筆序號」，勾選序號。")
                     
                     unit_actions = {}
                     book_actions = {}
@@ -1248,21 +1248,21 @@ try:
                     for unit_name in return_df['班隊'].unique():
                         # ✨ 第一層：班隊專屬卡片
                         with st.container(border=True):
-                            st.markdown(f"### 🏢 交接單位：【{unit_name}】")
+                            st.markdown(f"###【{unit_name}】")
                             
                             # 🚀 升級：使用 radio 水平排列，解決手機版斷行問題，且自帶防呆互斥
                             unit_actions[unit_name] = st.radio(
                                 f"【{unit_name}】批次處理",
-                                ["✍️ 展開逐項審核", "✅ 全收此班隊", "❌ 全退此班隊"],
+                                ["明細", "✅全審核", "❌全踢退"],
                                 horizontal=True,
                                 key=f"u_rad_{unit_name}",
                                 label_visibility="collapsed"
                             )
                             
-                            if unit_actions[unit_name] == "✅ 全收此班隊":
-                                st.success(f"✨ 已選取：將全數收訖【{unit_name}】所有歸還準則！")
-                            elif unit_actions[unit_name] == "❌ 全退此班隊":
-                                st.error(f"🚨 已選取：將全數駁回【{unit_name}】所有歸還準則！")
+                            if unit_actions[unit_name] == "✅全審核":
+                                st.success(f"將全審核【{unit_name}】歸還準則")
+                            elif unit_actions[unit_name] == "❌全踢退":
+                                st.error(f"將全踢退【{unit_name}】歸還準則")
                             else:
                                 unit_df = return_df[return_df['班隊'] == unit_name]
                                 for b_name in unit_df['書名'].unique():
@@ -1275,29 +1275,29 @@ try:
                                     # 🚀 升級：將書本的處理選項移到「折疊面板外面」，且水平排列
                                     book_actions[u_b_key] = st.radio(
                                         f"{b_name} 處理",
-                                        ["✍️ 展開單筆序號", "✅ 全收此項", "❌ 全退此項"],
+                                        ["明細", "✅全審核", "❌全踢退"],
                                         horizontal=True,
                                         key=f"b_rad_{u_b_key}",
                                         label_visibility="collapsed"
                                     )
                                     
-                                    if book_actions[u_b_key] == "✅ 全收此項":
-                                        st.success(f"✨ 已選取：全數收訖此項 {qty} 本！")
-                                    elif book_actions[u_b_key] == "❌ 全退此項":
-                                        st.error(f"🚨 已選取：全數駁回此項 {qty} 本！")
+                                    if book_actions[u_b_key] == "✅全審核":
+                                        st.success(f"將全審核 {qty} 本！")
+                                    elif book_actions[u_b_key] == "❌全踢退":
+                                        st.error(f"全踢退 {qty} 本！")
                                     else:
                                         # ✨ 只有在選擇「展開單筆」時，折疊面板才會出現
-                                        with st.expander("🔽 點擊展開單筆序號表格"):
-                                            b_df.insert(0, "❌ 駁回", False)
-                                            b_df.insert(0, "✅ 收訖", False)
+                                        with st.expander("🔽展開單筆序號"):
+                                            b_df.insert(0, "❌踢退", False)
+                                            b_df.insert(0, "✅審核", False)
                                             edited_receive_dfs[u_b_key] = st.data_editor(
                                                 b_df, 
                                                 hide_index=True, 
                                                 disabled=["id", "班隊", "書名", "序號", "owner_id"], 
                                                 use_container_width=True, 
                                                 column_config={
-                                                    "✅ 收訖": st.column_config.CheckboxColumn("✅ 收訖(退庫)"), 
-                                                    "❌ 駁回": st.column_config.CheckboxColumn("❌ 駁回(退回)"), 
+                                                    "✅審核": st.column_config.CheckboxColumn("✅審核(退庫)"), 
+                                                    "❌踢退": st.column_config.CheckboxColumn("❌踢退(退回)"), 
                                                     "id": None, "班隊": None, "書名": None, "owner_id": None
                                                 }, 
                                                 key=f"editor_{u_b_key}"
@@ -1305,33 +1305,33 @@ try:
                                     st.write("") # 增加項目間距，視覺更舒適
                     
                     st.markdown("---")
-                    if st.button("💾 批次送出點收結果", type="primary", use_container_width=True):
+                    if st.button("💾 批次送出審核結果", type="primary", use_container_width=True):
                         received_ids = []
                         rejected_ids = []
                         
                         # 擷取結果邏輯大瘦身 (不再需要檢查 has_conflict)
                         for unit_name in return_df['班隊'].unique():
-                            if unit_actions[unit_name] == "✅ 全收此班隊":
+                            if unit_actions[unit_name] == "✅全審核":
                                 unit_df = return_df[return_df['班隊'] == unit_name]
                                 received_ids.extend(unit_df['id'].tolist())
-                            elif unit_actions[unit_name] == "❌ 全退此班隊":
+                            elif unit_actions[unit_name] == "❌全踢退":
                                 unit_df = return_df[return_df['班隊'] == unit_name]
                                 rejected_ids.extend(unit_df['id'].tolist())
                             else:
                                 unit_df = return_df[return_df['班隊'] == unit_name]
                                 for b_name in unit_df['書名'].unique():
                                     u_b_key = f"{unit_name}_{b_name}"
-                                    if book_actions.get(u_b_key) == "✅ 全收此項":
+                                    if book_actions.get(u_b_key) == "✅全審核":
                                         b_df = unit_df[unit_df['書名'] == b_name]
                                         received_ids.extend(b_df['id'].tolist())
-                                    elif book_actions.get(u_b_key) == "❌ 全退此項":
+                                    elif book_actions.get(u_b_key) == "❌全踢退":
                                         b_df = unit_df[unit_df['書名'] == b_name]
                                         rejected_ids.extend(b_df['id'].tolist())
                                     elif edited_receive_dfs.get(u_b_key) is not None:
                                         edited_df = edited_receive_dfs[u_b_key]
-                                        recv_rows = edited_df[edited_df["✅ 收訖"] == True]
+                                        recv_rows = edited_df[edited_df["✅審核"] == True]
                                         received_ids.extend(recv_rows["id"].tolist())
-                                        rej_rows = edited_df[edited_df["❌ 駁回"] == True]
+                                        rej_rows = edited_df[edited_df["❌踢退"] == True]
                                         rejected_ids.extend(rej_rows["id"].tolist())
                         
                         has_action = False
@@ -1347,7 +1347,7 @@ try:
                             
                             for u_name, b_name, qty in recv_details:
                                 c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", 
-                                          (now_time, st.session_state.login_id, "歸還點收", f"核准 {u_name} 歸還 {b_name} {qty} 本"))
+                                          (now_time, st.session_state.login_id, "歸還審核", f"核准 {u_name} 歸還 {b_name} {qty} 本"))
                             has_action = True
                             
                         if rejected_ids:
@@ -1359,19 +1359,19 @@ try:
                             
                             for u_name, b_name, qty in rej_details:
                                 c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", 
-                                          (now_time, st.session_state.login_id, "駁回歸還", f"駁回 {u_name} 歸還 {b_name} {qty} 本"))
+                                          (now_time, st.session_state.login_id, "踢退歸還", f"踢退 {u_name} 歸還 {b_name} {qty} 本"))
                             has_action = True
                             
                         if has_action:
                             conn.commit()
-                            st.success(f"✅ 點收作業完成！收訖 {len(received_ids)} 本，駁回退回 {len(rejected_ids)} 本。")
+                            st.success(f"✅ 審核作業完成！收訖 {len(received_ids)} 本，踢退退回 {len(rejected_ids)} 本。")
                             import time
                             time.sleep(1.5)
                             st.rerun()
                         else:
-                            st.warning("⚠️ 您尚未選擇任何點收或駁回動作！")
+                            st.warning("⚠️ 您尚未選擇任何審核或踢退動作！")
                 else:
-                    st.success("目前各班隊皆無待點收的歸還準則！")
+                    st.success("目前各班隊皆無待歸還準則！")
 
                 st.markdown("---")
                 st.subheader("🚨 結訓準則未繳")
@@ -1672,7 +1672,7 @@ try:
             def parse_details(row):
                 text = str(row['詳細內容'])
                 # 正規表達式：精準捕捉標準格式
-                match = re.search(r'^(核准|申請|駁回)\s+(.*?)\s+(歸還|借閱)\s+(.*?)\s+(\d+)\s*本$', text)
+                match = re.search(r'^(核准|申請|踢退)\s+(.*?)\s+(歸還|借閱)\s+(.*?)\s+(\d+)\s*本$', text)
                 
                 if match:
                     return pd.Series([match.group(1), match.group(2), match.group(3), match.group(4), f"{match.group(5)} 本", ""])
