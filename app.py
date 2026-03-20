@@ -1239,7 +1239,7 @@ try:
                 return_df = pd.read_sql_query(f"SELECT b.id, u.unit as 班隊, b.book_name as 書名, b.serial_number as 序號, b.owner_id FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.status='歸還中' AND u.squadron IN ({sq_in_clause}) ORDER BY u.unit, b.book_name", conn)
                 
                 if not return_df.empty:
-                    st.caption("**【快捷審核】**：班隊「✅ 全審核」或準則「✅ 審核」按鈕\n**【單筆審核】**：點擊「🔽 展開序號」，勾選序號。")
+                    st.caption("**【快捷審核】**：班隊「✅ 全審核」或準則「✅ 審核」按鈕\n* **【單筆審核】**：點擊「🔽 展開序號」，勾選序號。")
                     
                     unit_actions = {}
                     book_actions = {}
@@ -1249,13 +1249,13 @@ try:
                         # ✨ 第一層：班隊專屬卡片
                         with st.container(border=True):
                             # 🚀 修復：### 後面加上空白，讓它變成真正的大標題！
-                            st.markdown(f"#### 🏢 【{unit_name}】")
+                            st.markdown(f"##### 🏢 【{unit_name}】")
                             
                             # 🚀 特殊化：為班隊全收按鈕加上專屬提示與更長的文字
                             st.markdown("**🎯 班隊批次快捷操作：**")
                             unit_actions[unit_name] = st.radio(
                                 f"【{unit_name}】批次處理",
-                                ["🔽 展開","✅ 全審核","❌ 全踢退"],
+                                ["🔽展開","✅全審核","❌全踢退"],
                                 horizontal=True,
                                 key=f"u_rad_{unit_name}",
                                 label_visibility="collapsed"
