@@ -1252,7 +1252,7 @@ try:
                             st.markdown(
                                 f"""
                                 <div style="text-align: center; margin-bottom: 10px;">
-                                    <span style="font-size: 21px; font-weight: bold; color: #1C83E1;">
+                                    <span style="font-size: 20px; font-weight: bold; color: #1C83E1;">
                                         【{unit_name}】
                                     </span>
                                 </div>
