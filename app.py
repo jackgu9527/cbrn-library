@@ -171,7 +171,7 @@ except Exception as e:
     st.stop()
 
 # ==========================================
-# ⚡ 幽靈背景引擎：結訓日 24:00 全自動清查 (台灣時區校正版)
+# ⚡ 全新幽靈背景引擎：結訓日 24:00 全自動清查 (無 cbrn 版)
 # ==========================================
 def run_ghost_cleanup():
     if 'ghost_engine_ran' in st.session_state:
@@ -180,40 +180,26 @@ def run_ghost_cleanup():
     conn = get_db_connection()
     try:
         c = conn.cursor()
-        # 🚀 強制對齊台灣時間 (UTC+8)，精準執行 24:00 斬首行動
         tz_tw = timezone(timedelta(hours=8))
         today_str = datetime.now(tz_tw).strftime('%Y-%m-%d')
+        now_time = datetime.now(tz_tw).strftime("%Y-%m-%d %H:%M:%S")
         
+        # 1. 處理逾期 (帳號轉凍結 + 自動代還)
         c.execute(f"SELECT id, login_id, unit FROM users WHERE role='L5' AND discharge_date < '{today_str}' AND status='啟用'")
         overdue_users = c.fetchall()
-        
-        if overdue_users:
-            now_time = datetime.now(tz_tw).strftime("%Y-%m-%d %H:%M:%S")
-            
-            for u_row in overdue_users:
-                u_id = int(u_row[0])
-                u_login = str(u_row[1])
-                u_unit = str(u_row[2])
+        for u_id, u_login, u_unit in overdue_users:
+            c.execute(f"UPDATE books SET status='歸還中' WHERE owner_id='{u_login}' AND status IN ('借閱中', '保留待領取', '少領異常')")
+            c.execute(f"UPDATE users SET status='結訓凍結' WHERE id={u_id}")
+            c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", (now_time, "SYSTEM", "結訓凍結", f"班隊 {u_unit} 已結訓，系統自動代為送出歸還並凍結帳號。"))
                 
-                c.execute(f"SELECT COUNT(*) FROM books WHERE owner_id='{u_login}' AND status!='在庫'")
-                unreturned = int(c.fetchone()[0])
-                
-                if unreturned == 0:
-                    c.execute(f"DELETE FROM users WHERE id={u_id}")
-                    c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", (now_time, "SYSTEM", "帳號註銷", f"班隊 {u_unit} ({u_login}) 已結訓且無欠裝，自動註銷。"))
-                else:
-                    c.execute("SELECT login_id FROM users WHERE login_id LIKE 'cbrn%'")
-                    existing_cbrn = [row[0] for row in c.fetchall()]
-                    cbrn_idx = 1
-                    while f"cbrn{cbrn_idx}" in existing_cbrn:
-                        cbrn_idx += 1
-                    new_login = f"cbrn{cbrn_idx}"
-                    
-                    c.execute(f"UPDATE users SET login_id='{new_login}', password='LOCKED', status='停權' WHERE id={u_id}")
-                    c.execute(f"UPDATE books SET owner_id='{new_login}' WHERE owner_id='{u_login}'")
-                    c.execute(f"UPDATE borrow_requests SET login_id='{new_login}' WHERE login_id='{u_login}'")
-                    c.execute(f"UPDATE action_logs SET user_id='{new_login}' WHERE user_id='{u_login}'")
-                    c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", (now_time, "SYSTEM", "強制扣留", f"班隊 {u_unit} ({u_login}) 結訓欠裝 {unreturned} 本，強制鎖定為 {new_login}。"))
+        # 2. 清除已結清的凍結帳號 (0 本書 = 幹部已點收完畢 = 自動刪除)
+        c.execute("SELECT id, login_id, unit FROM users WHERE role='L5' AND status='結訓凍結'")
+        frozen_users = c.fetchall()
+        for f_id, f_login, f_unit in frozen_users:
+            c.execute(f"SELECT COUNT(*) FROM books WHERE owner_id='{f_login}'")
+            if c.fetchone()[0] == 0:
+                c.execute(f"DELETE FROM users WHERE id={f_id}")
+                c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", (now_time, "SYSTEM", "帳號註銷", f"班隊 {f_unit} 裝備已結清，系統自動刪除凍結帳號。"))
                     
         seven_days_ago = (datetime.now(tz_tw) - timedelta(days=7)).strftime('%Y-%m-%d %H:%M:%S')
         c.execute(f"DELETE FROM action_logs WHERE timestamp < '{seven_days_ago}' AND user_id NOT IN (SELECT login_id FROM users) AND user_id != 'SYSTEM'")
@@ -887,17 +873,6 @@ try:
         if st.session_state.role == 'L1':
             st.error("👑 系統管理員模式：可強制修改全域使用者資料")
             
-            # === 🚑 神級救援按鈕：孤兒實體書強制回收 ===
-            if st.button("🧲 一鍵回收所有幽靈/孤兒實體書", type="primary"):
-                c = conn.cursor()
-                c.execute("UPDATE books SET status='在庫', owner_id='在庫' WHERE owner_id LIKE 'cbrn%'")
-                c.execute("UPDATE books SET status='在庫', owner_id='在庫' WHERE owner_id NOT IN (SELECT login_id FROM users) AND owner_id != '在庫'")
-                conn.commit()
-                st.success("✅ 救援成功！所有卡住的實體書都已強制退回大庫房！現在可以去綁定了！")
-                import time
-                time.sleep(2.5)
-                st.rerun()
-            st.markdown("---")
         # ===============================================
             # 升級 1：在 SQL 查詢中正式加入 title(職務) 與 name(姓名)
             all_users = pd.read_sql_query("SELECT id, login_id, password, role, squadron, unit, title, name, status, setup_count FROM users ORDER BY id", conn)
