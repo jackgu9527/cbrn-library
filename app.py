@@ -287,10 +287,55 @@ with st.sidebar:
     st.markdown(f"ID: {st.session_state.login_id}")
     st.markdown("---")
     
+    # 根據不同階級與職務，給予專屬的左側導覽列
     if st.session_state.role == 'L5':
-        menu = st.radio("功能導覽", ["首頁", "準則借閱", "準則歸還", "綜合查詢"])
-    else:
-        menu = st.radio("管理作業", ["首頁", "審核與管理", "綜合查詢", "操作紀錄"])
+        menu = st.radio("功能導覽", [
+            "🏠 首頁", 
+            "📤 準則借閱", 
+            "📥 準則歸還", 
+            "💬 Line 報表專區", 
+            "🔍 綜合查詢"
+        ])
+    elif st.session_state.role == 'L4':
+        # 判斷是否為文書兵
+        is_doc = "人事" in st.session_state.title or "文書" in st.session_state.title
+        if is_doc:
+            menu = st.radio("文書作業", [
+                "🏠 首頁", 
+                "👥 帳號管理", 
+                "📤 準則借閱核准", 
+                "📥 準則歸還核准", 
+                "💬 Line 報表專區", 
+                "📊 中隊持有現況", 
+                "🔍 綜合查詢", 
+                "🗂️ 操作紀錄"
+            ])
+        else:
+            menu = st.radio("幹部管理", [
+                "🏠 首頁", 
+                "👥 帳號管理", 
+                "📥 準則歸還核准", 
+                "💬 Line 報表專區", 
+                "📊 中隊持有現況", 
+                "🔍 綜合查詢", 
+                "🗂️ 操作紀錄"
+            ])
+    elif st.session_state.role == 'L3':
+        menu = st.radio("高階督導", [
+            "🏠 首頁", 
+            "👥 人事管理", 
+            "📊 中隊持有現況", 
+            "🔍 綜合查詢", 
+            "🗂️ 操作紀錄"
+        ])
+    elif st.session_state.role in ['L1', 'L2']:
+        menu = st.radio("系統管理", [
+            "🏠 首頁", 
+            "⚙️ 系統與帳號全域管理", 
+            "📊 中隊持有現況", 
+            "🔍 綜合查詢", 
+            "🗂️ 操作紀錄"
+        ])
     
     st.markdown("---")
     if st.button("登出"):
@@ -303,7 +348,7 @@ with st.sidebar:
 # ==========================================
 conn = get_db_connection()
 try:
-    if menu == "首頁":
+    if menu in ["首頁", "🏠 首頁"]:
         st.header("📊 首頁")
         
         if st.session_state.role == 'L5':
@@ -622,7 +667,7 @@ try:
         else:
             st.markdown(f"**{display_name}**，長官好今日概況良好。")
 
-    elif menu == "準則借閱" and st.session_state.role == 'L5':
+    elif menu in ["準則借閱", "📤 準則借閱", "💬 Line 報表專區"] and st.session_state.role == 'L5':
         st.header("📥 準則借閱與回報")
         
         # 🚀 升級三標籤：加入每日清點回報
@@ -750,7 +795,7 @@ try:
                 st.success("✨ 清點回報文字生成完畢！請全選複製貼至 Line：")
                 st.text_area("清點複製區", value=inv_msg.strip(), height=300, key="inv_text_area")
                 
-    elif menu == "準則歸還" and st.session_state.role == 'L5':
+    elif menu in ["準則歸還", "📥 準則歸還"] and st.session_state.role == 'L5':
         st.header("📤 準則歸還")
         books_df = pd.read_sql_query(f"SELECT id, book_name as 書名, serial_number as 序號 FROM books WHERE owner_id='{st.session_state.login_id}' AND status='借閱中'", conn)
         
@@ -867,7 +912,7 @@ try:
         else:
             st.success("✨ 您名下目前沒有需要歸還的準則！")
 
-    elif menu == "審核與管理" and st.session_state.role in ['L1', 'L2', 'L3', 'L4']:
+    elif menu in ["審核與管理", "⚙️ 系統與帳號全域管理", "👥 人事管理", "👥 帳號管理", "📤 準則借閱核准", "📥 準則歸還核准", "💬 Line 報表專區"] and st.session_state.role in ['L1', 'L2', 'L3', 'L4']:
         st.header("⚙️ 審核與管理後台")
         
         if st.session_state.role == 'L1':
@@ -1620,7 +1665,7 @@ try:
                     st.success("✨ 中隊彙總報表生成完畢！請點擊框框內全選複製：")
                     st.text_area("複製區", value=msg.strip(), height=400)
 
-    elif menu == "綜合查詢":
+    elif menu in ["綜合查詢", "🔍 綜合查詢", "📊 中隊持有現況"]:
         st.header("🔍綜合查詢")
         # 依照階級給予不同的查詢權限
         if st.session_state.role == 'L5':
@@ -1685,7 +1730,7 @@ try:
                             """
                             st.markdown(nested_html, unsafe_allow_html=True)
 
-    elif menu == "操作紀錄" and st.session_state.role in ['L1', 'L2', 'L3', 'L4']:
+    elif menu in ["操作紀錄", "🗂️ 操作紀錄"] and st.session_state.role in ['L1', 'L2', 'L3', 'L4']:
         st.header("🗂️ 操作紀錄")
         
         search_keyword = st.text_input("🔍 搜尋紀錄 (可輸入班隊名稱、動作、準則名稱等)")
