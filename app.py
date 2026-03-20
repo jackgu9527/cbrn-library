@@ -1260,15 +1260,13 @@ try:
                                         white-space: nowrap;
                                         letter-spacing: -0.5px;
                                     ">
-                                        🏢 【{unit_name}】
+                                        【{unit_name}】
                                     </span>
                                 </div>
                                 """, 
                                 unsafe_allow_html=True
                             )
                             
-                            # 🚀 特殊化：為班隊全收按鈕加上專屬提示
-                            st.caption("🎯 **班隊批次快捷操作：**")
                             unit_actions[unit_name] = st.radio(
                                 f"【{unit_name}】批次處理",
                                 ["🔽展開","✅全審核","❌全踢退"],
