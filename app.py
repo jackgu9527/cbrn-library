@@ -1239,7 +1239,7 @@ try:
                 return_df = pd.read_sql_query(f"SELECT b.id, u.unit as 班隊, b.book_name as 書名, b.serial_number as 序號, b.owner_id FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.status='歸還中' AND u.squadron IN ({sq_in_clause}) ORDER BY u.unit, b.book_name", conn)
                 
                 if not return_df.empty:
-                    st.info("【快捷審核】：操作班隊或書名下方的「✅ 審核」按鈕。\n【單筆審核】：點擊「🔽 展開單筆序號」，勾選繳回的序號。")
+                    st.caption("💡 **操作提示**：\n* **【快捷審核】**：班隊「✅ 全審核」或準則「✅ 審核」按鈕。\n* **【單筆審核】**：點擊「🔽 展開序號」，勾選繳回的序號。")
                     
                     unit_actions = {}
                     book_actions = {}
@@ -1255,15 +1255,15 @@ try:
                             st.markdown("**🎯 班隊批次快捷操作：**")
                             unit_actions[unit_name] = st.radio(
                                 f"【{unit_name}】批次處理",
-                                ["🔽 展開明細", "✅ 班隊全審核", "❌ 班隊全踢退"],
+                                ["🔽 展開", "✅ 全審核", "❌ 全踢退"],
                                 horizontal=True,
                                 key=f"u_rad_{unit_name}",
                                 label_visibility="collapsed"
                             )
                             
-                            if unit_actions[unit_name] == "✅ 班隊全審核":
+                            if unit_actions[unit_name] == "✅ 全審核":
                                 st.success(f"✨ 將全數審核【{unit_name}】所有歸還準則！")
-                            elif unit_actions[unit_name] == "❌ 班隊全踢退":
+                            elif unit_actions[unit_name] == "❌ 全踢退":
                                 st.error(f"🚨 將全數踢退【{unit_name}】所有歸還準則！")
                             else:
                                 st.divider() # 畫一條線，隔開班隊總開關與底下書本明細
@@ -1290,7 +1290,7 @@ try:
                                     elif book_actions[u_b_key] == "❌ 踢退":
                                         st.error(f"🚨 將全踢退此項 {qty} 本！")
                                     else:
-                                        with st.expander("🔽 展開單筆序號"):
+                                        with st.expander("🔽 展開序號"):
                                             b_df.insert(0, "❌踢退", False)
                                             b_df.insert(0, "✅審核", False)
                                             edited_receive_dfs[u_b_key] = st.data_editor(
@@ -1299,8 +1299,8 @@ try:
                                                 disabled=["id", "班隊", "書名", "序號", "owner_id"], 
                                                 use_container_width=True, 
                                                 column_config={
-                                                    "✅審核": st.column_config.CheckboxColumn("✅審核(退庫)"), 
-                                                    "❌踢退": st.column_config.CheckboxColumn("❌踢退(退回)"), 
+                                                    "✅審核": st.column_config.CheckboxColumn("✅審核"), 
+                                                    "❌踢退": st.column_config.CheckboxColumn("❌踢退"), 
                                                     "id": None, "班隊": None, "書名": None, "owner_id": None
                                                 }, 
                                                 key=f"editor_{u_b_key}"
@@ -1308,15 +1308,15 @@ try:
                                     st.write("") # 增加項目間距
                     
                     st.markdown("---")
-                    if st.button("💾 批次送出審核結果", type="primary", use_container_width=True):
+                    if st.button("💾 送出審核結果", type="primary", use_container_width=True):
                         received_ids = []
                         rejected_ids = []
                         
                         for unit_name in return_df['班隊'].unique():
-                            if unit_actions[unit_name] == "✅ 班隊全審核":
+                            if unit_actions[unit_name] == "✅ 全審核":
                                 unit_df = return_df[return_df['班隊'] == unit_name]
                                 received_ids.extend(unit_df['id'].tolist())
-                            elif unit_actions[unit_name] == "❌ 班隊全踢退":
+                            elif unit_actions[unit_name] == "❌ 全踢退":
                                 unit_df = return_df[return_df['班隊'] == unit_name]
                                 rejected_ids.extend(unit_df['id'].tolist())
                             else:
