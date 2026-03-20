@@ -1239,31 +1239,29 @@ try:
                 return_df = pd.read_sql_query(f"SELECT b.id, u.unit as 班隊, b.book_name as 書名, b.serial_number as 序號, b.owner_id FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.status='歸還中' AND u.squadron IN ({sq_in_clause}) ORDER BY u.unit, b.book_name", conn)
                 
                 if not return_df.empty:
-                    st.info("💡 【快捷點收】：直接勾選班隊或書名旁邊的「☑️ 全收」。\n💡 【單筆處理】：點開書名下拉箭頭，單獨勾選繳回的序號。")
+                    st.info("💡 【快捷點收】：直接切換班隊或書名下方的「✅ 全收」按鈕。\n💡 【單筆處理】：選擇「✍️ 展開單筆」，再點開面板勾選序號。")
                     
-                    unit_checks = {}
-                    unit_rejects = {}
-                    book_checks = {}
-                    book_rejects = {}
+                    unit_actions = {}
+                    book_actions = {}
                     edited_receive_dfs = {}
                     
                     for unit_name in return_df['班隊'].unique():
-                        # ✨ 第一層：班隊專屬卡片 (加上實體邊框)
+                        # ✨ 第一層：班隊專屬卡片
                         with st.container(border=True):
                             st.markdown(f"### 🏢 交接單位：【{unit_name}】")
-                            col_chk_acc, col_chk_rej, _ = st.columns([2, 2, 6])
                             
-                            with col_chk_acc:
-                                unit_checks[unit_name] = st.checkbox(f"☑️ 全收此班隊", key=f"u_acc_{unit_name}")
-                            with col_chk_rej:
-                                unit_rejects[unit_name] = st.checkbox(f"❌ 全退此班隊", key=f"u_rej_{unit_name}")
-                                
-                            if unit_checks[unit_name] and unit_rejects[unit_name]:
-                                st.error("⚠️ 錯誤：無法同時勾選全收與全退！")
-                            elif unit_checks[unit_name]:
-                                # 💡 魔法：勾選後隱藏子層，徹底避免狀態重置
+                            # 🚀 升級：使用 radio 水平排列，解決手機版斷行問題，且自帶防呆互斥
+                            unit_actions[unit_name] = st.radio(
+                                f"【{unit_name}】批次處理",
+                                ["✍️ 展開逐項審核", "✅ 全收此班隊", "❌ 全退此班隊"],
+                                horizontal=True,
+                                key=f"u_rad_{unit_name}",
+                                label_visibility="collapsed"
+                            )
+                            
+                            if unit_actions[unit_name] == "✅ 全收此班隊":
                                 st.success(f"✨ 已選取：將全數收訖【{unit_name}】所有歸還準則！")
-                            elif unit_rejects[unit_name]:
+                            elif unit_actions[unit_name] == "❌ 全退此班隊":
                                 st.error(f"🚨 已選取：將全數駁回【{unit_name}】所有歸還準則！")
                             else:
                                 unit_df = return_df[return_df['班隊'] == unit_name]
@@ -1272,22 +1270,24 @@ try:
                                     qty = len(b_df)
                                     u_b_key = f"{unit_name}_{b_name}"
                                     
-                                    # ✨ 第二層：書名下拉面板
-                                    with st.expander(f"📘 {b_name} (待處理 {qty} 本)"):
-                                        col_b_acc, col_b_rej, _ = st.columns([3, 3, 4])
-                                        with col_b_acc:
-                                            book_checks[u_b_key] = st.checkbox(f"☑️ 全收此項 ({qty})", key=f"b_acc_{u_b_key}")
-                                        with col_b_rej:
-                                            book_rejects[u_b_key] = st.checkbox(f"❌ 全退此項 ({qty})", key=f"b_rej_{u_b_key}")
-                                            
-                                        if book_checks[u_b_key] and book_rejects[u_b_key]:
-                                            st.error("⚠️ 錯誤：無法同時勾選全收與全退！")
-                                        elif book_checks[u_b_key]:
-                                            st.success(f"✨ 已選取：全數收訖此項 {qty} 本！")
-                                        elif book_rejects[u_b_key]:
-                                            st.error(f"🚨 已選取：全數駁回此項 {qty} 本！")
-                                        else:
-                                            # ✨ 第三層：單獨序號勾選表格 (隱藏身分證，只留打勾與序號)
+                                    st.markdown(f"##### 📘 {b_name} (待處理 {qty} 本)")
+                                    
+                                    # 🚀 升級：將書本的處理選項移到「折疊面板外面」，且水平排列
+                                    book_actions[u_b_key] = st.radio(
+                                        f"{b_name} 處理",
+                                        ["✍️ 展開單筆序號", "✅ 全收此項", "❌ 全退此項"],
+                                        horizontal=True,
+                                        key=f"b_rad_{u_b_key}",
+                                        label_visibility="collapsed"
+                                    )
+                                    
+                                    if book_actions[u_b_key] == "✅ 全收此項":
+                                        st.success(f"✨ 已選取：全數收訖此項 {qty} 本！")
+                                    elif book_actions[u_b_key] == "❌ 全退此項":
+                                        st.error(f"🚨 已選取：全數駁回此項 {qty} 本！")
+                                    else:
+                                        # ✨ 只有在選擇「展開單筆」時，折疊面板才會出現
+                                        with st.expander("🔽 點擊展開單筆序號表格"):
                                             b_df.insert(0, "❌ 駁回", False)
                                             b_df.insert(0, "✅ 收訖", False)
                                             edited_receive_dfs[u_b_key] = st.data_editor(
@@ -1302,36 +1302,29 @@ try:
                                                 }, 
                                                 key=f"editor_{u_b_key}"
                                             )
+                                    st.write("") # 增加項目間距，視覺更舒適
                     
                     st.markdown("---")
-                    # ✨ 唯一出口：最底部的單一送出按鈕 (取消上下雙按鈕設計)
                     if st.button("💾 批次送出點收結果", type="primary", use_container_width=True):
                         received_ids = []
                         rejected_ids = []
-                        has_conflict = False
                         
-                        # 由大到小層層掃描擷取結果
+                        # 擷取結果邏輯大瘦身 (不再需要檢查 has_conflict)
                         for unit_name in return_df['班隊'].unique():
-                            if unit_checks[unit_name] and unit_rejects[unit_name]:
-                                has_conflict = True
-                                break
-                            elif unit_checks[unit_name]:
+                            if unit_actions[unit_name] == "✅ 全收此班隊":
                                 unit_df = return_df[return_df['班隊'] == unit_name]
                                 received_ids.extend(unit_df['id'].tolist())
-                            elif unit_rejects[unit_name]:
+                            elif unit_actions[unit_name] == "❌ 全退此班隊":
                                 unit_df = return_df[return_df['班隊'] == unit_name]
                                 rejected_ids.extend(unit_df['id'].tolist())
                             else:
                                 unit_df = return_df[return_df['班隊'] == unit_name]
                                 for b_name in unit_df['書名'].unique():
                                     u_b_key = f"{unit_name}_{b_name}"
-                                    if book_checks.get(u_b_key) and book_rejects.get(u_b_key):
-                                        has_conflict = True
-                                        break
-                                    elif book_checks.get(u_b_key):
+                                    if book_actions.get(u_b_key) == "✅ 全收此項":
                                         b_df = unit_df[unit_df['書名'] == b_name]
                                         received_ids.extend(b_df['id'].tolist())
-                                    elif book_rejects.get(u_b_key):
+                                    elif book_actions.get(u_b_key) == "❌ 全退此項":
                                         b_df = unit_df[unit_df['書名'] == b_name]
                                         rejected_ids.extend(b_df['id'].tolist())
                                     elif edited_receive_dfs.get(u_b_key) is not None:
@@ -1341,45 +1334,42 @@ try:
                                         rej_rows = edited_df[edited_df["❌ 駁回"] == True]
                                         rejected_ids.extend(rej_rows["id"].tolist())
                         
-                        if has_conflict:
-                            st.error("⚠️ 送出失敗：有項目同時勾選了全收與全退，請修正後再送出！")
-                        else:
-                            has_action = False
-                            c = conn.cursor()
-                            now_time = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S")
+                        has_action = False
+                        c = conn.cursor()
+                        now_time = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S")
+                        
+                        if received_ids:
+                            id_list_str = ','.join(map(str, received_ids))
+                            c.execute(f"SELECT u.unit, b.book_name, COUNT(b.id) FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.id IN ({id_list_str}) GROUP BY u.unit, b.book_name")
+                            recv_details = c.fetchall()
                             
-                            if received_ids:
-                                id_list_str = ','.join(map(str, received_ids))
-                                c.execute(f"SELECT u.unit, b.book_name, COUNT(b.id) FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.id IN ({id_list_str}) GROUP BY u.unit, b.book_name")
-                                recv_details = c.fetchall()
-                                
-                                c.execute(f"UPDATE books SET status='在庫', owner_id='在庫' WHERE id IN ({id_list_str})")
-                                
-                                for u_name, b_name, qty in recv_details:
-                                    c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", 
-                                              (now_time, st.session_state.login_id, "歸還點收", f"核准 {u_name} 歸還 {b_name} {qty} 本"))
-                                has_action = True
-                                
-                            if rejected_ids:
-                                id_list_str = ','.join(map(str, rejected_ids))
-                                c.execute(f"SELECT u.unit, b.book_name, COUNT(b.id) FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.id IN ({id_list_str}) GROUP BY u.unit, b.book_name")
-                                rej_details = c.fetchall()
-                                
-                                c.execute(f"UPDATE books SET status='借閱中' WHERE id IN ({id_list_str})")
-                                
-                                for u_name, b_name, qty in rej_details:
-                                    c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", 
-                                              (now_time, st.session_state.login_id, "駁回歸還", f"駁回 {u_name} 歸還 {b_name} {qty} 本"))
-                                has_action = True
-                                
-                            if has_action:
-                                conn.commit()
-                                st.success(f"✅ 點收作業完成！收訖 {len(received_ids)} 本，駁回退回 {len(rejected_ids)} 本。")
-                                import time
-                                time.sleep(1.5)
-                                st.rerun()
-                            else:
-                                st.warning("⚠️ 您尚未選擇任何點收或駁回動作！")
+                            c.execute(f"UPDATE books SET status='在庫', owner_id='在庫' WHERE id IN ({id_list_str})")
+                            
+                            for u_name, b_name, qty in recv_details:
+                                c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", 
+                                          (now_time, st.session_state.login_id, "歸還點收", f"核准 {u_name} 歸還 {b_name} {qty} 本"))
+                            has_action = True
+                            
+                        if rejected_ids:
+                            id_list_str = ','.join(map(str, rejected_ids))
+                            c.execute(f"SELECT u.unit, b.book_name, COUNT(b.id) FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.id IN ({id_list_str}) GROUP BY u.unit, b.book_name")
+                            rej_details = c.fetchall()
+                            
+                            c.execute(f"UPDATE books SET status='借閱中' WHERE id IN ({id_list_str})")
+                            
+                            for u_name, b_name, qty in rej_details:
+                                c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", 
+                                          (now_time, st.session_state.login_id, "駁回歸還", f"駁回 {u_name} 歸還 {b_name} {qty} 本"))
+                            has_action = True
+                            
+                        if has_action:
+                            conn.commit()
+                            st.success(f"✅ 點收作業完成！收訖 {len(received_ids)} 本，駁回退回 {len(rejected_ids)} 本。")
+                            import time
+                            time.sleep(1.5)
+                            st.rerun()
+                        else:
+                            st.warning("⚠️ 您尚未選擇任何點收或駁回動作！")
                 else:
                     st.success("目前各班隊皆無待點收的歸還準則！")
 
