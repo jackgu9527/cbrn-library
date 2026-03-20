@@ -1248,7 +1248,7 @@ try:
                     for unit_name in return_df['班隊'].unique():
                         # ✨ 第一層：班隊專屬卡片
                         with st.container(border=True):
-                            st.markdown(f"###【{unit_name}】")
+                            st.markdown(f"【{unit_name}】")
                             
                             # 🚀 升級：使用 radio 水平排列，解決手機版斷行問題，且自帶防呆互斥
                             unit_actions[unit_name] = st.radio(
