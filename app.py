@@ -1077,105 +1077,146 @@ try:
                     
             if is_doc:
                 with tabs[1]:
-                    st.subheader("📚 準則批次核准 (發放額度與砍單)")
+                    st.subheader("📚 借閱準則審核")
                     req_df = pd.read_sql_query(f"SELECT br.id as 單號, br.login_id as 帳號, br.unit as 班隊, br.book_name as 書名, br.quantity as 申請數量 FROM borrow_requests br JOIN users u ON br.login_id = u.login_id WHERE br.status='待審核' AND u.squadron IN ({sq_in_clause}) ORDER BY br.unit, br.book_name, br.id", conn)
                     
                     if not req_df.empty:
-                        # === 🚀 終極防護 1：建立記憶保險箱，在表格被洗掉前先存檔 ===
-                        if 'saved_req_qty' not in st.session_state:
-                            st.session_state['saved_req_qty'] = {}
-                            
-                        if "req_batch_editor_v2" in st.session_state:
-                            edits = st.session_state["req_batch_editor_v2"].get("edited_rows", {})
-                            for r_idx, edit_dict in edits.items():
-                                try:
-                                    idx_int = int(r_idx)
-                                    if "核准數量" in edit_dict and idx_int < len(req_df):
-                                        req_id = req_df.at[idx_int, '單號'] # 綁定唯一單號
-                                        st.session_state['saved_req_qty'][req_id] = edit_dict['核准數量']
-                                except Exception:
-                                    pass
-                        # ============================================================
-
+                        # 預先計算持有數量，避免在 UI 迴圈中拖慢效能
                         owned_counts = []
                         c = conn.cursor()
                         for _, row in req_df.iterrows():
                             c.execute(f"SELECT COUNT(*) FROM books WHERE owner_id='{row['帳號']}' AND book_name='{row['書名']}' AND status IN ('借閱中', '保留待領取', '少領異常')")
                             owned_counts.append(c.fetchone()[0])
+                        req_df['已持有數'] = owned_counts
                         
-                        req_df.insert(4, "已持有數", owned_counts)
+                        st.caption("**【快捷核准】**：班隊「✅全核准」或準則「✅核准」\n**【單筆修改】**：選擇「📋自訂」，修改核准發放的數量(填 0 即為踢退)。")
                         
-                        col_info, col_chk = st.columns([3, 1])
-                        with col_info: st.info("💡 提示：若需「砍單」，請修改【核准數量】(填 0 代表踢退)。")
-                        with col_chk:
-                            st.write("") 
-                            select_all = st.checkbox("☑️ 全選所有準則")
+                        unit_actions = {}
+                        book_actions = {}
+                        final_decisions = {} # 系統大腦：自動蒐集畫面上所有單號的最終核准數量
+                        
+                        for unit_name in req_df['班隊'].unique():
+                            # ✨ 第一層：班隊專屬卡片
+                            with st.container(border=True):
+                                # 🚀 終極版標題：自動縮放 + 強制不換行 + Streamlit主題藍
+                                st.markdown(
+                                    f"""
+                                    <div style="text-align: center; margin-bottom: 10px; width: 100%; overflow: hidden;">
+                                        <span style="
+                                            font-size: clamp(14px, 4.5vw, 22px); 
+                                            font-weight: bold; 
+                                            color: #1C83E1;
+                                            white-space: nowrap;
+                                            letter-spacing: -0.5px;
+                                        ">
+                                            【{unit_name}】
+                                        </span>
+                                    </div>
+                                    """, 
+                                    unsafe_allow_html=True
+                                )
+                                
+                                st.caption("🎯 **班隊快捷核准操作：**")
+                                unit_actions[unit_name] = st.radio(
+                                    f"【{unit_name}】批次處理",
+                                    ["🔽展開", "✅全核准", "❌全踢退"],
+                                    horizontal=True,
+                                    key=f"u_req_{unit_name}",
+                                    label_visibility="collapsed"
+                                )
+                                
+                                unit_df = req_df[req_df['班隊'] == unit_name]
+                                
+                                if unit_actions[unit_name] == "✅全核准":
+                                    st.success(f"✨ 將全數核准發放【{unit_name}】申請的所有準則！")
+                                    for _, row in unit_df.iterrows():
+                                        final_decisions[row['單號']] = row['申請數量']
+                                elif unit_actions[unit_name] == "❌全踢退":
+                                    st.error(f"🚨 將全數踢退【{unit_name}】申請的所有準則！")
+                                    for _, row in unit_df.iterrows():
+                                        final_decisions[row['單號']] = 0
+                                else:
+                                    st.divider() # 畫一條線，隔開班隊總開關與底下書本明細
+                                    for _, row in unit_df.iterrows():
+                                        req_id = row['單號']
+                                        b_name = row['書名']
+                                        req_qty = row['申請數量']
+                                        owned = row['已持有數']
+                                        
+                                        st.markdown(f"**📘 {b_name}** (申請: **{req_qty}** 本 | 已持有: {owned} 本)")
+                                        
+                                        # 🚀 降維打擊：將表格降級為三個簡單按鈕
+                                        book_actions[req_id] = st.radio(
+                                            f"處理 {req_id}",
+                                            ["📋自訂", "✅核准", "❌踢退"],
+                                            horizontal=True,
+                                            key=f"b_req_rad_{req_id}",
+                                            label_visibility="collapsed"
+                                        )
+                                        
+                                        if book_actions[req_id] == "✅核准":
+                                            st.success(f"✨ 核准發放 {req_qty} 本")
+                                            final_decisions[req_id] = req_qty
+                                        elif book_actions[req_id] == "❌踢退":
+                                            st.error(f"🚨 踢退此項申請")
+                                            final_decisions[req_id] = 0
+                                        else:
+                                            # 📋 展開無邊框微型輸入框，專門處理砍單
+                                            approve_qty = st.number_input(
+                                                f"設定核准數量", 
+                                                min_value=0, 
+                                                max_value=int(req_qty), 
+                                                value=int(req_qty), 
+                                                key=f"num_{req_id}",
+                                                help="輸入 0 視同踢退此項目"
+                                            )
+                                            final_decisions[req_id] = approve_qty
+                                        st.write("") # 增加項目間距
+                        
+                        st.markdown("---")
+                        # ✨ 單一送出按鈕：直接搜集畫面上所有的決定寫入資料庫
+                        if st.button("💾 送出核准結果", type="primary", use_container_width=True):
+                            c = conn.cursor()
+                            processed_count = 0
                             
-                        req_df.insert(0, "勾選", select_all)
-                        req_df['核准數量'] = req_df['申請數量'] 
-                        
-                        # === 🚀 終極防護 2：表格重繪前，把保險箱裡的數字無縫倒回去 ===
-                        for i, row in req_df.iterrows():
-                            req_id = row['單號']
-                            if req_id in st.session_state['saved_req_qty']:
-                                req_df.at[i, '核准數量'] = st.session_state['saved_req_qty'][req_id]
-                        # ============================================================
-                        
-                        edited_req = st.data_editor(
-                            req_df, hide_index=True, disabled=["單號", "帳號", "班隊", "書名", "申請數量", "已持有數"], width='stretch',  
-                            column_config={
-                                "勾選": st.column_config.CheckboxColumn("勾選"), 
-                                "核准數量": st.column_config.NumberColumn("核准(可修改)", min_value=0),
-                                "單號": None, "帳號": None
-                            },
-                            key="req_batch_editor_v2" 
-                        )
-                        sel_reqs = edited_req[edited_req["勾選"] == True]
-                        
-                        if st.button("✅ 批次送出勾選的準則", type="primary"):
-                            if not sel_reqs.empty:
-                                c = conn.cursor()
-                                for idx, row in sel_reqs.iterrows():
-                                    req_id = int(row['單號'])
-                                    req_login = str(row['帳號'])
-                                    req_book = str(row['書名'])
-                                    req_qty = int(row['申請數量'])
-                                    approve_qty = int(row['核准數量'])
-                                    if approve_qty > req_qty: approve_qty = req_qty
-                                    if approve_qty < 0: approve_qty = 0
-                                        
-                                    c.execute(f"SELECT id FROM books WHERE book_name='{req_book}' AND status='審核中(已圈存)' AND owner_id='{req_login}' LIMIT {req_qty}")
-                                    reserved_ids = [b[0] for b in c.fetchall()]
-                                    approved_ids = reserved_ids[:approve_qty]
-                                    rejected_ids = reserved_ids[approve_qty:]
-                                    
-                                    if approved_ids: c.execute(f"UPDATE books SET status='保留待領取' WHERE id IN ({','.join(map(str, approved_ids))})")
-                                    if rejected_ids: c.execute(f"UPDATE books SET status='在庫', owner_id='在庫' WHERE id IN ({','.join(map(str, rejected_ids))})")
-                                        
-                                    now_time = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S")
-                                    if approve_qty > 0:
-                                        c.execute(f"UPDATE borrow_requests SET status='已核准(實發{approve_qty}本)' WHERE id={req_id}")
-                                        c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", (now_time, st.session_state.login_id, "核准借閱", f"核准 {req_book} {approve_qty} 本給 {row['班隊']}"))
-                                    else:
-                                        c.execute(f"UPDATE borrow_requests SET status='已踢退(砍單退件)' WHERE id={req_id}")
-                                        c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", (now_time, st.session_state.login_id, "踢退借閱", f"全數踢退 {row['班隊']} 的 {req_book} 申請"))
+                            for _, row in req_df.iterrows():
+                                req_id = row['單號']
+                                req_login = row['帳號']
+                                req_book = row['書名']
+                                req_qty = row['申請數量']
+                                req_unit = row['班隊']
                                 
-                                conn.commit()
+                                # 系統大腦精準抓取幹部的最終決定數字
+                                approve_qty = final_decisions.get(req_id, 0)
+                                if approve_qty > req_qty: approve_qty = req_qty
+                                if approve_qty < 0: approve_qty = 0
                                 
-                                # 🚀 任務完成，將雙重記憶體徹底銷毀
-                                if "req_batch_editor_v2" in st.session_state:
-                                    del st.session_state["req_batch_editor_v2"]
-                                if "saved_req_qty" in st.session_state:
-                                    del st.session_state["saved_req_qty"]
+                                # 原汁原味的資料庫更新邏輯，絕對安全
+                                c.execute(f"SELECT id FROM books WHERE book_name='{req_book}' AND status='審核中(已圈存)' AND owner_id='{req_login}' LIMIT {req_qty}")
+                                reserved_ids = [b[0] for b in c.fetchall()]
+                                approved_ids = reserved_ids[:approve_qty]
+                                rejected_ids = reserved_ids[approve_qty:]
+                                
+                                if approved_ids: c.execute(f"UPDATE books SET status='保留待領取' WHERE id IN ({','.join(map(str, approved_ids))})")
+                                if rejected_ids: c.execute(f"UPDATE books SET status='在庫', owner_id='在庫' WHERE id IN ({','.join(map(str, rejected_ids))})")
                                     
-                                st.success(f"✅ 批次審核完成！共處理 {len(sel_reqs)} 本準則。")
-                                import time
-                                time.sleep(1.5)
-                                st.rerun()
-                            else:
-                                st.warning("⚠️ 請先在表格前方勾選要處理的準則！")
+                                now_time = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S")
+                                if approve_qty > 0:
+                                    c.execute(f"UPDATE borrow_requests SET status='已核准(實發{approve_qty}本)' WHERE id={req_id}")
+                                    c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", (now_time, st.session_state.login_id, "核准借閱", f"核准 {req_book} {approve_qty} 本給 {req_unit}"))
+                                else:
+                                    c.execute(f"UPDATE borrow_requests SET status='已踢退(砍單退件)' WHERE id={req_id}")
+                                    c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", (now_time, st.session_state.login_id, "踢退借閱", f"全數踢退 {req_unit} 的 {req_book} 申請"))
+                                    
+                                processed_count += 1
+                                
+                            conn.commit()
+                            st.success(f"✅ 批次審核完成！共處理 {processed_count} 筆申請。")
+                            import time
+                            time.sleep(1.5)
+                            st.rerun()
                     else:
-                        st.info("目前無待審核的準則。")
+                        st.info("目前無待核准的準則。")
 
                     st.markdown("---")
                     st.subheader("🔴 領取異常警示")
