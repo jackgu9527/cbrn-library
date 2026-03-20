@@ -886,19 +886,18 @@ try:
         
         if st.session_state.role == 'L1':
             st.error("👑 系統管理員模式：可強制修改全域使用者資料")
+            
             # === 🚑 神級救援按鈕：孤兒實體書強制回收 ===
-        if st.button("🧲 一鍵回收所有幽靈/孤兒實體書", type="primary"):
-            c = conn.cursor()
-            # 1. 殺死所有 cbrn 幽靈的持有權
-            c.execute("UPDATE books SET status='在庫', owner_id='在庫' WHERE owner_id LIKE 'cbrn%'")
-            # 2. 殺死「主人帳號已經不存在」的孤兒裝備持有權
-            c.execute("UPDATE books SET status='在庫', owner_id='在庫' WHERE owner_id NOT IN (SELECT login_id FROM users) AND owner_id != '在庫'")
-            conn.commit()
-            st.success("✅ 救援成功！所有卡住的實體書都已強制退回大庫房！現在可以去綁定了！")
-            import time
-            time.sleep(2.5)
-            st.rerun()
-        st.markdown("---")
+            if st.button("🧲 一鍵回收所有幽靈/孤兒實體書", type="primary"):
+                c = conn.cursor()
+                c.execute("UPDATE books SET status='在庫', owner_id='在庫' WHERE owner_id LIKE 'cbrn%'")
+                c.execute("UPDATE books SET status='在庫', owner_id='在庫' WHERE owner_id NOT IN (SELECT login_id FROM users) AND owner_id != '在庫'")
+                conn.commit()
+                st.success("✅ 救援成功！所有卡住的實體書都已強制退回大庫房！現在可以去綁定了！")
+                import time
+                time.sleep(2.5)
+                st.rerun()
+            st.markdown("---")
         # ===============================================
             # 升級 1：在 SQL 查詢中正式加入 title(職務) 與 name(姓名)
             all_users = pd.read_sql_query("SELECT id, login_id, password, role, squadron, unit, title, name, status, setup_count FROM users ORDER BY id", conn)
