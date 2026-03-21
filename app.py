@@ -925,7 +925,6 @@ try:
             st.success("✨ 您名下目前沒有需要歸還的準則！")
 
     elif menu in ["審核與管理", "⚙️ 系統與帳號全域管理", "👥 人事管理", "👥 帳號管理", "📤 準則借閱核准", "📥 準則歸還核准", "💬 Line 報表專區"] and st.session_state.role in ['L1', 'L2', 'L3', 'L4']:
-        st.header("⚙️ 審核與管理後台")
         
         # ======== 🟢 L1：系統管理員 ========
         if st.session_state.role == 'L1':
