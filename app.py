@@ -872,67 +872,45 @@ try:
                 else:
                     st.error("❌ 系統找不到 CSV 檔案！請確認 GitHub 上的檔案名稱是否包含「準則資料庫」且副檔名為 .csv。")
                             
-        elif st.session_state.role == 'L3':
-            st.subheader("中隊後台")
-            pending_l4 = pd.read_sql_query(f"SELECT id, title as 職務, name as 原姓名, pending_name as 申請新姓名 FROM users WHERE role='L4' AND squadron='{st.session_state.squadron}' AND pending_name IS NOT NULL", conn)
-            if not pending_l4.empty:
-                st.warning("⚠️ 您有待核准的所屬幹部交接申請：")
-                for idx, row in pending_l4.iterrows():
-                    st.write(f"**{row['職務']} {row['原姓名']}** 申請將業務移交給 👉 **{row['申請新姓名']}**")
-                    colA, colB, colC = st.columns([1,1,3])
-                    with colA:
-                        if st.button("✅ 核准替換", key=f"app_{row['id']}"):
-                            c = conn.cursor()
-                            c.execute("UPDATE users SET name=%s, pending_name=NULL WHERE id=%s", (row['申請新姓名'], int(row['id'])))
-                            conn.commit()
-                            log_action(st.session_state.login_id, "核准交接", f"核准 {row['職務']} 交接給 {row['申請新姓名']}")
-                            st.success("✅ 已核准！交接完成。")
-                            import time
-                            time.sleep(1.5)
-                            st.rerun()
-                    with colB:
-                        if st.button("❌踢退", key=f"rej_{row['id']}"):
-                            c = conn.cursor()
-                            c.execute("UPDATE users SET pending_name=NULL WHERE id=%s", (int(row['id']),))
-                            conn.commit()
-                            st.success("✅ 已踢退該交接申請。")
-                            st.rerun()
-                st.markdown("---")
-            else:
-                st.info("✅ 目前無待核准的幹部交接申請。")
+        elif menu in ["👥 人事管理", "審核與管理"] and st.session_state.role == 'L3':
+        st.subheader("👥 所屬幹部 (L4) 管理中心")
+        st.info("💡 您可直接在此表中調整幹部的所屬中隊與職務。若遇幹部人員更換，請勾選後點擊「發放強制修改權限」。")
+        
+        # 只撈取該中隊的 L4 幹部
+        l4_users = pd.read_sql_query(f"SELECT id, squadron as 中隊, title as 職務, name as 姓名, login_id as 帳號, setup_count as 修改權限 FROM users WHERE role='L4' AND squadron='{st.session_state.squadron}'", conn)
+        
+        if not l4_users.empty:
+            l4_users.insert(0, "選取", False)
+            edited_l4 = st.data_editor(
+                l4_users, hide_index=True, disabled=["id", "姓名", "帳號", "修改權限"], use_container_width=True,
+                column_config={
+                    "中隊": st.column_config.SelectboxColumn("管理中隊 (可多選逗號分隔)", required=True),
+                    "職務": st.column_config.TextColumn("職務", required=True)
+                }
+            )
             
-            st.markdown("#### 👥 訓員(L5)班隊管理")
-            l5_users = pd.read_sql_query(f"SELECT id, squadron as 中隊, unit as 班隊, login_id as 帳號, setup_count as 免審額度 FROM users WHERE role='L5' AND squadron='{st.session_state.squadron}'", conn)
-            tabs = st.tabs(["班隊中隊調整", "帳密修改權限"])
-            with tabs[0]:
-                if not l5_users.empty:
-                    edited_l5 = st.data_editor(
-                        l5_users, hide_index=True, disabled=["id", "帳號", "免審額度"], use_container_width=True,
-                        column_config={"中隊": st.column_config.SelectboxColumn("所屬中隊", options=["學生一中隊", "學生二中隊", "學員一中隊", "學員二中隊"], required=True), "班隊": st.column_config.TextColumn("受訓全銜", required=True)}
-                    )
-                    if st.button("💾 儲存資料"):
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("💾 儲存【中隊】與【職務】變更", type="primary", use_container_width=True):
+                    c = conn.cursor()
+                    for idx, row in edited_l4.iterrows():
+                        c.execute("UPDATE users SET squadron=%s, title=%s WHERE id=%s", (row['中隊'], row['職務'], int(row['id'])))
+                    conn.commit()
+                    st.success("✅ 資料已成功更新！")
+                    import time; time.sleep(1); st.rerun()
+            with col2:
+                sel_l4 = edited_l4[edited_l4["選取"] == True]["id"].tolist()
+                if st.button("🔓 發放「強制修改權限」(供幹部更換交接用)", use_container_width=True):
+                    if sel_l4:
                         c = conn.cursor()
-                        for index, row in edited_l5.iterrows():
-                            c.execute(f"UPDATE users SET squadron='{row['中隊']}', unit='{row['班隊']}' WHERE id={int(row['id'])}")
+                        c.execute(f"UPDATE users SET setup_count=1 WHERE id IN ({','.join(map(str, sel_l4))})")
                         conn.commit()
-                        st.success("✅ 資料已更新！")
-                        st.rerun()
-                else:
-                    st.info("尚未有任何屬於您的訓員(L5)註冊資料。")
-            with tabs[1]:
-                if not l5_users.empty:
-                    grant_df = l5_users[['id', '中隊', '班隊', '帳號', '免審額度']].copy()
-                    grant_df.insert(0, "勾選", False)
-                    edited_grant = st.data_editor(grant_df, hide_index=True)
-                    sel_grant = edited_grant[edited_grant["勾選"] == True]["id"].tolist()
-                    if st.button("🔓 批次發放 1 次修改權限") and sel_grant:
-                        c = conn.cursor()
-                        c.execute(f"UPDATE users SET setup_count=1 WHERE id IN ({','.join(map(str, sel_grant))})")
-                        conn.commit()
-                        st.success("✅ 已成功下放修改額度給勾選的班隊！")
-                        st.rerun()
-                else:
-                    st.info("目前無資料可發放權限。")
+                        st.success("✅ 權限已發放！該幹部下次登入將被強制要求重設姓名與帳密。")
+                        import time; time.sleep(1.5); st.rerun()
+                    else:
+                        st.warning("⚠️ 請先勾選要發放權限的幹部！")
+        else:
+            st.success("目前無所屬的 L4 幹部資料。")
 
         elif st.session_state.role == 'L4':
             sq_list = [s.strip() for s in st.session_state.squadron.split(',')]
