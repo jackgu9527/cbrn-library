@@ -614,34 +614,39 @@ try:
                         import time; time.sleep(1.5); st.rerun()
                 else:
                     st.error("🚨 發現重複借閱項目！請勾選上方確認框後，才能送出申請。")
-    elif menu == "💬 Line 報表專區" and st.session_state.role == 'L5':
+    elif menu in ["💬 Line 報表專區", "Line 報表專區"] and st.session_state.role == 'L5':
         st.header("💬 Line 借還書回報")
-        st.info("💡 請複製以下格式，至 Line 群組回報借還狀況。")
+        tabs = st.tabs(["🚚 借還書回報", "📱 裝備清點回報"])
         
-        c = conn.cursor()
-        # 取得借閱書目
-        c.execute(f"SELECT book_name, COUNT(id) FROM books WHERE owner_id='{st.session_state.login_id}' AND status IN ('借閱中', '保留待領取', '少領異常') GROUP BY book_name")
-        borrowed = c.fetchall()
-        
-        # 取得歸還書目
-        c.execute(f"SELECT book_name, COUNT(id) FROM books WHERE owner_id='{st.session_state.login_id}' AND status='歸還中' GROUP BY book_name")
-        returning = c.fetchall()
-        
-        msg = f"班隊：{st.session_state.unit}\n學號：{st.session_state.login_id}\n\n【借閱書目】\n"
-        if borrowed:
-            for b in borrowed:
-                msg += f"{b[0]}*{b[1]}\n"
-        else:
-            msg += "無\n"
-            
-        msg += "\n【歸還書目】\n"
-        if returning:
-            for r in returning:
-                msg += f"{r[0]}*{r[1]}\n"
-        else:
-            msg += "無\n"
-            
-        st.text_area("📋 請點擊下方框框並全選複製：", value=msg.strip(), height=300)
+        with tabs[0]:
+            st.info("💡 請在送出申請後，點擊下方產生回報文字貼至 Line。")
+            if st.button("🚀 生成借還書清單", type="primary"):
+                br_df = pd.read_sql_query(f"SELECT book_name, quantity FROM borrow_requests WHERE login_id='{st.session_state.login_id}' AND status='待審核'", conn)
+                rt_df = pd.read_sql_query(f"SELECT book_name FROM books WHERE owner_id='{st.session_state.login_id}' AND status='歸還中'", conn)
+                
+                msg = f"報告，班隊：{st.session_state.unit}\n借還書清單：\n\n【申請借閱】：\n"
+                if not br_df.empty:
+                    for _, r in br_df.iterrows(): msg += f"{r['book_name']}*{r['quantity']}\n"
+                else: msg += "無\n"
+                
+                msg += "\n【申請歸還】：\n"
+                if not rt_df.empty:
+                    rt_group = rt_df.groupby('book_name').size()
+                    for b_name, count in rt_group.items(): msg += f"{b_name}*{count}\n"
+                else: msg += "無\n"
+                st.text_area("📋 借還書複製區", value=msg.strip(), height=250)
+                
+        with tabs[1]:
+            st.info("💡 產出目前名下所有「借閱中」準則的序號清單，供每日清點。")
+            if st.button("🚀 生成清點報表", type="primary"):
+                inv_df = pd.read_sql_query(f"SELECT book_name, serial_number FROM books WHERE owner_id='{st.session_state.login_id}' AND status='借閱中'", conn)
+                msg = f"報告，班隊：{st.session_state.unit}\n準則清點：\n\n"
+                if inv_df.empty: msg += "無\n"
+                else:
+                    grouped = inv_df.groupby('book_name')
+                    for b_name, group in grouped:
+                        msg += f"{b_name}*{len(group)}\n{','.join(group['serial_number'].tolist())}\n\n"
+                st.text_area("📋 清點複製區", value=msg.strip(), height=250)
                 
     elif menu in ["準則歸還", "📥 準則歸還"] and st.session_state.role == 'L5':
         st.header("📤 準則歸還")
@@ -1243,75 +1248,73 @@ try:
                     else:
                         st.success("✨ 裝備妥善率 100%！目前中隊無任何遺失待賠之準則！")
 
-            elif menu == "💬 Line 報表專區":
-                st.subheader("💬 Line 報表自動生成器")
-                line_tabs = st.tabs(["🚚 借還動態彙總", "📦 裝備總清點(含遺失)"])
-                sq_list = [s.strip() for s in st.session_state.squadron.split(',')]
+                # =============== L4 幹部的 Line 報表 ===============
+    elif menu in ["💬 Line 報表專區", "Line 報表專區"] and st.session_state.role == 'L4':
+        st.subheader("💬 Line 報表自動生成器")
+        line_tabs = st.tabs(["🚚 借還動態彙總", "📦 裝備總清點(含遺失)"])
+        sq_list = [s.strip() for s in st.session_state.squadron.split(',')]
+        is_doc = "人事" in st.session_state.title or "文書" in st.session_state.title
+        
+        with line_tabs[0]:
+            st.info("💡 產出今日「待領取」與「歸還中」之包裹物流清單。")
+            if is_doc: target_squadron_dyn = st.selectbox("請選擇中隊 (動態彙總)", sq_list, key="dyn_sq")
+            else: 
+                target_squadron_dyn = sq_list[0]
+                st.write(f"📍 **目前產出中隊：** {target_squadron_dyn}")
                 
-                with line_tabs[0]:
-                    st.info("💡 產出今日「待領取」與「歸還中」之包裹物流清單。")
-                    target_squadron_dyn = st.selectbox("請選擇中隊 (動態彙總)", sq_list, key="dyn_sq")
-                    col1, col2, col3 = st.columns(3)
-                    with col1: dyn_contact = st.text_input("開頭稱呼", value="劉姐", key="dyn_contact")
-                    with col2: 
-                        tz_tw = timezone(timedelta(hours=8))
-                        dyn_date = st.date_input("預計日期", value=datetime.now(tz_tw).date(), key="dyn_date")
-                    with col3: dyn_time = st.time_input("預計時間", value=datetime.strptime("16:30", "%H:%M").time(), key="dyn_time")
-                        
-                    if st.button("🚀 生成借還動態報表", type="primary"):
-                        c = conn.cursor()
-                        borrow_df = pd.read_sql_query(f"SELECT u.unit, b.book_name, COUNT(b.id) as qty FROM books b JOIN users u ON b.owner_id = u.login_id WHERE u.squadron='{target_squadron_dyn}' AND b.status IN ('審核中(已圈存)', '保留待領取') GROUP BY u.unit, b.book_name", conn)
-                        return_df = pd.read_sql_query(f"SELECT u.unit, b.book_name, COUNT(b.id) as qty FROM books b JOIN users u ON b.owner_id = u.login_id WHERE u.squadron='{target_squadron_dyn}' AND b.status='歸還中' GROUP BY u.unit, b.book_name", conn)
-                        
-                        tw_wd = ["一", "二", "三", "四", "五", "六", "日"][dyn_date.weekday()]
-                        b_time_str = f"{dyn_date.month}/{dyn_date.day}（{tw_wd}）{dyn_time.strftime('%H%M')}"
-                        msg = f"{dyn_contact}好，{target_squadron_dyn}借還書清單\n時間：{b_time_str}\n\n"
-                        
-                        all_units = set()
-                        if not borrow_df.empty: all_units.update(borrow_df['unit'].tolist())
-                        if not return_df.empty: all_units.update(return_df['unit'].tolist())
-                        
-                        if not all_units: msg += "今日無待辦物流。\n"
-                        else:
-                            for unit in sorted(list(all_units)):
-                                msg += f"==== 【{unit}】 ====\n借閱書目：\n"
-                                if not borrow_df.empty and not borrow_df[borrow_df['unit'] == unit].empty:
-                                    for _, r in borrow_df[borrow_df['unit'] == unit].iterrows(): msg += f"{r['book_name']}*{int(r['qty'])}\n"
-                                else: msg += "無\n"
-                                msg += "\n歸還書目：\n"
-                                if not return_df.empty and not return_df[return_df['unit'] == unit].empty:
-                                    for _, r in return_df[return_df['unit'] == unit].iterrows(): msg += f"{r['book_name']}*{int(r['qty'])}\n"
-                                else: msg += "無\n"
-                                msg += "\n"
-                        st.text_area("複製區", value=msg.strip(), height=350, key="dyn_area")
+            if st.button("🚀 生成借還動態報表", type="primary"):
+                borrow_df = pd.read_sql_query(f"SELECT u.unit, b.book_name, COUNT(b.id) as qty FROM books b JOIN users u ON b.owner_id = u.login_id WHERE u.squadron='{target_squadron_dyn}' AND b.status IN ('審核中(已圈存)', '保留待領取') GROUP BY u.unit, b.book_name", conn)
+                return_df = pd.read_sql_query(f"SELECT u.unit, b.book_name, COUNT(b.id) as qty FROM books b JOIN users u ON b.owner_id = u.login_id WHERE u.squadron='{target_squadron_dyn}' AND b.status='歸還中' GROUP BY u.unit, b.book_name", conn)
+                
+                now = datetime.now(timezone(timedelta(hours=8)))
+                tw_wd = ["一", "二", "三", "四", "五", "六", "日"][now.weekday()]
+                date_str = f"{now.month}/{now.day}（{tw_wd}）"
+                msg = f"劉姐好，{target_squadron_dyn}借還書清單\n時間：{date_str}\n\n"
+                
+                all_units = set()
+                if not borrow_df.empty: all_units.update(borrow_df['unit'].tolist())
+                if not return_df.empty: all_units.update(return_df['unit'].tolist())
+                
+                if not all_units: msg += "今日無待辦物流。\n"
+                else:
+                    for unit in sorted(list(all_units)):
+                        msg += f"==== 【{unit}】 ====\n借閱書目：\n"
+                        b_u = borrow_df[borrow_df['unit'] == unit] if not borrow_df.empty else pd.DataFrame()
+                        if not b_u.empty:
+                            for _, r in b_u.iterrows(): msg += f"{r['book_name']}*{int(r['qty'])}\n"
+                        else: msg += "無\n"
+                        msg += "\n歸還書目：\n"
+                        r_u = return_df[return_df['unit'] == unit] if not return_df.empty else pd.DataFrame()
+                        if not r_u.empty:
+                            for _, r in r_u.iterrows(): msg += f"{r['book_name']}*{int(r['qty'])}\n"
+                        else: msg += "無\n"
+                        msg += "\n"
+                st.text_area("📋 複製區", value=msg.strip(), height=350)
 
-                with line_tabs[1]:
-                    st.info("💡 拉出中隊下所有「借閱中」、「歸還中」、「遺失待賠」之準則清單，供每日高裝檢清點使用。")
-                    target_squadron_inv = st.selectbox("請選擇中隊 (總清點)", sq_list, key="inv_sq")
-                    if st.button("🚀 生成中隊裝備總清點報表", type="primary"):
-                        inv_df = pd.read_sql_query(f"SELECT u.unit, b.book_name, b.serial_number, b.status FROM books b JOIN users u ON b.owner_id = u.login_id WHERE u.squadron='{target_squadron_inv}' AND b.status IN ('借閱中', '歸還中', '遺失待賠') ORDER BY u.unit, b.book_name", conn)
-                        
-                        inv_msg = f"【{target_squadron_inv}】裝備清點總表\n日期：{datetime.now(timezone(timedelta(hours=8))).strftime('%Y/%m/%d')}\n\n"
-                        
-                        if inv_df.empty:
-                            inv_msg += "目前中隊外散之準則數量為 0。\n"
-                        else:
-                            for unit in inv_df['unit'].unique():
-                                inv_msg += f"🏢 班隊：{unit}\n"
-                                u_df = inv_df[inv_df['unit'] == unit]
-                                for b_name in u_df['book_name'].unique():
-                                    b_df = u_df[u_df['book_name'] == b_name]
-                                    inv_msg += f"📘 {b_name} * {len(b_df)}\n"
-                                    serials = []
-                                    for _, r in b_df.iterrows():
-                                        s_text = str(r['serial_number']).strip()
-                                        if r['status'] == '遺失待賠': s_text += " (遺失)"
-                                        elif r['status'] == '歸還中': s_text += " (待退庫)"
-                                        serials.append(s_text)
-                                    inv_msg += f"[{', '.join(serials)}]\n"
-                                inv_msg += "-------------------\n"
-                                
-                        st.text_area("清點複製區", value=inv_msg.strip(), height=400, key="inv_area")
+        with line_tabs[1]:
+            st.info("💡 拉出中隊下所有「借閱中」、「歸還中」、「遺失待賠」之準則清單。")
+            if is_doc: target_squadron_inv = st.selectbox("請選擇中隊 (總清點)", sq_list, key="inv_sq")
+            else: 
+                target_squadron_inv = sq_list[0]
+                st.write(f"📍 **目前產出中隊：** {target_squadron_inv}")
+                
+            if st.button("🚀 生成裝備總清點報表", type="primary"):
+                inv_df = pd.read_sql_query(f"SELECT u.unit, b.book_name, b.serial_number, b.status FROM books b JOIN users u ON b.owner_id = u.login_id WHERE u.squadron='{target_squadron_inv}' AND b.status IN ('借閱中', '歸還中', '遺失待賠') ORDER BY u.unit, b.book_name", conn)
+                now = datetime.now(timezone(timedelta(hours=8)))
+                tw_wd = ["一", "二", "三", "四", "五", "六", "日"][now.weekday()]
+                inv_msg = f"劉姐好，{target_squadron_inv}裝備清點總表\n時間：{now.month}/{now.day}（{tw_wd}）\n\n"
+                
+                if inv_df.empty: inv_msg += "目前無外散之裝備。\n"
+                else:
+                    for unit in inv_df['unit'].unique():
+                        inv_msg += f"==== 【{unit}】 ====\n"
+                        u_df = inv_df[inv_df['unit'] == unit]
+                        for b_name in u_df['book_name'].unique():
+                            b_df = u_df[u_df['book_name'] == b_name]
+                            inv_msg += f"📘 {b_name} * {len(b_df)}\n"
+                            serials = [str(r['serial_number']).strip() + ("(遺失)" if r['status']=='遺失待賠' else "(待退庫)" if r['status']=='歸還中' else "") for _, r in b_df.iterrows()]
+                            inv_msg += f"[{', '.join(serials)}]\n\n"
+                st.text_area("📋 清點複製區", value=inv_msg.strip(), height=350)
 
     elif menu in ["綜合查詢", "🔍 綜合查詢"]:
         st.header("🔍 綜合查詢")
@@ -1375,9 +1378,9 @@ try:
                         st.markdown(nested_html, unsafe_allow_html=True)
 
     elif menu in ["操作紀錄", "🗂️ 操作紀錄"] and st.session_state.role in ['L1', 'L2', 'L3', 'L4']:
-        st.header("🗂️ 操作紀錄")
+        st.header("🗂️ 系統操作紀錄")
         
-        search_keyword = st.text_input("🔍 搜尋紀錄 (可輸入班隊名稱、動作、準則名稱等)")
+        search_keyword = st.text_input("🔍 搜尋紀錄 (可輸入班隊、動作、準則名稱等)", placeholder="例如：借閱、M2A2、第一中隊...")
         
         log_query = """
             SELECT a.timestamp as 時間, 
@@ -1388,39 +1391,45 @@ try:
                            ELSE a.user_id 
                        END, a.user_id
                    ) as 操作者, 
-                   a.action as 系統動作, 
+                   a.action as 動作, 
                    a.details as 詳細內容 
             FROM action_logs a
             LEFT JOIN users u ON a.user_id = u.login_id
         """
-        
         if search_keyword:
             safe_kw = search_keyword.replace("'", "''")
             log_query += f" WHERE a.details LIKE '%%{safe_kw}%%' OR a.action LIKE '%%{safe_kw}%%' OR u.unit LIKE '%%{safe_kw}%%' OR u.name LIKE '%%{safe_kw}%%'"
             
-        log_query += " ORDER BY a.id DESC LIMIT 200"
+        log_query += " ORDER BY a.id DESC LIMIT 300"
         logs_df = pd.read_sql_query(log_query, conn)
         
         if logs_df.empty:
-            st.warning("沒有找到符合條件的操作紀錄。")
+            st.info("📭 目前無操作紀錄。")
         else:
-            import re
-            def parse_details(row):
-                text = str(row['詳細內容'])
-                # 正規表達式：精準捕捉標準格式
-                match = re.search(r'^(核准|申請|踢退)\s+(.*?)\s+(歸還|借閱)\s+(.*?)\s+(\d+)\s*本$', text)
+            # 加入精美表情符號映射
+            def add_emoji(action):
+                act = str(action)
+                if '借閱' in act: return f"📤 {act}"
+                if '歸還' in act: return f"📥 {act}"
+                if '核准' in act: return f"✅ {act}"
+                if '踢退' in act or '異常' in act: return f"🚨 {act}"
+                if '設定' in act or '修改' in act: return f"⚙️ {act}"
+                if '登出' in act or '登入' in act: return f"👤 {act}"
+                return f"🔹 {act}"
                 
-                if match:
-                    return pd.Series([match.group(1), match.group(2), match.group(3), match.group(4), f"{match.group(5)} 本", ""])
-                else:
-                    return pd.Series(["-", "-", "-", "-", "-", text])
-
-            logs_df[['操作指令', '對象/班隊', '動作細節', '準則名稱(含版本)', '數量', '其他操作細節']] = logs_df.apply(parse_details, axis=1)
-            display_df = logs_df[['時間', '操作者', '操作指令', '對象/班隊', '動作細節', '準則名稱(含版本)', '數量', '其他操作細節']]
+            logs_df['動作'] = logs_df['動作'].apply(add_emoji)
             
-            st.dataframe(display_df, use_container_width=True, hide_index=True)
-finally:
-    release_connection(conn)
+            st.dataframe(
+                logs_df, 
+                hide_index=True, 
+                use_container_width=True,
+                column_config={
+                    "時間": st.column_config.TextColumn("🕒 發生時間", width="medium"),
+                    "操作者": st.column_config.TextColumn("🧑‍✈️ 單位 / 操作者", width="medium"),
+                    "動作": st.column_config.TextColumn("🎯 系統動作", width="small"),
+                    "詳細內容": st.column_config.TextColumn("📝 日誌詳情", width="large")
+                }
+            )
 
 
 
