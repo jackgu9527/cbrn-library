@@ -595,6 +595,115 @@ try:
         else:
             st.markdown(f"**{display_name}**，長官好今日概況良好。")
 
+    elif menu in ["裝備序號登載", "🏷️ 裝備序號登載"] and st.session_state.role == 'L5':
+        st.header("🏷️ 準則序號登載與校正")
+        st.info("💡 請對照實體準則，在下方輸入序號（多本請用逗號 `,` 隔開）。\n💡 若本次未全數領齊，輸入實際拿到的數量即可送出。")
+
+        bk_df = pd.read_sql_query(f"SELECT id, book_name, serial_number, status FROM books WHERE owner_id='{st.session_state.login_id}' AND status IN ('保留待領取', '借閱中') ORDER BY book_name", conn)
+
+        if bk_df.empty:
+            st.success("✨ 您目前沒有需要登載或校正的準則！")
+        else:
+            with st.form("serial_entry_form"):
+                form_data = {}
+                for b_name in bk_df['book_name'].unique():
+                    b_group = bk_df[bk_df['book_name'] == b_name]
+                    pending_ids = b_group[b_group['status'] == '保留待領取']['id'].tolist()
+                    borrowed_rows = b_group[b_group['status'] == '借閱中']
+                    
+                    form_data[b_name] = {'pending_ids': pending_ids, 'borrowed': borrowed_rows.to_dict('records')}
+                    
+                    with st.container(border=True):
+                        # === 🟡 待領取區塊 (支援部分送出) ===
+                        if pending_ids:
+                            st.markdown(f"**🟡 {b_name}** (待領取額度：{len(pending_ids)} 本)")
+                            pending_input = st.text_input("📝 請輸入序號 (多本用逗號隔開)", key=f"p_{b_name}")
+                            abnormal_check = st.checkbox(f"☑️ 異常回報：確定剩下的拿不到了，轉少領退庫", key=f"abn_{b_name}")
+                            form_data[b_name]['pending_input'] = pending_input
+                            form_data[b_name]['abnormal'] = abnormal_check
+                            
+                        if pending_ids and not borrowed_rows.empty:
+                            st.divider()
+                            
+                        # === 🟢 借閱中(校正)區塊 ===
+                        if not borrowed_rows.empty:
+                            current_serials = [str(r['serial_number']).strip() for r in borrowed_rows.to_dict('records') if pd.notna(r['serial_number'])]
+                            st.markdown(f"**🟢 {b_name}** (已借閱：{len(borrowed_rows)} 本)")
+                            corr_input = st.text_input("📝 校正序號 (維持等量並用逗號隔開)", value=", ".join(current_serials), key=f"c_{b_name}")
+                            form_data[b_name]['corr_input'] = corr_input
+                            
+                st.markdown("---")
+                if st.form_submit_button("💾 批次儲存 / 送出序號", type="primary", use_container_width=True):
+                    c = conn.cursor()
+                    has_error = False
+                    success_count = 0
+                    
+                    for b_name, data in form_data.items():
+                        # 處理 🟡 待領取
+                        if 'pending_input' in data:
+                            raw_s = [s.strip() for s in data['pending_input'].split(',') if s.strip()]
+                            entered_qty = len(raw_s)
+                            pending_ids = data['pending_ids']
+                            pending_qty = len(pending_ids)
+                            
+                            if entered_qty > pending_qty:
+                                st.error(f"❌ 【{b_name}】輸入的序號數量 ({entered_qty}) 超過待領取額度 ({pending_qty})！")
+                                has_error = True; continue
+                                
+                            for i in range(pending_qty):
+                                p_id = int(pending_ids[i])
+                                if i < entered_qty:
+                                    new_s = raw_s[i]
+                                    c.execute("SELECT id, status FROM books WHERE serial_number=%s", (new_s,))
+                                    check = c.fetchone()
+                                    if check and check[1] == '在庫':
+                                        c.execute(f"UPDATE books SET status='借閱中', owner_id='{st.session_state.login_id}' WHERE id={int(check[0])}")
+                                        c.execute(f"UPDATE books SET status='在庫', owner_id='在庫' WHERE id={p_id}")
+                                        success_count += 1
+                                    elif not check:
+                                        c.execute("UPDATE books SET serial_number=%s, status='借閱中' WHERE id=%s", (new_s, p_id))
+                                        success_count += 1
+                                    else:
+                                        st.error(f"❌ 序號 {new_s} 已被借閱或不存在！")
+                                        has_error = True; break
+                                elif data.get('abnormal', False):
+                                    c.execute(f"UPDATE books SET status='少領異常' WHERE id={p_id}")
+                                    success_count += 1
+                                    
+                        # 處理 🟢 借閱中校正
+                        if 'corr_input' in data:
+                            raw_c = [s.strip() for s in data['corr_input'].split(',') if s.strip()]
+                            borrowed_rows = data['borrowed']
+                            if len(raw_c) != len(borrowed_rows) and len(raw_c) > 0:
+                                st.error(f"❌ 【{b_name}】校正數量 ({len(raw_c)}) 與原借閱數量 ({len(borrowed_rows)}) 不符！")
+                                has_error = True; continue
+                            
+                            if len(raw_c) == len(borrowed_rows):
+                                for i, r in enumerate(borrowed_rows):
+                                    b_id = int(r['id'])
+                                    old_s = str(r['serial_number']).strip()
+                                    new_s = raw_c[i]
+                                    if old_s != new_s:
+                                        c.execute("SELECT id, status FROM books WHERE serial_number=%s", (new_s,))
+                                        check = c.fetchone()
+                                        if check and check[1] == '在庫':
+                                            c.execute(f"UPDATE books SET status='借閱中', owner_id='{st.session_state.login_id}' WHERE id={int(check[0])}")
+                                            c.execute(f"UPDATE books SET status='在庫', owner_id='在庫' WHERE id={b_id}")
+                                            success_count += 1
+                                        elif not check:
+                                            c.execute("UPDATE books SET serial_number=%s WHERE id=%s", (new_s, b_id))
+                                            success_count += 1
+                                        else:
+                                            st.error(f"❌ 校正失敗：序號 {new_s} 已被他人借閱！")
+                                            has_error = True; break
+                                            
+                    if not has_error and success_count > 0:
+                        conn.commit()
+                        st.success("✅ 序號儲存成功！")
+                        import time; time.sleep(1.5); st.rerun()
+                    elif not has_error and success_count == 0:
+                        st.warning("⚠️ 您尚未輸入任何序號。")
+    
     elif menu in ["準則借閱", "📤 準則借閱"] and st.session_state.role == 'L5':
         st.header("📤 準則借閱申請")
         st.info("💡 請選擇您需要借閱的準則與數量，送出後請等待幹部核准。")
