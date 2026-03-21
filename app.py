@@ -580,9 +580,6 @@ try:
                                 st.success("✅ 修改成功！請重新登入。")
                                 import time; time.sleep(1.5); st.session_state.clear(); st.rerun()
 
-        else:
-            st.markdown(f"**{display_name}**，今日概況良好。")
-
     elif menu in ["序號登載", "🏷️ 序號登載"] and st.session_state.role == 'L5':
         st.header("🏷️ 序號登載與校正")
         
