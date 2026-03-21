@@ -7,6 +7,7 @@ import psycopg2
 from psycopg2 import pool
 from psycopg2 import IntegrityError
 import warnings
+import extra_streamlit_components as stx  # 🚀 新增餅乾套件
 
 # 關閉 Pandas 對於未嚴格使用 SQLAlchemy 的警告
 warnings.filterwarnings('ignore', category=UserWarning, module='pandas')
@@ -15,6 +16,14 @@ warnings.filterwarnings('ignore', category=UserWarning, module='pandas')
 # 1. 系統初始化與資料庫設定 (渦輪加速連線池)
 # ==========================================
 st.set_page_config(page_title="大隊部準則管理系統", layout="wide")
+
+# === 🚀 全域快閃通知 (Toast) 接收器 ===
+if 'sys_toast' in st.session_state:
+    st.toast(st.session_state['sys_toast'])
+    del st.session_state['sys_toast']
+
+# === 🍪 餅乾通行證管理器 ===
+cookie_manager = stx.CookieManager()
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -213,6 +222,20 @@ def run_ghost_cleanup():
 # ==========================================
 # 2. 登入與註冊模組
 # ==========================================
+# 🍪 嘗試從 Cookie 讀取通行證 (無感自動登入)
+if 'logged_in' not in st.session_state:
+    stored_user = cookie_manager.get('sys_user_token')
+    if stored_user:
+        conn = get_db_connection()
+        try:
+            user = pd.read_sql_query("SELECT * FROM users WHERE login_id=%s", conn, params=(stored_user,))
+            if not user.empty and user.iloc[0]['status'] not in ['待審核', '停權', '結訓凍結']:
+                for col in user.columns:
+                    st.session_state[col] = user.iloc[0][col]
+                st.session_state['logged_in'] = True
+        finally:
+            release_connection(conn)
+
 if 'logged_in' not in st.session_state:
     st.markdown("##  大隊部準則管理系統")
     tab1, tab2 = st.tabs([" 系統登入", " 新進班隊註冊"])
@@ -220,10 +243,9 @@ if 'logged_in' not in st.session_state:
     with tab1:
         login_id = st.text_input("帳號 (Login ID)")
         password = st.text_input("密碼 (Password)", type="password")
-        if st.button("登入"):
+        if st.button("登入", type="primary"):
             conn = get_db_connection()
             try:
-                # 🛡️ 參數化查詢：將帳號密碼作為 tuple 傳入 params，防禦 SQL Injection
                 user = pd.read_sql_query("SELECT * FROM users WHERE login_id=%s AND password=%s", conn, params=(login_id, password))
                 if not user.empty:
                     if user.iloc[0]['status'] == '待審核':
@@ -234,7 +256,12 @@ if 'logged_in' not in st.session_state:
                         for col in user.columns:
                             st.session_state[col] = user.iloc[0][col]
                         st.session_state['logged_in'] = True
+                        
+                        # 🍪 核發通行證，設定 30 天免重新登入
+                        cookie_manager.set('sys_user_token', login_id, expires_at=datetime.now() + timedelta(days=30))
+                        
                         log_action(login_id, "登入", "使用者成功登入系統")
+                        import time; time.sleep(0.5) # 給瀏覽器 0.5 秒存入 Cookie
                         st.rerun()
                 else:
                     st.error("❌ 帳號或密碼錯誤 / 帳號不存在")
@@ -262,7 +289,10 @@ if 'logged_in' not in st.session_state:
                                   (reg_id, reg_pw, 'L5', reg_unit, reg_squadron, '訓員', '代表', reg_date.strftime('%Y-%m-%d'), '待審核', 1))
                         conn.commit()
                         log_action(reg_id, "註冊申請", f"{reg_squadron} {reg_unit} 提出註冊申請")
-                        st.success("✅ 註冊申請已送出！請等待幹部核准後即可登入。")
+                        
+                        # 🚀 註冊成功的 Toast 瞬間重整
+                        st.session_state['sys_toast'] = "✅ 註冊申請已送出！請等待幹部核准後即可登入。"
+                        st.rerun()
                 finally:
                     release_connection(conn)
             else:
@@ -341,7 +371,9 @@ with st.sidebar:
     st.markdown("---")
     if st.button("登出"):
         log_action(st.session_state.login_id, "登出", "使用者登出系統")
+        cookie_manager.delete('sys_user_token') # 🍪 徹底銷毀通行證
         st.session_state.clear()
+        import time; time.sleep(0.5)
         st.rerun()
 
 # ==========================================
@@ -679,8 +711,8 @@ try:
                                             
                     if not has_err and success_cnt > 0:
                         conn.commit()
-                        st.success("✅ 序號儲存成功！")
-                        import time; time.sleep(1.5); st.rerun()
+                        st.session_state['sys_toast'] ="✅ 序號儲存成功！"
+                        st.rerun()
                     elif not has_err and success_cnt == 0:
                         st.warning("⚠️ 尚未輸入或修改任何序號。")
     
@@ -741,8 +773,8 @@ try:
                             c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)",
                                       (now_time, st.session_state.login_id, "申請借閱", f"申請 {b_name} {qty} 本"))
                         conn.commit()
-                        st.success("✅ 申請已送出！請等待幹部核准。")
-                        import time; time.sleep(1.5); st.rerun()
+                        st.session_state['sys_toast'] ="✅ 申請已送出！請等待幹部核准。"
+                        st.rerun()
                 else:
                     st.error("🚨 發現重複借閱項目！請勾選上方確認框後，才能送出申請。")
     elif menu in ["💬 Line 報表專區", "Line 報表專區"] and st.session_state.role == 'L5':
@@ -878,18 +910,14 @@ try:
                     if 'l5_partial_return_memory' in st.session_state: 
                         del st.session_state['l5_partial_return_memory']
                         
-                    st.success(f"✅ 已送出 {len(selected_ids)} 本歸還申請！等待幹部審核。")
-                    import time
-                    time.sleep(1.5)
+                    st.session_state['sys_toast'] ="✅ 已送出 {len(selected_ids)} 本歸還申請！等待幹部審核。"
                     st.rerun()
                     
                     # 任務成功，銷毀保險箱
                     if 'l5_partial_return_memory' in st.session_state: 
                         del st.session_state['l5_partial_return_memory']
                         
-                    st.success(f"✅ 已送出 {len(selected_ids)} 本歸還申請！等待幹部審核。")
-                    import time
-                    time.sleep(1.5)
+                    st.session_state['sys_toast'] = "✅ 已送出 {len(selected_ids)} 本歸還申請！等待幹部審核。"
                     st.rerun()
                 else:
                     st.warning("⚠️ 您尚未勾選任何需要歸還的準則！")
@@ -952,8 +980,8 @@ try:
                                                     c.execute("""UPDATE users SET login_id=%s, password=%s, squadron=%s, unit=%s, title=%s, name=%s, status=%s, setup_count=%s WHERE id=%s""", 
                                                               (new_login, new_pwd, new_sq, new_unit, new_ti, new_na, new_st, new_sc, uid))
                                                     conn.commit()
-                                                    st.success("✅ 更新成功！")
-                                                    import time; time.sleep(1); st.rerun()
+                                                    st.session_state['sys_toast'] = "✅ 更新成功！"
+                                                    st.rerun()
                                                 except Exception as e:
                                                     st.error(f"❌ 儲存失敗：{e}")
 
@@ -1052,8 +1080,8 @@ try:
                                         if grant_auth: c.execute("UPDATE users SET setup_count=1 WHERE id=%s", (uid,))
                                         else: c.execute("UPDATE users SET setup_count=0 WHERE id=%s", (uid,))
                                         conn.commit()
-                                        st.success("✅ 更新成功！")
-                                        import time; time.sleep(1); st.rerun()
+                                        st.session_state['sys_toast'] = "✅ 更新成功！"
+                                        st.rerun()
             else:
                 st.success("目前無所屬的 L4 幹部資料。")
 
@@ -1085,15 +1113,15 @@ try:
                                         c = conn.cursor()
                                         c.execute("UPDATE users SET status='啟用' WHERE id=%s", (uid,))
                                         conn.commit()
-                                        st.success("✅ 已核准開通！")
-                                        import time; time.sleep(1); st.rerun()
+                                        st.session_state['sys_toast'] = "✅ 已核准開通！"
+                                        st.rerun()
                                 with col2:
                                     if st.button("❌ 否決(刪除)", key=f"rej_reg_{uid}", use_container_width=True):
                                         c = conn.cursor()
                                         c.execute("DELETE FROM users WHERE id=%s", (uid,))
                                         conn.commit()
-                                        st.error("🗑️ 已刪除此申請！")
-                                        import time; time.sleep(1); st.rerun()
+                                        st.session_state['sys_toast'] = "🗑️ 已刪除此申請！"
+                                        st.rerun()
                     else:
                         st.success("✨ 目前無待審核的註冊申請。")
 
@@ -1129,8 +1157,8 @@ try:
                                             else: c.execute("UPDATE users SET setup_count=0 WHERE id=%s", (uid,))
                                             
                                             conn.commit()
-                                            st.success("✅ 儲存成功！(若原為凍結已自動復權)")
-                                            import time; time.sleep(1); st.rerun()
+                                            st.session_state['sys_toast'] = "✅ 儲存成功！(若原為凍結已自動復權)"
+                                            st.rerun()
                     else:
                         st.success("✨ 目前無可管理的訓員資料。")
 
@@ -1195,8 +1223,8 @@ try:
                                 c.execute(f"UPDATE borrow_requests SET status='已踢退(砍單退件)' WHERE id={req_id}")
                                 c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", (now_time, st.session_state.login_id, "踢退借閱", f"全數踢退 {req_unit} 的 {req_book} 申請"))
                         conn.commit()
-                        st.success(f"✅ 批次審核完成！")
-                        import time; time.sleep(1.5); st.rerun()
+                        st.session_state['sys_toast'] ="✅ 批次審核完成！"
+                        st.rerun()
                 else:
                     st.info("目前無待核准的準則。")
 
@@ -1234,8 +1262,8 @@ try:
                             now_time = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S")
                             c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", (now_time, st.session_state.login_id, "異常處理", f"將少領的 {len(resolved_ids)} 本額度釋放回庫房"))
                             conn.commit()
-                            st.success(f"✅ 成功結案！已釋放 {len(resolved_ids)} 本準則。")
-                            import time; time.sleep(1.5); st.rerun()
+                            st.session_state['sys_toast'] ="✅ 成功結案！已釋放 {len(resolved_ids)} 本準則。"
+                            st.rerun()
                 else:
                     st.success("目前無異常少領通報。")
 
@@ -1313,8 +1341,8 @@ try:
                                 
                             if has_action:
                                 conn.commit()
-                                st.success("✅ 審核完成！")
-                                import time; time.sleep(1.5); st.rerun()
+                                st.session_state['sys_toast'] ="✅ 審核完成！"
+                                st.rerun()
                     else:
                         st.success("目前各班隊皆無待歸還準則！")
 
@@ -1334,8 +1362,8 @@ try:
                                 c.execute(f"UPDATE books SET status='在庫', owner_id='在庫' WHERE id IN ({','.join(map(str, resolved_ids))})")
                                 c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", (now_time, st.session_state.login_id, "遺失結案", f"尋獲或完成賠償，退庫共 {len(resolved_ids)} 本準則"))
                                 conn.commit()
-                                st.success("✅ 成功結案！")
-                                import time; time.sleep(1.5); st.rerun()
+                                st.session_state['sys_toast'] ="✅ 成功結案！"
+                                st.rerun()
                     else:
                         st.success("✨ 裝備妥善率 100%！目前中隊無任何遺失待賠之準則！")
 
