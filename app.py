@@ -877,9 +877,9 @@ try:
                 else:
                     st.error("❌ 系統找不到 CSV 檔案！請確認 GitHub 上的檔案名稱是否包含「準則資料庫」且副檔名為 .csv。")
                             
-        elif menu in ["👥 人事管理", "審核與管理"] and st.session_state.role == 'L3':
-        st.subheader("👥 所屬幹部 (L4) 管理中心")
-        st.info("💡 您可直接在此表中調整幹部的所屬中隊與職務。若遇幹部人員更換，請勾選後點擊「發放強制修改權限」。")
+                elif menu in ["👥 人事管理", "審核與管理"] and st.session_state.role == 'L3':
+                    st.subheader("👥 所屬幹部 (L4) 管理中心")
+                    st.info("💡 您可直接在此表中調整幹部的所屬中隊與職務。若遇幹部人員更換，請勾選後點擊「發放強制修改權限」。")
         
         # 只撈取該中隊的 L4 幹部
         l4_users = pd.read_sql_query(f"SELECT id, squadron as 中隊, title as 職務, name as 姓名, login_id as 帳號, setup_count as 修改權限 FROM users WHERE role='L4' AND squadron='{st.session_state.squadron}'", conn)
