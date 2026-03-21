@@ -886,8 +886,16 @@ try:
             l4_users = pd.read_sql_query(f"SELECT id, squadron as 中隊, title as 職務, name as 姓名, login_id as 帳號, password as 密碼, setup_count as 修改權限, status as 狀態 FROM users WHERE role='L4' AND squadron='{st.session_state.squadron}'", conn)
             
             if not l4_users.empty:
-                titles = l4_users['職務'].unique()
+                # 🚀 升級：職務強制排序引擎 (輔導長 -> 區隊長 -> 分隊長)
+                raw_titles = l4_users['職務'].unique().tolist()
+                order_map = {"輔導長": 1, "區隊長": 2, "分隊長": 3}
+                titles = sorted(raw_titles, key=lambda x: order_map.get(x, 99))
+                
                 tabs = st.tabs([f"🎖️ {t} ({len(l4_users[l4_users['職務']==t])}人)" for t in titles])
+                
+                # 下拉選單的選項清單
+                sq_options = ["學生一中隊", "學生二中隊", "學員一中隊", "學員二中隊"]
+                title_options = ["輔導長", "區隊長", "分隊長"]
                 
                 for i, t in enumerate(titles):
                     with tabs[i]:
@@ -898,8 +906,13 @@ try:
                                 st.markdown(f"**🧑‍✈️ {row['姓名']}** ｜ {'🟢' if row['狀態']=='啟用' else '🔴'} 狀態: `{row['狀態']}`  \n🆔 帳號: `{row['帳號']}` ｜ 🔑 密碼: `{row['密碼']}`")
                                 
                                 with st.expander("✏️ 修改所屬中隊與交接權限"):
-                                    new_sq = st.text_input("管理中隊 (多個請用逗號 , 分隔)", value=row['中隊'], key=f"sq_{uid}")
-                                    new_title = st.text_input("職務名稱", value=row['職務'], key=f"ti_{uid}")
+                                    # 🚀 升級：改用防呆下拉式選單
+                                    curr_sq = row['中隊'] if row['中隊'] in sq_options else sq_options[0]
+                                    new_sq = st.selectbox("管理中隊", sq_options, index=sq_options.index(curr_sq), key=f"sq_{uid}")
+                                    
+                                    curr_ti = row['職務'] if row['職務'] in title_options else title_options[0]
+                                    new_title = st.selectbox("職務名稱", title_options, index=title_options.index(curr_ti), key=f"ti_{uid}")
+                                    
                                     grant_auth = st.checkbox("☑️ 發放 1 次「修改帳密」權限 (交接用)", value=(row['修改權限']>0), key=f"g3_{uid}")
                                     
                                     if st.button("💾 儲存變更", key=f"s3_{uid}", type="primary", use_container_width=True):
@@ -932,7 +945,8 @@ try:
                         for _, row in reg_df.iterrows():
                             uid = row['id']
                             with st.container(border=True):
-                                st.markdown(f"🏢 **班隊：** `{row['班隊']}`  \n👤 **帳號：** `{row['帳號']}`  \n📅 **結訓：** `{row['結訓日']}`")
+                                # 🚀 升級：依照長官指定格式，顯示所屬中隊
+                                st.markdown(f"🏢 **班隊：** `{row['班隊']}`  \n📍 **所屬中隊：** `{row['中隊']}`  \n📅 **結訓：** `{row['結訓日']}`")
                                 
                                 col1, col2 = st.columns(2)
                                 with col1:
