@@ -396,75 +396,46 @@ try:
                 else: st.info(f"📅 距離結訓日還有：{days_left} 天")
 
             st.markdown("#### 📦 我的裝備狀態總覽")
-            st.info("💡 以下為您名下所有準則目前的動態。")
             
             # 撈取所有狀態資料
             br_df = pd.read_sql_query(f"SELECT book_name, quantity FROM borrow_requests WHERE login_id='{st.session_state.login_id}' AND status='待審核'", conn)
-            bk_df = pd.read_sql_query(f"SELECT book_name, serial_number, status FROM books WHERE owner_id='{st.session_state.login_id}' AND status IN ('保留待領取', '借閱中', '歸還中')", conn)
+            bk_df = pd.read_sql_query(f"SELECT book_name, status FROM books WHERE owner_id='{st.session_state.login_id}' AND status IN ('保留待領取', '借閱中', '歸還中')", conn)
 
-            # 將所有書整合到一本大字典裡
-            book_stats = {}
+            # 依狀態與書名進行大數據分組
+            items = {'🔵 申請中': {}, '🟡 待領取': {}, '🟢 借閱中': {}, '🔴 歸還中': {}}
             for _, r in br_df.iterrows():
-                b_name = r['book_name']
-                if b_name not in book_stats: book_stats[b_name] = {'🔵 申請中':0, '🟡 待領取':0, '🟢 借閱中':0, '🔴 歸還中':0, 'serials':[]}
-                book_stats[b_name]['🔵 申請中'] += r['quantity']
-                
+                items['🔵 申請中'][r['book_name']] = items['🔵 申請中'].get(r['book_name'], 0) + r['quantity']
             for _, r in bk_df.iterrows():
-                b_name = r['book_name']
                 st_val = r['status']
-                if b_name not in book_stats: book_stats[b_name] = {'🔵 申請中':0, '🟡 待領取':0, '🟢 借閱中':0, '🔴 歸還中':0, 'serials':[]}
-                if st_val == '保留待領取': book_stats[b_name]['🟡 待領取'] += 1
-                elif st_val == '借閱中': 
-                    book_stats[b_name]['🟢 借閱中'] += 1
-                    if pd.notna(r['serial_number']): book_stats[b_name]['serials'].append(str(r['serial_number']))
-                elif st_val == '歸還中': book_stats[b_name]['🔴 歸還中'] += 1
+                mapped_st = '🟡 待領取' if st_val == '保留待領取' else '🟢 借閱中' if st_val == '借閱中' else '🔴 歸還中'
+                items[mapped_st][r['book_name']] = items[mapped_st].get(r['book_name'], 0) + 1
 
-            # 渲染 RWD 極簡卡片
-            if not book_stats:
-                st.success("✨ 您目前名下沒有任何準則紀錄。")
-            else:
-                for b_name, stats in book_stats.items():
+            has_items = False
+            # 絕對排序與 RWD 顏色設定
+            status_config = [
+                ('🔵 申請中', '🔵', '#4da6ff', '申請中 (等待幹部核准)'),
+                ('🟡 待領取', '🟡', '#ffb84d', '已審核 ⬅️ 請至左側登載序號'),
+                ('🟢 借閱中', '🟢', '#4CAF50', '借閱中'),
+                ('🔴 歸還中', '🔴', '#ff6666', '歸還中 (等待幹部點收)')
+            ]
+
+            for st_key, icon, color, st_desc in status_config:
+                for b_name, qty in items[st_key].items():
+                    has_items = True
                     with st.container(border=True):
-                        html_content = ""
-                        # 🔵 申請中
-                        if stats['🔵 申請中'] > 0:
-                            html_content += f"""
-                            <div style="display: flex; justify-content: space-between; flex-wrap: wrap; margin-bottom: 4px;">
-                                <span style="font-weight: bold; color: #1f77b4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 70%;">🔵 {b_name}</span>
-                                <span style="white-space: nowrap;">(共 {stats['🔵 申請中']} 本)</span>
-                            </div>
-                            <div style="color: #888; font-size: 0.9em; margin-bottom: 8px;">狀態：申請中 (等待幹部核准)</div>
-                            """
-                        # 🟡 保留待領取
-                        if stats['🟡 待領取'] > 0:
-                            html_content += f"""
-                            <div style="display: flex; justify-content: space-between; flex-wrap: wrap; margin-bottom: 4px;">
-                                <span style="font-weight: bold; color: #ff7f0e; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 70%;">🟡 {b_name}</span>
-                                <span style="white-space: nowrap;">(共 {stats['🟡 待領取']} 本)</span>
-                            </div>
-                            <div style="color: #ff7f0e; font-size: 0.9em; margin-bottom: 8px; font-weight: bold;">狀態：已審核 (保留待領取) ⬅️ 請至左側登載序號</div>
-                            """
-                        # 🟢 借閱中
-                        if stats['🟢 借閱中'] > 0:
-                            s_list = ", ".join(stats['serials'])
-                            html_content += f"""
-                            <div style="display: flex; justify-content: space-between; flex-wrap: wrap; margin-bottom: 4px;">
-                                <span style="font-weight: bold; color: #2ca02c; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 70%;">🟢 {b_name}</span>
-                                <span style="white-space: nowrap;">(共 {stats['🟢 借閱中']} 本)</span>
-                            </div>
-                            <div style="color: #888; font-size: 0.9em;">狀態：借閱中</div>
-                            <div style="color: #555; font-size: 0.9em; font-family: monospace; word-break: break-all; margin-bottom: 8px;">序號：{s_list}</div>
-                            """
-                        # 🔴 歸還中
-                        if stats['🔴 歸還中'] > 0:
-                            html_content += f"""
-                            <div style="display: flex; justify-content: space-between; flex-wrap: wrap; margin-bottom: 4px;">
-                                <span style="font-weight: bold; color: #d62728; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 70%;">🔴 {b_name}</span>
-                                <span style="white-space: nowrap;">(共 {stats['🔴 歸還中']} 本)</span>
-                            </div>
-                            <div style="color: #888; font-size: 0.9em; margin-bottom: 8px;">狀態：歸還中 (等待幹部點收)</div>
-                            """
-                        st.markdown(html_content, unsafe_allow_html=True)
+                        # 長官指定的完美雙行排版
+                        st.markdown(f"""
+                        <div style="font-size: 15px; font-weight: bold; color: {color}; margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                            {icon} {b_name}
+                        </div>
+                        <div style="display: flex; justify-content: space-between; font-size: 14px; color: #E0E0E0; padding-left: 28px;">
+                            <span>(共 {qty} 本)</span>
+                            <span style="text-align: right;">狀態：{st_desc}</span>
+                        </div>
+                        """, unsafe_allow_html=True)
+
+            if not has_items:
+                st.success("✨ 您目前名下沒有任何裝備紀錄。")
 
         # ======== 🟢 L3：中隊長/輔導長 (首頁戰情看板) ========
         elif st.session_state.role == 'L3':
@@ -597,8 +568,7 @@ try:
 
     elif menu in ["裝備序號登載", "🏷️ 裝備序號登載"] and st.session_state.role == 'L5':
         st.header("🏷️ 準則序號登載與校正")
-        st.info("💡 請對照實體準則，在下方輸入序號（多本請用逗號 `,` 隔開）。\n💡 若本次未全數領齊，輸入實際拿到的數量即可送出。")
-
+        
         bk_df = pd.read_sql_query(f"SELECT id, book_name, serial_number, status FROM books WHERE owner_id='{st.session_state.login_id}' AND status IN ('保留待領取', '借閱中') ORDER BY book_name", conn)
 
         if bk_df.empty:
@@ -606,103 +576,113 @@ try:
         else:
             with st.form("serial_entry_form"):
                 form_data = {}
-                for b_name in bk_df['book_name'].unique():
-                    b_group = bk_df[bk_df['book_name'] == b_name]
-                    pending_ids = b_group[b_group['status'] == '保留待領取']['id'].tolist()
-                    borrowed_rows = b_group[b_group['status'] == '借閱中']
-                    
-                    form_data[b_name] = {'pending_ids': pending_ids, 'borrowed': borrowed_rows.to_dict('records')}
+                
+                # 🟡 待領取區塊 (容許部分送出)
+                pending_df = bk_df[bk_df['status'] == '保留待領取']
+                for b_name in pending_df['book_name'].unique():
+                    b_ids = pending_df[pending_df['book_name'] == b_name]['id'].tolist()
+                    qty = len(b_ids)
+                    with st.container(border=True):
+                        st.markdown(f"""
+                        <div style="font-size: 15px; font-weight: bold; color: #ffb84d; margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                            🟡 {b_name}
+                        </div>
+                        <div style="font-size: 14px; color: #E0E0E0; padding-left: 28px; margin-bottom: 8px;">
+                            (共 {qty} 本) 📝 請登載序號 (請用 , 隔開)
+                        </div>
+                        """, unsafe_allow_html=True)
+                        
+                        user_input = st.text_input(f"隱藏標題_{b_name}_p", label_visibility="collapsed", key=f"p_{b_name}")
+                        abnormal = st.checkbox(f"☑️ 異常回報：確定不會再領到了，剩下轉少領退庫", key=f"abn_{b_name}")
+                        form_data[f"p_{b_name}"] = {'type': 'pending', 'ids': b_ids, 'input': user_input, 'abnormal': abnormal, 'b_name': b_name}
+
+                # 🟢 借閱中(校正)區塊
+                borrowed_df = bk_df[bk_df['status'] == '借閱中']
+                for b_name in borrowed_df['book_name'].unique():
+                    b_rows = borrowed_df[borrowed_df['book_name'] == b_name]
+                    qty = len(b_rows)
+                    current_s = [str(r['serial_number']).strip() for _, r in b_rows.iterrows() if pd.notna(r['serial_number'])]
                     
                     with st.container(border=True):
-                        # === 🟡 待領取區塊 (支援部分送出) ===
-                        if pending_ids:
-                            st.markdown(f"**🟡 {b_name}** (待領取額度：{len(pending_ids)} 本)")
-                            pending_input = st.text_input("📝 請輸入序號 (多本用逗號隔開)", key=f"p_{b_name}")
-                            abnormal_check = st.checkbox(f"☑️ 異常回報：確定剩下的拿不到了，轉少領退庫", key=f"abn_{b_name}")
-                            form_data[b_name]['pending_input'] = pending_input
-                            form_data[b_name]['abnormal'] = abnormal_check
-                            
-                        if pending_ids and not borrowed_rows.empty:
-                            st.divider()
-                            
-                        # === 🟢 借閱中(校正)區塊 ===
-                        if not borrowed_rows.empty:
-                            current_serials = [str(r['serial_number']).strip() for r in borrowed_rows.to_dict('records') if pd.notna(r['serial_number'])]
-                            st.markdown(f"**🟢 {b_name}** (已借閱：{len(borrowed_rows)} 本)")
-                            corr_input = st.text_input("📝 校正序號 (維持等量並用逗號隔開)", value=", ".join(current_serials), key=f"c_{b_name}")
-                            form_data[b_name]['corr_input'] = corr_input
-                            
+                        st.markdown(f"""
+                        <div style="font-size: 15px; font-weight: bold; color: #4CAF50; margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                            🟢 {b_name}
+                        </div>
+                        <div style="font-size: 14px; color: #E0E0E0; padding-left: 28px; margin-bottom: 8px;">
+                            (共 {qty} 本) 📝 校正序號 (請用 , 隔開)
+                        </div>
+                        """, unsafe_allow_html=True)
+                        
+                        user_input = st.text_input(f"隱藏標題_{b_name}_c", value=", ".join(current_s), label_visibility="collapsed", key=f"c_{b_name}")
+                        form_data[f"c_{b_name}"] = {'type': 'correct', 'rows': b_rows.to_dict('records'), 'input': user_input, 'b_name': b_name}
+
                 st.markdown("---")
                 if st.form_submit_button("💾 批次儲存 / 送出序號", type="primary", use_container_width=True):
                     c = conn.cursor()
-                    has_error = False
-                    success_count = 0
+                    has_err = False
+                    success_cnt = 0
                     
-                    for b_name, data in form_data.items():
-                        # 處理 🟡 待領取
-                        if 'pending_input' in data:
-                            raw_s = [s.strip() for s in data['pending_input'].split(',') if s.strip()]
-                            entered_qty = len(raw_s)
-                            pending_ids = data['pending_ids']
-                            pending_qty = len(pending_ids)
-                            
-                            if entered_qty > pending_qty:
-                                st.error(f"❌ 【{b_name}】輸入的序號數量 ({entered_qty}) 超過待領取額度 ({pending_qty})！")
-                                has_error = True; continue
+                    for key, data in form_data.items():
+                        raw_input = [s.strip() for s in data['input'].split(',') if s.strip()]
+                        b_name = data['b_name']
+                        
+                        if data['type'] == 'pending':
+                            p_ids = data['ids']
+                            if len(raw_input) > len(p_ids):
+                                st.error(f"❌ 【{b_name}】輸入序號數量 ({len(raw_input)}) 超過待領取額度 ({len(p_ids)})！")
+                                has_err = True; continue
                                 
-                            for i in range(pending_qty):
-                                p_id = int(pending_ids[i])
-                                if i < entered_qty:
-                                    new_s = raw_s[i]
+                            for i in range(len(p_ids)):
+                                b_id = p_ids[i]
+                                if i < len(raw_input):
+                                    new_s = raw_input[i]
                                     c.execute("SELECT id, status FROM books WHERE serial_number=%s", (new_s,))
                                     check = c.fetchone()
                                     if check and check[1] == '在庫':
                                         c.execute(f"UPDATE books SET status='借閱中', owner_id='{st.session_state.login_id}' WHERE id={int(check[0])}")
-                                        c.execute(f"UPDATE books SET status='在庫', owner_id='在庫' WHERE id={p_id}")
-                                        success_count += 1
+                                        c.execute(f"UPDATE books SET status='在庫', owner_id='在庫' WHERE id={b_id}")
+                                        success_cnt += 1
                                     elif not check:
-                                        c.execute("UPDATE books SET serial_number=%s, status='借閱中' WHERE id=%s", (new_s, p_id))
-                                        success_count += 1
+                                        c.execute("UPDATE books SET serial_number=%s, status='借閱中' WHERE id=%s", (new_s, b_id))
+                                        success_cnt += 1
                                     else:
-                                        st.error(f"❌ 序號 {new_s} 已被借閱或不存在！")
-                                        has_error = True; break
-                                elif data.get('abnormal', False):
-                                    c.execute(f"UPDATE books SET status='少領異常' WHERE id={p_id}")
-                                    success_count += 1
+                                        st.error(f"❌ 【{b_name}】序號 {new_s} 已被借閱！")
+                                        has_err = True; break
+                                elif data['abnormal']:
+                                    c.execute(f"UPDATE books SET status='少領異常' WHERE id={b_id}")
+                                    success_cnt += 1
                                     
-                        # 處理 🟢 借閱中校正
-                        if 'corr_input' in data:
-                            raw_c = [s.strip() for s in data['corr_input'].split(',') if s.strip()]
-                            borrowed_rows = data['borrowed']
-                            if len(raw_c) != len(borrowed_rows) and len(raw_c) > 0:
-                                st.error(f"❌ 【{b_name}】校正數量 ({len(raw_c)}) 與原借閱數量 ({len(borrowed_rows)}) 不符！")
-                                has_error = True; continue
-                            
-                            if len(raw_c) == len(borrowed_rows):
-                                for i, r in enumerate(borrowed_rows):
+                        elif data['type'] == 'correct':
+                            b_rows = data['rows']
+                            if len(raw_input) != len(b_rows) and len(raw_input) > 0:
+                                st.error(f"❌ 【{b_name}】校正數量 ({len(raw_input)}) 與已借閱數量 ({len(b_rows)}) 不符！")
+                                has_err = True; continue
+                                
+                            if len(raw_input) == len(b_rows):
+                                for i, r in enumerate(b_rows):
                                     b_id = int(r['id'])
                                     old_s = str(r['serial_number']).strip()
-                                    new_s = raw_c[i]
+                                    new_s = raw_input[i]
                                     if old_s != new_s:
                                         c.execute("SELECT id, status FROM books WHERE serial_number=%s", (new_s,))
                                         check = c.fetchone()
                                         if check and check[1] == '在庫':
                                             c.execute(f"UPDATE books SET status='借閱中', owner_id='{st.session_state.login_id}' WHERE id={int(check[0])}")
                                             c.execute(f"UPDATE books SET status='在庫', owner_id='在庫' WHERE id={b_id}")
-                                            success_count += 1
+                                            success_cnt += 1
                                         elif not check:
                                             c.execute("UPDATE books SET serial_number=%s WHERE id=%s", (new_s, b_id))
-                                            success_count += 1
+                                            success_cnt += 1
                                         else:
-                                            st.error(f"❌ 校正失敗：序號 {new_s} 已被他人借閱！")
-                                            has_error = True; break
+                                            st.error(f"❌ 【{b_name}】校正失敗：序號 {new_s} 已被他人借閱！")
+                                            has_err = True; break
                                             
-                    if not has_error and success_count > 0:
+                    if not has_err and success_cnt > 0:
                         conn.commit()
                         st.success("✅ 序號儲存成功！")
                         import time; time.sleep(1.5); st.rerun()
-                    elif not has_error and success_count == 0:
-                        st.warning("⚠️ 您尚未輸入任何序號。")
+                    elif not has_err and success_cnt == 0:
+                        st.warning("⚠️ 尚未輸入或修改任何序號。")
     
     elif menu in ["準則借閱", "📤 準則借閱"] and st.session_state.role == 'L5':
         st.header("📤 準則借閱申請")
