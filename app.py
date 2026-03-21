@@ -943,64 +943,58 @@ try:
                         st.info("目前無待審核的註冊申請。")
 
                 with acc_tabs[1]:
-                    st.markdown("#### 結訓日修改與凍結救援")
-                    l5_users = pd.read_sql_query(f"SELECT id, squadron as 中隊, unit as 班隊, login_id as 訓員帳號, discharge_date as 結訓日, status as 狀態 FROM users WHERE role='L5' AND status IN ('啟用', '結訓凍結') AND squadron IN ({sq_in_clause})", conn)
+                    st.markdown("#### 👤 結訓日與權限救援中心")
+                    st.info("💡 直接點擊表格修改結訓日。勾選最左方方塊可批次執行「權限發放」或「密碼重置」。")
+                    
+                    l5_users = pd.read_sql_query(f"SELECT id, squadron as 中隊, unit as 班隊, login_id as 訓員帳號, status as 狀態, discharge_date as 結訓日 FROM users WHERE role='L5' AND status IN ('啟用', '結訓凍結') AND squadron IN ({sq_in_clause})", conn)
+                    
                     if not l5_users.empty:
                         l5_users['結訓日'] = pd.to_datetime(l5_users['結訓日'], errors='coerce').dt.date
-                        edited_date = st.data_editor(
-                            l5_users, hide_index=True, disabled=["id", "中隊", "班隊", "訓員帳號", "狀態"], 
-                            column_config={"id": None, "結訓日": st.column_config.DateColumn("新結訓日期", format="YYYY-MM-DD")}
+                        l5_users.insert(0, "選取", False)
+                        
+                        edited_u = st.data_editor(
+                            l5_users, hide_index=True, disabled=["id", "中隊", "班隊", "訓員帳號", "狀態"], use_container_width=True,
+                            column_config={
+                                "id": None, 
+                                "結訓日": st.column_config.DateColumn("結訓日期 (點擊修改)", format="YYYY-MM-DD")
+                            }
                         )
-                        if st.button("💾 儲存變更 (凍結帳號將自動復權)"):
-                            c = conn.cursor()
-                            has_err = False
-                            for index, row in edited_date.iterrows():
-                                if pd.notna(row['結訓日']):
-                                    try:
-                                        u_id = int(row['id'])
-                                        new_date = str(row['結訓日'])
+                        
+                        col1, col2, col3 = st.columns(3)
+                        sel_ids = edited_u[edited_u["選取"] == True]["id"].tolist()
+                        
+                        with col1:
+                            if st.button("💾 儲存結訓日變更 (自動解除凍結)", type="primary", use_container_width=True):
+                                c = conn.cursor()
+                                for idx, row in edited_u.iterrows():
+                                    if pd.notna(row['結訓日']):
                                         new_status = '啟用' if row['狀態'] == '結訓凍結' else row['狀態']
-                                        c.execute("UPDATE users SET discharge_date=%s, status=%s WHERE id=%s", (new_date, new_status, u_id))
-                                    except Exception:
-                                        has_err = True
-                            if not has_err:
+                                        c.execute("UPDATE users SET discharge_date=%s, status=%s WHERE id=%s", (str(row['結訓日']), new_status, int(row['id'])))
                                 conn.commit()
-                                st.success("✅ 結訓日期已更新！若有凍結帳號也已一併復權。")
-                                import time; time.sleep(1.5); st.rerun()
-                            else:
-                                st.error("❌ 更新結訓日發生異常！")
-                        
-                        st.markdown("---")
-                        # === 🔄 權限與密碼救援中心 ===
-                        st.markdown("#### 🔄 權限發放與帳密救援")
-                        st.info("💡 若班隊人員更換或忘記帳密，請勾選後執行。這將會重置密碼並讓訓員首頁再次彈出修改視窗。")
-                        
-                        reset_df = l5_users[['id', '中隊', '班隊', '訓員帳號', '狀態']].copy()
-                        reset_df.insert(0, "選取", False)
-                        edited_u = st.data_editor(reset_df, hide_index=True, disabled=["id","中隊","班隊","訓員帳號","狀態"], column_config={"id": None})
-                        
-                        sel_reset = edited_u[edited_u["選取"] == True]["id"].tolist()
-                        
-                        col_r1, col_r2 = st.columns(2)
-                        with col_r1:
-                            if st.button("🔓 重置修改權限 (供人員更換時使用)", use_container_width=True):
-                                if sel_reset:
+                                st.success("✅ 結訓日已更新！")
+                                import time; time.sleep(1); st.rerun()
+                                
+                        with col2:
+                            if st.button("🔓 發放強制修改權限 (供人員更換)", use_container_width=True):
+                                if sel_ids:
                                     c = conn.cursor()
-                                    # 重置為 1 次，讓訓員登入時首頁跳出修改視窗
-                                    c.execute(f"UPDATE users SET setup_count=1 WHERE id IN ({','.join(map(str, sel_reset))})")
+                                    c.execute(f"UPDATE users SET setup_count=1 WHERE id IN ({','.join(map(str, sel_ids))})")
                                     conn.commit()
-                                    st.success("✅ 權限已下放！訓員下次登入首頁將自動跳出修改視窗。")
-                                    st.rerun()
-                        with col_r2:
-                            if st.button("🔑 強制重置密碼為 army1234", use_container_width=True):
-                                if sel_reset:
+                                    st.success("✅ 權限已發放！訓員登入將跳出修改視窗。")
+                                    import time; time.sleep(1); st.rerun()
+                                else: st.warning("請先勾選名單！")
+                                    
+                        with col3:
+                            if st.button("🔑 批次重置密碼為 army1234", use_container_width=True):
+                                if sel_ids:
                                     c = conn.cursor()
-                                    c.execute(f"UPDATE users SET password='army1234' WHERE id IN ({','.join(map(str, sel_reset))})")
+                                    c.execute(f"UPDATE users SET password='army1234' WHERE id IN ({','.join(map(str, sel_ids))})")
                                     conn.commit()
-                                    st.success("✅ 密碼已重置！請告知訓員使用預設密碼登入後自行修改。")
-                                    st.rerun()
+                                    st.success("✅ 密碼已重置為預設！")
+                                    import time; time.sleep(1); st.rerun()
+                                else: st.warning("請先勾選名單！")
                     else:
-                        st.info("目前無可管理的訓員資料。")
+                        st.success("目前無可管理的訓員資料。")
 
             elif menu == "📤 準則借閱核准" and is_doc:
                 st.subheader("📚 借閱準則審核")
