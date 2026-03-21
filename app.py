@@ -877,45 +877,45 @@ try:
                 else:
                     st.error("❌ 系統找不到 CSV 檔案！請確認 GitHub 上的檔案名稱是否包含「準則資料庫」且副檔名為 .csv。")
                             
-                elif menu in ["👥 人事管理", "審核與管理"] and st.session_state.role == 'L3':
-                    st.subheader("👥 所屬幹部 (L4) 管理中心")
-                    st.info("💡 您可直接在此表中調整幹部的所屬中隊與職務。若遇幹部人員更換，請勾選後點擊「發放強制修改權限」。")
-        
-        # 只撈取該中隊的 L4 幹部
-        l4_users = pd.read_sql_query(f"SELECT id, squadron as 中隊, title as 職務, name as 姓名, login_id as 帳號, setup_count as 修改權限 FROM users WHERE role='L4' AND squadron='{st.session_state.squadron}'", conn)
-        
-        if not l4_users.empty:
-            l4_users.insert(0, "選取", False)
-            edited_l4 = st.data_editor(
-                l4_users, hide_index=True, disabled=["id", "姓名", "帳號", "修改權限"], use_container_width=True,
-                column_config={
-                    "中隊": st.column_config.SelectboxColumn("管理中隊 (可多選逗號分隔)", required=True),
-                    "職務": st.column_config.TextColumn("職務", required=True)
-                }
-            )
+        elif menu in ["👥 人事管理", "審核與管理"] and st.session_state.role == 'L3':
+            st.subheader("👥 所屬幹部 (L4) 管理中心")
+            st.info("💡 您可直接在此表中調整幹部的所屬中隊與職務。若遇幹部人員更換，請勾選後點擊「發放強制修改權限」。")
             
-            col1, col2 = st.columns(2)
-            with col1:
-                if st.button("💾 儲存【中隊】與【職務】變更", type="primary", use_container_width=True):
-                    c = conn.cursor()
-                    for idx, row in edited_l4.iterrows():
-                        c.execute("UPDATE users SET squadron=%s, title=%s WHERE id=%s", (row['中隊'], row['職務'], int(row['id'])))
-                    conn.commit()
-                    st.success("✅ 資料已成功更新！")
-                    import time; time.sleep(1); st.rerun()
-            with col2:
-                sel_l4 = edited_l4[edited_l4["選取"] == True]["id"].tolist()
-                if st.button("🔓 發放「強制修改權限」(供幹部更換交接用)", use_container_width=True):
-                    if sel_l4:
+            # 只撈取該中隊的 L4 幹部
+            l4_users = pd.read_sql_query(f"SELECT id, squadron as 中隊, title as 職務, name as 姓名, login_id as 帳號, setup_count as 修改權限 FROM users WHERE role='L4' AND squadron='{st.session_state.squadron}'", conn)
+            
+            if not l4_users.empty:
+                l4_users.insert(0, "選取", False)
+                edited_l4 = st.data_editor(
+                    l4_users, hide_index=True, disabled=["id", "姓名", "帳號", "修改權限"], use_container_width=True,
+                    column_config={
+                        "中隊": st.column_config.SelectboxColumn("管理中隊 (可多選逗號分隔)", required=True),
+                        "職務": st.column_config.TextColumn("職務", required=True)
+                    }
+                )
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("💾 儲存【中隊】與【職務】變更", type="primary", use_container_width=True):
                         c = conn.cursor()
-                        c.execute(f"UPDATE users SET setup_count=1 WHERE id IN ({','.join(map(str, sel_l4))})")
+                        for idx, row in edited_l4.iterrows():
+                            c.execute("UPDATE users SET squadron=%s, title=%s WHERE id=%s", (row['中隊'], row['職務'], int(row['id'])))
                         conn.commit()
-                        st.success("✅ 權限已發放！該幹部下次登入將被強制要求重設姓名與帳密。")
-                        import time; time.sleep(1.5); st.rerun()
-                    else:
-                        st.warning("⚠️ 請先勾選要發放權限的幹部！")
-        else:
-            st.success("目前無所屬的 L4 幹部資料。")
+                        st.success("✅ 資料已成功更新！")
+                        import time; time.sleep(1); st.rerun()
+                with col2:
+                    sel_l4 = edited_l4[edited_l4["選取"] == True]["id"].tolist()
+                    if st.button("🔓 發放「強制修改權限」(供幹部更換交接用)", use_container_width=True):
+                        if sel_l4:
+                            c = conn.cursor()
+                            c.execute(f"UPDATE users SET setup_count=1 WHERE id IN ({','.join(map(str, sel_l4))})")
+                            conn.commit()
+                            st.success("✅ 權限已發放！該幹部下次登入將被強制要求重設姓名與帳密。")
+                            import time; time.sleep(1.5); st.rerun()
+                        else:
+                            st.warning("⚠️ 請先勾選要發放權限的幹部！")
+            else:
+                st.success("目前無所屬的 L4 幹部資料。")
 
         elif st.session_state.role == 'L4':
             sq_list = [s.strip() for s in st.session_state.squadron.split(',')]
