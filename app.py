@@ -469,7 +469,7 @@ try:
                         """, unsafe_allow_html=True)
 
             if not has_items:
-                st.success("✨ 您目前名下沒有任何準則紀錄。")
+                st.success("✨ 您目前沒有任何準則。")
 
             # ======== 🟢 L2 & L3：大隊部/中隊部 (合併共用首頁與帳密區塊) ========
         elif st.session_state.role in ['L2', 'L3']:
@@ -500,9 +500,9 @@ try:
             with st.expander("⚙️ 個人帳密設置", expanded=False):
                 st.info("💡 此處可修改您的登入帳號與密碼。")
                 new_id = st.text_input("新帳號", value=st.session_state.login_id, key="l23_daily_id")
-                new_pwd = st.text_input("新密碼 (必填)", type="password", key="l23_daily_pw")
+                new_pwd = st.text_input("新密碼", type="password", key="l23_daily_pw")
                 
-                if st.button("💾 儲存變更", key="l23_save_pwd", type="primary"):
+                if st.button("💾 儲存", key="l23_save_pwd", type="primary"):
                     if not new_pwd:
                         st.error("請輸入新密碼！")
                     else:
@@ -512,7 +512,7 @@ try:
                         
                         c.execute("SELECT COUNT(*) FROM users WHERE (login_id=%s OR pending_login_id=%s) AND id!=%s", (final_id, final_id, uid))
                         if c.fetchone()[0] > 0:
-                            st.error("❌ 修改失敗！此帳號已被他人使用！")
+                            st.error("❌ 此帳號已被他人使用！")
                         else:
                             c.execute("UPDATE users SET login_id=%s, password=%s WHERE id=%s", (final_id, new_pwd, uid))
                             conn.commit()
@@ -525,12 +525,12 @@ try:
             # === 🎯 智慧引導：新進/更換幹部強制修改 ===
             if st.session_state.setup_count > 0:
                 with st.container(border=True):
-                    st.error("🆕 **新進/更換幹部：請先設定您的姓名與專屬帳密**")
-                    st.info("💡 為確保紀錄正確，請填寫您的真實姓名與密碼。日後姓名僅能由中隊長更改。")
+                    st.error("🆕 **請先設定姓名與帳密**")
+                    st.info("💡 請填寫姓名與密碼，後續更改姓名需由中隊長審核。")
                     c1, c2, c3 = st.columns(3)
-                    with c1: new_name = st.text_input("您的姓名", value=st.session_state.name, key="l4_setup_name")
-                    with c2: new_id = st.text_input("專屬帳號", value=st.session_state.login_id, key="l4_setup_id")
-                    with c3: new_pwd = st.text_input("專屬密碼", type="password", key="l4_setup_pw")
+                    with c1: new_name = st.text_input("姓名", value=st.session_state.name, key="l4_setup_name")
+                    with c2: new_id = st.text_input("帳號", value=st.session_state.login_id, key="l4_setup_id")
+                    with c3: new_pwd = st.text_input("密碼", type="password", key="l4_setup_pw")
                     
                     if st.button("🚀 確認開通", type="primary", use_container_width=True):
                         if not new_pwd or not new_name: st.warning("姓名與密碼為必填！")
@@ -581,7 +581,7 @@ try:
                                 import time; time.sleep(1.5); st.session_state.clear(); st.rerun()
 
     elif menu in ["序號登載", "🏷️ 序號登載"] and st.session_state.role == 'L5':
-        st.header("🏷️ 序號登載與校正")
+        st.header("🏷️ 序號登載")
         
         bk_df = pd.read_sql_query(f"SELECT id, book_name, serial_number, status FROM books WHERE owner_id='{st.session_state.login_id}' AND status IN ('保留待領取', '借閱中') ORDER BY book_name", conn)
 
@@ -607,7 +607,7 @@ try:
                         """, unsafe_allow_html=True)
                         
                         user_input = st.text_input(f"隱藏標題_{b_name}_p", label_visibility="collapsed", key=f"p_{b_name}")
-                        abnormal = st.checkbox(f"☑️ 異常回報：確定不會再領到了，剩下轉少領退庫", key=f"abn_{b_name}")
+                        abnormal = st.checkbox(f"☑️ 借閱異常：剩餘準則未借閱到勾選。", key=f"abn_{b_name}")
                         form_data[f"p_{b_name}"] = {'type': 'pending', 'ids': b_ids, 'input': user_input, 'abnormal': abnormal, 'b_name': b_name}
 
                 # 🟢 借閱中(校正)區塊
@@ -631,7 +631,7 @@ try:
                         form_data[f"c_{b_name}"] = {'type': 'correct', 'rows': b_rows.to_dict('records'), 'input': user_input, 'b_name': b_name}
 
                 st.markdown("---")
-                if st.form_submit_button("💾 批次儲存 / 送出序號", type="primary", use_container_width=True):
+                if st.form_submit_button("💾 儲存序號", type="primary", use_container_width=True):
                     c = conn.cursor()
                     has_err = False
                     success_cnt = 0
@@ -700,17 +700,16 @@ try:
     
     elif menu in ["準則借閱", "📤 準則借閱"] and st.session_state.role == 'L5':
         st.header("📤 準則借閱申請")
-        st.info("💡 請選擇您需要借閱的準則與數量，送出後請等待幹部審核。")
         
         c = conn.cursor()
         c.execute("SELECT book_name, COUNT(id) FROM books WHERE status='在庫' GROUP BY book_name")
         available_books = c.fetchall()
         
         if not available_books:
-            st.warning("目前庫房沒有可借閱的準則。")
+            st.warning("庫房無可借閱的準則。")
         else:
             # === ✨ 升級功能：全域預設借閱數量 ===
-            st.markdown("#### 🎯 第一步：設定預設數量")
+            st.markdown("#### 🎯 設置需借閱數量，會自動套用在下方")
             default_req_qty = st.number_input("請輸入欲借閱的數量 (例如：貴班隊人數)", min_value=1, value=1, help="設定後，下方所有選取的準則都會自動帶入此數量")
             st.markdown("---")
             
@@ -727,22 +726,31 @@ try:
                         b_name = selection.split(" (")[0]
                         max_qty = int(selection.split("庫存: ")[1].replace("本)", ""))
                         
-                        # 🔍 啟動防呆偵測雷達：檢查是否已經持有
+                        # 🔍 啟動防呆雙重雷達：檢查「已持有」與「申請中」
                         c.execute(f"SELECT COUNT(*) FROM books WHERE owner_id='{st.session_state.login_id}' AND book_name='{b_name}' AND status!='在庫'")
-                        total_existing = int(c.fetchone()[0])
+                        owned_count = int(c.fetchone()[0])
+                        
+                        c.execute(f"SELECT SUM(quantity) FROM borrow_requests WHERE login_id='{st.session_state.login_id}' AND book_name='{b_name}' AND status='待審核'")
+                        pending_req = c.fetchone()[0]
+                        pending_count = int(pending_req) if pending_req else 0
+                        
+                        total_existing = owned_count + pending_count
                         
                         # === ✨ 智慧帶入預設數量 (若庫存不足，則安全帶入最大庫存) ===
                         auto_val = min(default_req_qty, max_qty)
-                        
                         qty = st.number_input(f"欲借閱【{b_name}】的數量", min_value=1, max_value=max_qty, value=auto_val, key=f"req_{b_name}")
                         borrow_requests[b_name] = qty
                         
                         # 🚨 觸發重複借閱防呆機制
                         if total_existing > 0:
-                            st.warning(f"⚠️ 系統偵測到您名下已有 **{total_existing}** 本【{b_name}】。")
-                            confirm_extra = st.checkbox(f"☑️ 我確認此為「缺少數量再額外申請」", key=f"chk_extra_{b_name}")
-                            if not confirm_extra:
-                                can_submit = False
+                            if pending_count > 0:
+                                st.error(f"🚨 系統攔截：您目前已有 **{pending_count}** 本【{b_name}】正在「等待幹部審核中」，請勿重複送單！")
+                                can_submit = False # 強制鎖死，連打勾都不給打
+                            else:
+                                st.warning(f"⚠️ 系統偵測到您名下已持有 **{owned_count}** 本【{b_name}】。")
+                                confirm_extra = st.checkbox(f"☑️ 我確認此為「缺少數量再額外申請」", key=f"chk_extra_{b_name}")
+                                if not confirm_extra:
+                                    can_submit = False
                 
                 st.markdown("---")
                 # 🛡️ 根據防呆結果決定是否顯示按鈕
