@@ -457,12 +457,12 @@ try:
                 for b_name, qty in items[st_key].items():
                     has_items = True
                     with st.container(border=True):
-                        # 幹部指定的完美雙行排版
+                        # 幹部指定的完美雙行排版 (顏色全面同步)
                         st.markdown(f"""
                         <div style="font-size: 15px; font-weight: bold; color: {color}; margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
                             {icon} {b_name}
                         </div>
-                        <div style="display: flex; justify-content: space-between; font-size: 14px; color: black; padding-left: 28px;">
+                        <div style="display: flex; justify-content: space-between; font-size: 14px; color: {color}; padding-left: 28px;">
                             <span>(共 {qty} 本)</span>
                             <span style="text-align: right;">狀態：{st_desc}</span>
                         </div>
