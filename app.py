@@ -292,6 +292,7 @@ with st.sidebar:
         menu = st.radio("功能導覽", [
             "🏠 首頁", 
             "📤 準則借閱", 
+            "🏷️ 裝備序號登載", 
             "📥 準則歸還", 
             "💬 Line 報表專區", 
             "🔍 綜合查詢"
@@ -394,73 +395,76 @@ try:
                 elif days_left <= 3: st.warning(f"⚠️ 結訓倒數：{days_left} 天！")
                 else: st.info(f"📅 距離結訓日還有：{days_left} 天")
 
-            # 待領取與持有清單 (維持原本全幅設計)
-            pending_claim = pd.read_sql_query(f"SELECT id, book_name FROM books WHERE owner_id='{st.session_state.login_id}' AND status='保留待領取'", conn)
-            if not pending_claim.empty:
-                st.warning("⚠️ 您有已核准但尚未綁定序號的準則！請對照實體書進行批次登錄。")
-                with st.form("batch_claim_form"):
-                    st.info("💡 若部分準則尚未發放，請「留空」即可；若確定不會再領到，請勾選「異常回報」。")
-                    grouped = pending_claim.groupby('book_name')
-                    claim_data = {}
-                    for b_name, group in grouped:
-                        qty = len(group)
-                        st.markdown(f"**📘 {b_name}** (待領：**{qty}** 本)")
-                        serials_str = st.text_input("請輸入實體序號 (逗號隔開)", key=f"serials_{b_name}")
-                        is_short = st.checkbox(f"☑️ 異常回報：確定「不會再領到」剩下的書才勾選", key=f"short_{b_name}")
-                        claim_data[b_name] = {"ids": group['id'].tolist(), "serials_str": serials_str, "is_short": is_short, "qty": qty}
-                    
-                    if st.form_submit_button("💾 確認送出實領準則"):
-                        c = conn.cursor(); has_error = False
-                        for b_name, data in claim_data.items():
-                            raw_s = [s.strip() for s in data["serials_str"].split(',') if s.strip()]
-                            entered_qty, app_qty, ids = len(raw_s), int(data["qty"]), data["ids"]
-                            if entered_qty > app_qty: st.error(f"❌ {b_name} 數量超過額度！"); has_error = True; break
-                            if entered_qty == 0 and not data["is_short"]: continue
-                            for i in range(app_qty):
-                                p_id = int(ids[i])
-                                if i < entered_qty:
-                                    new_s = raw_s[i]
-                                    c.execute("SELECT id, status FROM books WHERE serial_number=%s", (new_s,))
-                                    check = c.fetchone()
-                                    if check and check[1] == '在庫':
-                                        c.execute(f"UPDATE books SET status='借閱中', owner_id='{st.session_state.login_id}' WHERE id={int(check[0])}")
-                                        c.execute(f"UPDATE books SET status='在庫', owner_id='在庫' WHERE id={p_id}")
-                                    elif not check:
-                                        c.execute("UPDATE books SET serial_number=%s, status='借閱中' WHERE id=%s", (new_s, p_id))
-                                    else: st.error(f"❌ 序號 {new_s} 已被借閱！"); has_error = True; break
-                                elif data["is_short"]: c.execute(f"UPDATE books SET status='少領異常' WHERE id={p_id}")
-                        if not has_error: conn.commit(); st.success("✅ 序號綁定完成！"); import time; time.sleep(1.5); st.rerun()
+            st.markdown("#### 📦 我的裝備狀態總覽")
+            st.info("💡 以下為您名下所有準則目前的動態。")
+            
+            # 撈取所有狀態資料
+            br_df = pd.read_sql_query(f"SELECT book_name, quantity FROM borrow_requests WHERE login_id='{st.session_state.login_id}' AND status='待審核'", conn)
+            bk_df = pd.read_sql_query(f"SELECT book_name, serial_number, status FROM books WHERE owner_id='{st.session_state.login_id}' AND status IN ('保留待領取', '借閱中', '歸還中')", conn)
 
-            st.markdown("#### 📦 我的持有清單")
-            my_books = pd.read_sql_query(f"SELECT id, book_name as 書名, serial_number as 序號 FROM books WHERE owner_id='{st.session_state.login_id}' AND status='借閱中'", conn)
-            if my_books.empty: st.info("目前無借閱準則。")
+            # 將所有書整合到一本大字典裡
+            book_stats = {}
+            for _, r in br_df.iterrows():
+                b_name = r['book_name']
+                if b_name not in book_stats: book_stats[b_name] = {'🔵 申請中':0, '🟡 待領取':0, '🟢 借閱中':0, '🔴 歸還中':0, 'serials':[]}
+                book_stats[b_name]['🔵 申請中'] += r['quantity']
+                
+            for _, r in bk_df.iterrows():
+                b_name = r['book_name']
+                st_val = r['status']
+                if b_name not in book_stats: book_stats[b_name] = {'🔵 申請中':0, '🟡 待領取':0, '🟢 借閱中':0, '🔴 歸還中':0, 'serials':[]}
+                if st_val == '保留待領取': book_stats[b_name]['🟡 待領取'] += 1
+                elif st_val == '借閱中': 
+                    book_stats[b_name]['🟢 借閱中'] += 1
+                    if pd.notna(r['serial_number']): book_stats[b_name]['serials'].append(str(r['serial_number']))
+                elif st_val == '歸還中': book_stats[b_name]['🔴 歸還中'] += 1
+
+            # 渲染 RWD 極簡卡片
+            if not book_stats:
+                st.success("✨ 您目前名下沒有任何準則紀錄。")
             else:
-                st.dataframe(my_books[['書名', '序號']], use_container_width=True, hide_index=True)
-                with st.expander("🔧 自主修正實體序號"):
-                    edited_dfs = {}
-                    for b_name in my_books['書名'].unique():
-                        b_df = my_books[my_books['書名'] == b_name].reset_index(drop=True)
-                        edited_dfs[b_name] = st.data_editor(b_df, hide_index=True, disabled=["id", "書名"], key=f"edit_my_{b_name}")
-                    if st.button("💾 批次修正序號"):
-                        c = conn.cursor(); has_err = False
-                        for b_name, e_df in edited_dfs.items():
-                            orig_df = my_books[my_books['書名'] == b_name].reset_index(drop=True)
-                            for idx, row in e_df.iterrows():
-                                old_s, new_s, b_id = str(orig_df.iloc[idx]['序號']).strip(), str(row['序號']).strip(), int(row['id'])
-                                if old_s != new_s:
-                                    c.execute("SELECT id, status FROM books WHERE serial_number=%s", (new_s,))
-                                    check = c.fetchone()
-                                    if check and check[1] == '在庫':
-                                        c.execute(f"UPDATE books SET status='借閱中', owner_id='{st.session_state.login_id}' WHERE id={int(check[0])}")
-                                        c.execute(f"UPDATE books SET status='在庫', owner_id='在庫' WHERE id={b_id}")
-                                    else: c.execute("UPDATE books SET serial_number=%s WHERE id=%s", (new_s, b_id))
-                        if not has_err: conn.commit(); st.success("✅ 序號已修正！"); import time; time.sleep(1); st.rerun()
-
-            st.markdown("---")
-            st.markdown("#### 📤 待幹部審核清單 (歸還中)")
-            returning_books = pd.read_sql_query(f"SELECT book_name as 書名, serial_number as 序號 FROM books WHERE owner_id='{st.session_state.login_id}' AND status='歸還中'", conn)
-            if not returning_books.empty: st.dataframe(returning_books, hide_index=True, use_container_width=True)
-            else: st.success("目前無歸還中準則。")
+                for b_name, stats in book_stats.items():
+                    with st.container(border=True):
+                        html_content = ""
+                        # 🔵 申請中
+                        if stats['🔵 申請中'] > 0:
+                            html_content += f"""
+                            <div style="display: flex; justify-content: space-between; flex-wrap: wrap; margin-bottom: 4px;">
+                                <span style="font-weight: bold; color: #1f77b4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 70%;">🔵 {b_name}</span>
+                                <span style="white-space: nowrap;">(共 {stats['🔵 申請中']} 本)</span>
+                            </div>
+                            <div style="color: #888; font-size: 0.9em; margin-bottom: 8px;">狀態：申請中 (等待幹部核准)</div>
+                            """
+                        # 🟡 保留待領取
+                        if stats['🟡 待領取'] > 0:
+                            html_content += f"""
+                            <div style="display: flex; justify-content: space-between; flex-wrap: wrap; margin-bottom: 4px;">
+                                <span style="font-weight: bold; color: #ff7f0e; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 70%;">🟡 {b_name}</span>
+                                <span style="white-space: nowrap;">(共 {stats['🟡 待領取']} 本)</span>
+                            </div>
+                            <div style="color: #ff7f0e; font-size: 0.9em; margin-bottom: 8px; font-weight: bold;">狀態：已審核 (保留待領取) ⬅️ 請至左側登載序號</div>
+                            """
+                        # 🟢 借閱中
+                        if stats['🟢 借閱中'] > 0:
+                            s_list = ", ".join(stats['serials'])
+                            html_content += f"""
+                            <div style="display: flex; justify-content: space-between; flex-wrap: wrap; margin-bottom: 4px;">
+                                <span style="font-weight: bold; color: #2ca02c; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 70%;">🟢 {b_name}</span>
+                                <span style="white-space: nowrap;">(共 {stats['🟢 借閱中']} 本)</span>
+                            </div>
+                            <div style="color: #888; font-size: 0.9em;">狀態：借閱中</div>
+                            <div style="color: #555; font-size: 0.9em; font-family: monospace; word-break: break-all; margin-bottom: 8px;">序號：{s_list}</div>
+                            """
+                        # 🔴 歸還中
+                        if stats['🔴 歸還中'] > 0:
+                            html_content += f"""
+                            <div style="display: flex; justify-content: space-between; flex-wrap: wrap; margin-bottom: 4px;">
+                                <span style="font-weight: bold; color: #d62728; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 70%;">🔴 {b_name}</span>
+                                <span style="white-space: nowrap;">(共 {stats['🔴 歸還中']} 本)</span>
+                            </div>
+                            <div style="color: #888; font-size: 0.9em; margin-bottom: 8px;">狀態：歸還中 (等待幹部點收)</div>
+                            """
+                        st.markdown(html_content, unsafe_allow_html=True)
 
         # ======== 🟢 L3：中隊長/輔導長 (首頁戰情看板) ========
         elif st.session_state.role == 'L3':
