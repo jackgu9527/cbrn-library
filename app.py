@@ -428,7 +428,7 @@ try:
                         <div style="font-size: 15px; font-weight: bold; color: {color}; margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
                             {icon} {b_name}
                         </div>
-                        <div style="display: flex; justify-content: space-between; font-size: 14px; color: #E0E0E0; padding-left: 28px;">
+                        <div style="display: flex; justify-content: space-between; font-size: 14px; color: black; padding-left: 28px;">
                             <span>(共 {qty} 本)</span>
                             <span style="text-align: right;">狀態：{st_desc}</span>
                         </div>
@@ -587,7 +587,7 @@ try:
                         <div style="font-size: 15px; font-weight: bold; color: #ffb84d; margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
                             🟡 {b_name}
                         </div>
-                        <div style="font-size: 14px; color: #E0E0E0; padding-left: 28px; margin-bottom: 8px;">
+                        <div style="font-size: 14px; color: black; padding-left: 28px; margin-bottom: 8px;">
                             (共 {qty} 本) 📝 請登載序號 (請用 , 隔開)
                         </div>
                         """, unsafe_allow_html=True)
@@ -608,7 +608,7 @@ try:
                         <div style="font-size: 15px; font-weight: bold; color: #4CAF50; margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
                             🟢 {b_name}
                         </div>
-                        <div style="font-size: 14px; color: #E0E0E0; padding-left: 28px; margin-bottom: 8px;">
+                        <div style="font-size: 14px; color: black; padding-left: 28px; margin-bottom: 8px;">
                             (共 {qty} 本) 📝 校正序號 (請用 , 隔開)
                         </div>
                         """, unsafe_allow_html=True)
