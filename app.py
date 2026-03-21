@@ -208,7 +208,7 @@ def run_ghost_cleanup():
             c.execute(f"SELECT COUNT(*) FROM books WHERE owner_id='{f_login}'")
             if c.fetchone()[0] == 0:
                 c.execute(f"DELETE FROM users WHERE id={f_id}")
-                c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", (now_time, "SYSTEM", "帳號註銷", f"班隊 {f_unit} 裝備已結清，系統自動刪除凍結帳號。"))
+                c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", (now_time, "SYSTEM", "帳號註銷", f"班隊 {f_unit} 準則已結清，系統自動刪除凍結帳號。"))
                     
         seven_days_ago = (datetime.now(tz_tw) - timedelta(days=7)).strftime('%Y-%m-%d %H:%M:%S')
         c.execute(f"DELETE FROM action_logs WHERE timestamp < '{seven_days_ago}' AND user_id NOT IN (SELECT login_id FROM users) AND user_id != 'SYSTEM'")
@@ -425,11 +425,11 @@ try:
                 d_date = datetime.strptime(str(st.session_state.discharge_date), '%Y-%m-%d').date()
                 today = datetime.now().date()
                 days_left = (d_date - today).days
-                if days_left < 0: st.error(f"🚨 已逾結訓日！請盡速完成裝備歸還。")
+                if days_left < 0: st.error(f"🚨 已逾結訓日！請盡速完成準則歸還。")
                 elif days_left <= 3: st.warning(f"⚠️ 結訓倒數：{days_left} 天！")
                 else: st.info(f"📅 距離結訓日還有：{days_left} 天")
 
-            st.markdown("#### 📦 我的裝備狀態總覽")
+            st.markdown("#### 📦 準則狀態總覽")
             
             # 撈取所有狀態資料
             br_df = pd.read_sql_query(f"SELECT book_name, quantity FROM borrow_requests WHERE login_id='{st.session_state.login_id}' AND status='待審核'", conn)
@@ -447,10 +447,10 @@ try:
             has_items = False
             # 絕對排序與 RWD 顏色設定
             status_config = [
-                ('🔵 申請中', '🔵', '#4da6ff', '申請中 (等待幹部審核)'),
-                ('🟡 待領取', '🟡', '#ffb84d', '已審核 ⬅️ 請至左側登載序號'),
+                ('🔵 申請中', '🔵', '#4da6ff', '申請中'),
+                ('🟡 待領取', '🟡', '#ffb84d', '已審核'),
                 ('🟢 借閱中', '🟢', '#4CAF50', '借閱中'),
-                ('🔴 歸還中', '🔴', '#ff6666', '歸還中 (等待幹部點收)')
+                ('🔴 歸還中', '🔴', '#ff6666', '歸還中')
             ]
 
             for st_key, icon, color, st_desc in status_config:
@@ -469,7 +469,7 @@ try:
                         """, unsafe_allow_html=True)
 
             if not has_items:
-                st.success("✨ 您目前名下沒有任何裝備紀錄。")
+                st.success("✨ 您目前名下沒有任何準則紀錄。")
 
             # ======== 🟢 L2 & L3：大隊部/中隊部 (合併共用首頁與帳密區塊) ========
         elif st.session_state.role in ['L2', 'L3']:
@@ -761,7 +761,7 @@ try:
                     st.error("🚨 發現重複借閱項目！請勾選上方確認框後，才能送出申請。")
     elif menu in ["💬 回報專區", "回報專區"] and st.session_state.role == 'L5':
         st.header("💬 Line 借還書回報")
-        tabs = st.tabs(["🚚 借還書回報", "📱 裝備清點回報"])
+        tabs = st.tabs(["🚚 借還書回報", "📱 準則清點回報"])
         
         with tabs[0]:
             st.info("💡 請在送出申請後，點擊下方產生回報文字貼至 Line。")
@@ -1250,7 +1250,7 @@ try:
 
             elif menu == "📥 準則歸還審核":
                 st.subheader("📥 歸還點收與遺失追查")
-                ret_tabs = st.tabs(["📥 待點收清單", "🚨 遺失裝備追查榜"])
+                ret_tabs = st.tabs(["📥 待點收清單", "🚨 遺失準則追查榜"])
                 
                 with ret_tabs[0]:
                     return_df = pd.read_sql_query(f"SELECT b.id, u.unit as 班隊, b.book_name as 書名, b.serial_number as 序號, b.owner_id FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.status='歸還中' AND u.squadron IN ({sq_in_clause}) ORDER BY u.unit, b.book_name", conn)
@@ -1328,7 +1328,7 @@ try:
                         st.success("目前各班隊皆無待歸還準則！")
 
                 with ret_tabs[1]:
-                    st.markdown("#### 🚨 遺失裝備追查榜")
+                    st.markdown("#### 🚨 遺失準則追查榜")
                     lost_df = pd.read_sql_query(f"SELECT b.id, u.unit as 班隊, b.book_name as 書名, b.serial_number as 序號 FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.status='遺失待賠' AND u.squadron IN ({sq_in_clause}) ORDER BY u.unit, b.book_name", conn)
                     
                     if not lost_df.empty:
@@ -1346,11 +1346,11 @@ try:
                                 st.session_state['sys_toast'] ="✅ 成功結案！"
                                 st.rerun()
                     else:
-                        st.success("✨ 裝備妥善率 100%！目前中隊無任何遺失待賠之準則！")
+                        st.success("✨ 準則妥善率 100%！目前中隊無任何遺失待賠之準則！")
 
             elif menu in ["💬 回報專區", "回報專區"]:
                 st.subheader("💬 Line 報表自動生成器")
-                line_tabs = st.tabs(["🚚 借還動態彙總", "📦 裝備總清點(含遺失)"])
+                line_tabs = st.tabs(["🚚 借還動態彙總", "📦 準則總清點(含遺失)"])
                 sq_list = [s.strip() for s in st.session_state.squadron.split(',')]
                 is_doc = "人事" in st.session_state.title or "文書" in st.session_state.title
                 
@@ -1397,13 +1397,13 @@ try:
                         target_squadron_inv = sq_list[0]
                         st.write(f"📍 **目前產出中隊：** {target_squadron_inv}")
                         
-                    if st.button("🚀 生成裝備總清點報表", type="primary"):
+                    if st.button("🚀 生成準則總清點報表", type="primary"):
                         inv_df = pd.read_sql_query(f"SELECT u.unit, b.book_name, b.serial_number, b.status FROM books b JOIN users u ON b.owner_id = u.login_id WHERE u.squadron='{target_squadron_inv}' AND b.status IN ('借閱中', '歸還中', '遺失待賠') ORDER BY u.unit, b.book_name", conn)
                         now = datetime.now(timezone(timedelta(hours=8)))
                         tw_wd = ["一", "二", "三", "四", "五", "六", "日"][now.weekday()]
-                        inv_msg = f"劉姐好，{target_squadron_inv}裝備清點總表\n時間：{now.month}/{now.day}（{tw_wd}）\n\n"
+                        inv_msg = f"劉姐好，{target_squadron_inv}準則清點總表\n時間：{now.month}/{now.day}（{tw_wd}）\n\n"
                         
-                        if inv_df.empty: inv_msg += "目前無外散之裝備。\n"
+                        if inv_df.empty: inv_msg += "目前無外散之準則。\n"
                         else:
                             for unit in inv_df['unit'].unique():
                                 inv_msg += f"==== 【{unit}】 ====\n"
