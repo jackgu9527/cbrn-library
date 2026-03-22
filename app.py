@@ -22,7 +22,12 @@ cookie_manager = stx.CookieManager()
 
 # 🚨 終極登出攔截器：確保銷毀指令能完整傳達到瀏覽器
 if st.session_state.get('logout_triggered'):
-    cookie_manager.delete('sys_user_token')
+    # 🛡️ 防呆裝甲：嘗試刪除餅乾，如果餅乾已經不在了就安全下莊，不報錯
+    try:
+        cookie_manager.delete('sys_user_token')
+    except KeyError:
+        pass
+        
     st.session_state.clear()
     st.session_state['force_logout'] = True  # 🛡️ 防禦盾：阻止下方被殭屍餅乾拉回
     st.session_state['sys_toast'] = "👋 登出成功！安全連線已銷毀。"
