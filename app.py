@@ -1138,7 +1138,7 @@ try:
                         for unit_name in l5_users['班隊'].unique():
                             u_df = l5_users[l5_users['班隊'] == unit_name]
                             
-                            with st.expander(f"🔽 {unit_name} (共 {len(u_df)} 組帳號)"):
+                            with st.expander(f"🔽 {unit_name}"):
                                 for _, row in u_df.iterrows():
                                     uid = row['id']
                                     with st.container(border=True):
