@@ -385,16 +385,6 @@ with st.sidebar:
     if st.button("登出"):
         # 射後不理：發射登出信號並瞬間重整，交給頂部的「攔截器」處理
         st.session_state['logout_triggered'] = True
-        st.rerun() 
-        
-        # 2. 清空大腦暫存記憶
-        st.session_state.clear()
-        
-        # 3. 縮短強制等待時間 (只需 0.2 秒讓瀏覽器反應即可)
-        import time; time.sleep(0.2)
-        
-        # 4. 塞入快閃通知，讓使用者回到登入頁時有安心感
-        st.session_state['sys_toast'] = "👋 登出成功！安全連線已銷毀。"
         st.rerun()
 
 # ==========================================
