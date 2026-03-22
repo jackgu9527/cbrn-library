@@ -786,7 +786,7 @@ try:
         tabs = st.tabs(["🚚 借還書回報", "📱 準則清點回報"])
         
         with tabs[0]:
-            st.info("💡 請在送出申請後，點擊下方產生回報文字貼至 Line。")
+            st.info("💡 請點擊下方生成清單，並點擊黑框右上角的「📋」一秒複製！")
             if st.button("🚀 生成借還書清單", type="primary"):
                 br_pending = pd.read_sql_query(f"SELECT book_name, SUM(quantity) as qty FROM borrow_requests WHERE login_id='{st.session_state.login_id}' AND status='待審核' GROUP BY book_name", conn)
                 bk_reserved = pd.read_sql_query(f"SELECT book_name, COUNT(id) as qty FROM books WHERE owner_id='{st.session_state.login_id}' AND status='保留待領取' GROUP BY book_name", conn)
@@ -796,33 +796,35 @@ try:
                 has_borrow = False
                 if not br_pending.empty:
                     for _, r in br_pending.iterrows(): 
-                        msg += f"{r['book_name']}*{int(r['qty'])}(申請中)\n"
+                        msg += f"{r['book_name']} * {int(r['qty'])} (申請中)\n"
                         has_borrow = True
                 if not bk_reserved.empty:
                     for _, r in bk_reserved.iterrows(): 
-                        msg += f"{r['book_name']}*{int(r['qty'])}(已審核)\n"
+                        msg += f"{r['book_name']} * {int(r['qty'])} (已審核)\n"
                         has_borrow = True
                 if not has_borrow: msg += "無\n"
                 
                 msg += "\n【申請歸還】：\n"
                 if not rt_df.empty:
                     for _, r in rt_df.iterrows(): 
-                        msg += f"{r['book_name']}*{int(r['qty'])}(歸還中)\n"
+                        msg += f"{r['book_name']} * {int(r['qty'])} (歸還中)\n"
                 else: msg += "無\n"
-                st.text_area("📋 借還書複製區", value=msg.strip(), height=250)
+                
+                # 🚀 終極破敵戰術：使用 st.code 召喚原生複製按鈕
+                st.code(msg.strip(), language="text")
                 
         with tabs[1]:
-            st.info("💡 產出目前名下所有「借閱中」及「歸還中」準則的序號清單，供每日清點。")
+            st.info("💡 產出目前名下所有準則總數 (已拔除序號)。點擊黑框右上角「📋」複製。")
             if st.button("🚀 生成清點報表", type="primary"):
-                inv_df = pd.read_sql_query(f"SELECT book_name, serial_number, status FROM books WHERE owner_id='{st.session_state.login_id}' AND status IN ('借閱中', '歸還中')", conn)
+                inv_df = pd.read_sql_query(f"SELECT book_name, status, COUNT(id) as qty FROM books WHERE owner_id='{st.session_state.login_id}' AND status IN ('借閱中', '歸還中') GROUP BY book_name, status ORDER BY book_name", conn)
                 msg = f"報告，班隊：{st.session_state.unit}\n準則清點：\n\n"
                 if inv_df.empty: msg += "無\n"
                 else:
-                    grouped = inv_df.groupby(['book_name', 'status'])
-                    for (b_name, status), group in grouped:
-                        display_status = "歸還中" if status == '歸還中' else "借閱中"
-                        msg += f"{b_name}*{len(group)}({display_status})\n{','.join(group['serial_number'].tolist())}\n\n"
-                st.text_area("📋 清點複製區", value=msg.strip(), height=250)
+                    for _, r in inv_df.iterrows():
+                        display_status = "歸還中" if r['status'] == '歸還中' else "借閱中"
+                        msg += f"{r['book_name']} * {int(r['qty'])} ({display_status})\n"
+                
+                st.code(msg.strip(), language="text")
 
     elif menu in ["💬 回報專區", "回報專區"]:
         st.subheader("💬 Line 報表自動生成器")
@@ -831,7 +833,7 @@ try:
         is_doc = "人事" in st.session_state.title or "文書" in st.session_state.title
         
         with line_tabs[0]:
-            st.info("💡 產出今日「待辦物流」與「歸還審核」之動態清單。")
+            st.info("💡 產出今日動態物流清單 (已拔除狀態，純數量合併)。點擊黑框右上角「📋」複製。")
             if is_doc: target_sq_dyn = st.selectbox("🏢 目標中隊", sq_list, key="dyn_sq")
             else: 
                 target_sq_dyn = sq_list[0]
@@ -872,30 +874,37 @@ try:
                 else:
                     for unit in sorted(list(all_units)):
                         msg += f"==== 【{unit}】 ====\n【申請借閱】：\n"
-                        has_b = False
+                        
+                        # 🎯 L4 專屬：合併「申請中」與「已審核」的數量，並拔除狀態文字
+                        borrow_items = {}
                         u_req = req_df[req_df['unit'] == unit] if not req_df.empty else pd.DataFrame()
                         if not u_req.empty:
                             for _, r in u_req.iterrows(): 
-                                msg += f"{r['book_name']}*{int(r['qty'])}(申請中)\n"
-                                has_b = True
+                                borrow_items[r['book_name']] = borrow_items.get(r['book_name'], 0) + int(r['qty'])
+                                
                         u_res = res_df[res_df['unit'] == unit] if not res_df.empty else pd.DataFrame()
                         if not u_res.empty:
                             for _, r in u_res.iterrows(): 
-                                msg += f"{r['book_name']}*{int(r['qty'])}(已審核)\n"
-                                has_b = True
-                        if not has_b: msg += "無\n"
+                                borrow_items[r['book_name']] = borrow_items.get(r['book_name'], 0) + int(r['qty'])
+                                
+                        if borrow_items:
+                            for b_name, qty in borrow_items.items():
+                                msg += f"{b_name} * {qty}\n"
+                        else:
+                            msg += "無\n"
                         
-                        msg += "【申請歸還】：\n"
+                        msg += "\n【申請歸還】：\n"
                         u_ret = ret_df[ret_df['unit'] == unit] if not ret_df.empty else pd.DataFrame()
                         if not u_ret.empty:
                             for _, r in u_ret.iterrows(): 
-                                msg += f"{r['book_name']}*{int(r['qty'])}(歸還中)\n"
+                                msg += f"{r['book_name']} * {int(r['qty'])}\n"
                         else: msg += "無\n"
                         msg += "\n"
-                st.text_area("📋 借還動態複製區", value=msg.strip(), height=350)
+                
+                st.code(msg.strip(), language="text")
 
         with line_tabs[1]:
-            st.info("💡 拉出中隊下所有外散準則之總清單 (無序號版)。")
+            st.info("💡 產出中隊外散準則之總清單 (已拔除序號)。點擊黑框右上角「📋」複製。")
             if is_doc: target_sq_inv = st.selectbox("🏢 目標中隊 (總清點)", sq_list, key="inv_sq")
             else: 
                 target_sq_inv = sq_list[0]
@@ -918,6 +927,7 @@ try:
                     units_str = "'" + "','".join(inv_selected_units) + "'"
                     unit_filter = f" AND u.unit IN ({units_str})"
                     
+                # 🎯 L4 總清點：精準抓取、拔除序號、並加上括號狀態
                 inv_df = pd.read_sql_query(f"SELECT u.unit, b.book_name, b.status, COUNT(b.id) as qty FROM books b JOIN users u ON b.owner_id = u.login_id WHERE u.squadron='{target_sq_inv}' AND b.status IN ('借閱中', '歸還中', '遺失待賠', '少領異常') {unit_filter} GROUP BY u.unit, b.book_name, b.status ORDER BY u.unit, b.book_name", conn)
                 
                 now = datetime.now(timezone(timedelta(hours=8)))
@@ -935,7 +945,8 @@ try:
                             st_val = r['status']
                             inv_msg += f"📘 {b_name} * {qty} ({st_val})\n"
                         inv_msg += "\n"
-                st.text_area("📋 清點複製區", value=inv_msg.strip(), height=350)
+                
+                st.code(inv_msg.strip(), language="text")
                 
     elif menu in ["準則歸還", "📥 準則歸還"] and st.session_state.role == 'L5':
         st.header("📤 準則歸還")
