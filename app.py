@@ -794,14 +794,17 @@ try:
                 
                 msg = f"報告，班隊：{st.session_state.unit}\n借還書清單：\n\n【申請借閱】：\n"
                 
-                # 🎯 排序引擎：同書名綁定，狀態權重排序 (申請中 -> 已審核)
                 borrow_items = []
                 if not br_pending.empty:
                     for _, r in br_pending.iterrows(): borrow_items.append({'n': r['book_name'], 'q': int(r['qty']), 's': '申請中', 'w': 2})
                 if not bk_reserved.empty:
                     for _, r in bk_reserved.iterrows(): borrow_items.append({'n': r['book_name'], 'q': int(r['qty']), 's': '已審核', 'w': 3})
                 
-                borrow_items.sort(key=lambda x: (x['n'], x['w']))
+                # 🎯 動態權重排序：找出該書的「最高優先級」，將整組書往上拉
+                min_w = {}
+                for x in borrow_items:
+                    min_w[x['n']] = min(min_w.get(x['n'], 99), x['w'])
+                borrow_items.sort(key=lambda x: (min_w[x['n']], x['n'], x['w']))
                 
                 if borrow_items:
                     for i in borrow_items: msg += f"{i['n']} * {i['q']} ({i['s']})\n"
@@ -819,14 +822,18 @@ try:
         with tabs[1]:
             st.info("💡 產出目前名下所有準則總數。點擊黑框右上角「📋」複製。")
             if st.button("🚀 生成清點報表", type="primary"):
-                # 🎯 SQL 排序引擎：優先排書名，次要排狀態權重
-                inv_df = pd.read_sql_query(f"SELECT book_name, status, COUNT(id) as qty FROM books WHERE owner_id='{st.session_state.login_id}' AND status IN ('借閱中', '歸還中') GROUP BY book_name, status ORDER BY book_name, CASE status WHEN '借閱中' THEN 4 WHEN '歸還中' THEN 5 ELSE 9 END", conn)
+                inv_df = pd.read_sql_query(f"SELECT book_name, status, COUNT(id) as qty FROM books WHERE owner_id='{st.session_state.login_id}' AND status IN ('借閱中', '歸還中') GROUP BY book_name, status", conn)
                 msg = f"報告，班隊：{st.session_state.unit}\n準則清點：\n\n"
                 if inv_df.empty: msg += "無\n"
                 else:
+                    # 🎯 Pandas 權重引擎
+                    w_map = {'少領異常': 1, '申請中': 2, '已審核': 3, '借閱中': 4, '歸還中': 5, '遺失待賠': 6}
+                    inv_df['w'] = inv_df['status'].map(lambda x: w_map.get(x, 99))
+                    inv_df['min_w'] = inv_df.groupby('book_name')['w'].transform('min')
+                    inv_df.sort_values(by=['min_w', 'book_name', 'w'], inplace=True)
+                    
                     for _, r in inv_df.iterrows():
-                        display_status = "歸還中" if r['status'] == '歸還中' else "借閱中"
-                        msg += f"{r['book_name']} * {int(r['qty'])} ({display_status})\n"
+                        msg += f"{r['book_name']} * {int(r['qty'])} ({r['status']})\n"
                 
                 st.code(msg.strip(), language="text")
 
@@ -862,7 +869,7 @@ try:
                     
                 req_df = pd.read_sql_query(f"SELECT u.unit, br.book_name, SUM(br.quantity) as qty FROM borrow_requests br JOIN users u ON br.login_id = u.login_id WHERE u.squadron='{target_sq_dyn}' AND br.status='待審核'{unit_filter} GROUP BY u.unit, br.book_name", conn)
                 res_df = pd.read_sql_query(f"SELECT u.unit, b.book_name, COUNT(b.id) as qty FROM books b JOIN users u ON b.owner_id = u.login_id WHERE u.squadron='{target_sq_dyn}' AND b.status='保留待領取'{unit_filter} GROUP BY u.unit, b.book_name", conn)
-                ret_df = pd.read_sql_query(f"SELECT u.unit, b.book_name, COUNT(b.id) as qty FROM books b JOIN users u ON b.owner_id = u.login_id WHERE u.squadron='{target_sq_dyn}' AND b.status='歸還中'{unit_filter} GROUP BY u.unit, b.book_name ORDER BY b.book_name", conn)
+                ret_df = pd.read_sql_query(f"SELECT u.unit, b.book_name, COUNT(b.id) as qty FROM books b JOIN users u ON b.owner_id = u.login_id WHERE u.squadron='{target_sq_dyn}' AND b.status='歸還中'{unit_filter} GROUP BY u.unit, b.book_name", conn)
                 
                 now = datetime.now(timezone(timedelta(hours=8)))
                 tw_wd = ["一", "二", "三", "四", "五", "六", "日"][now.weekday()]
@@ -879,7 +886,6 @@ try:
                     for unit in sorted(list(all_units)):
                         msg += f"==== 【{unit}】 ====\n【申請借閱】：\n"
                         
-                        # 🎯 動態彙總：將「申請中」與「已審核」數量完美疊加
                         borrow_items = {}
                         u_req = req_df[req_df['unit'] == unit] if not req_df.empty else pd.DataFrame()
                         if not u_req.empty:
@@ -900,6 +906,8 @@ try:
                         msg += "\n【申請歸還】：\n"
                         u_ret = ret_df[ret_df['unit'] == unit] if not ret_df.empty else pd.DataFrame()
                         if not u_ret.empty:
+                            # 歸還清單依字母排序
+                            u_ret.sort_values(by='book_name', inplace=True)
                             for _, r in u_ret.iterrows(): 
                                 msg += f"{r['book_name']} * {int(r['qty'])}\n"
                         else: msg += "無\n"
@@ -931,8 +939,7 @@ try:
                     units_str = "'" + "','".join(inv_selected_units) + "'"
                     unit_filter = f" AND u.unit IN ({units_str})"
                     
-                # 🎯 SQL 終極排序引擎：書名優先，狀態權重次之 (少領->借閱->歸還->遺失)
-                inv_df = pd.read_sql_query(f"SELECT u.unit, b.book_name, b.status, COUNT(b.id) as qty FROM books b JOIN users u ON b.owner_id = u.login_id WHERE u.squadron='{target_sq_inv}' AND b.status IN ('借閱中', '歸還中', '遺失待賠', '少領異常') {unit_filter} GROUP BY u.unit, b.book_name, b.status ORDER BY u.unit, b.book_name, CASE b.status WHEN '少領異常' THEN 1 WHEN '借閱中' THEN 4 WHEN '歸還中' THEN 5 WHEN '遺失待賠' THEN 6 ELSE 9 END", conn)
+                inv_df = pd.read_sql_query(f"SELECT u.unit, b.book_name, b.status, COUNT(b.id) as qty FROM books b JOIN users u ON b.owner_id = u.login_id WHERE u.squadron='{target_sq_inv}' AND b.status IN ('借閱中', '歸還中', '遺失待賠', '少領異常') {unit_filter} GROUP BY u.unit, b.book_name, b.status", conn)
                 
                 now = datetime.now(timezone(timedelta(hours=8)))
                 tw_wd = ["一", "二", "三", "四", "五", "六", "日"][now.weekday()]
@@ -940,14 +947,22 @@ try:
                 
                 if inv_df.empty: inv_msg += "目前無外散之準則。\n"
                 else:
+                    # 🎯 終極 Pandas 權重引擎
+                    # 1. 賦予各狀態絕對權重
+                    w_map = {'少領異常': 1, '申請中': 2, '已審核': 3, '借閱中': 4, '歸還中': 5, '遺失待賠': 6}
+                    inv_df['w'] = inv_df['status'].map(lambda x: w_map.get(x, 99))
+                    
+                    # 2. 核心魔法：算出每一本書在該班隊中的「最高優先級(數字最小)」，讓弱勢狀態跟著強勢狀態走！
+                    inv_df['min_w'] = inv_df.groupby(['unit', 'book_name'])['w'].transform('min')
+                    
+                    # 3. 完美排序：先看班隊 -> 再看該書最高權重 -> 書名 -> 該行狀態權重
+                    inv_df.sort_values(by=['unit', 'min_w', 'book_name', 'w'], inplace=True)
+                    
                     for unit in inv_df['unit'].unique():
                         inv_msg += f"==== 【{unit}】 ====\n"
                         u_df = inv_df[inv_df['unit'] == unit]
                         for _, r in u_df.iterrows():
-                            b_name = r['book_name']
-                            qty = int(r['qty'])
-                            st_val = r['status']
-                            inv_msg += f"📘 {b_name} * {qty} ({st_val})\n"
+                            inv_msg += f"📘 {r['book_name']} * {int(r['qty'])} ({r['status']})\n"
                         inv_msg += "\n"
                 
                 st.code(inv_msg.strip(), language="text")
