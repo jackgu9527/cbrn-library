@@ -15,7 +15,7 @@ warnings.filterwarnings('ignore', category=UserWarning, module='pandas')
 # ==========================================
 # 1. 系統初始化與資料庫設定 (渦輪加速連線池)
 # ==========================================
-st.set_page_config(page_title="大隊部準則管理系統", layout="wide")
+st.set_page_config(page_title="大隊部準則管理系統", page_icon="app圖標.png", layout="wide")
 
 # === 🍪 餅乾通行證管理器 ===
 cookie_manager = stx.CookieManager()
