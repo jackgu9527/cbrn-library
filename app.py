@@ -790,19 +790,23 @@ try:
             if st.button("🚀 生成借還書清單", type="primary"):
                 br_pending = pd.read_sql_query(f"SELECT book_name, SUM(quantity) as qty FROM borrow_requests WHERE login_id='{st.session_state.login_id}' AND status='待審核' GROUP BY book_name", conn)
                 bk_reserved = pd.read_sql_query(f"SELECT book_name, COUNT(id) as qty FROM books WHERE owner_id='{st.session_state.login_id}' AND status='保留待領取' GROUP BY book_name", conn)
-                rt_df = pd.read_sql_query(f"SELECT book_name, COUNT(id) as qty FROM books WHERE owner_id='{st.session_state.login_id}' AND status='歸還中' GROUP BY book_name", conn)
+                rt_df = pd.read_sql_query(f"SELECT book_name, COUNT(id) as qty FROM books WHERE owner_id='{st.session_state.login_id}' AND status='歸還中' GROUP BY book_name ORDER BY book_name", conn)
                 
                 msg = f"報告，班隊：{st.session_state.unit}\n借還書清單：\n\n【申請借閱】：\n"
-                has_borrow = False
+                
+                # 🎯 排序引擎：同書名綁定，狀態權重排序 (申請中 -> 已審核)
+                borrow_items = []
                 if not br_pending.empty:
-                    for _, r in br_pending.iterrows(): 
-                        msg += f"{r['book_name']} * {int(r['qty'])} (申請中)\n"
-                        has_borrow = True
+                    for _, r in br_pending.iterrows(): borrow_items.append({'n': r['book_name'], 'q': int(r['qty']), 's': '申請中', 'w': 2})
                 if not bk_reserved.empty:
-                    for _, r in bk_reserved.iterrows(): 
-                        msg += f"{r['book_name']} * {int(r['qty'])} (已審核)\n"
-                        has_borrow = True
-                if not has_borrow: msg += "無\n"
+                    for _, r in bk_reserved.iterrows(): borrow_items.append({'n': r['book_name'], 'q': int(r['qty']), 's': '已審核', 'w': 3})
+                
+                borrow_items.sort(key=lambda x: (x['n'], x['w']))
+                
+                if borrow_items:
+                    for i in borrow_items: msg += f"{i['n']} * {i['q']} ({i['s']})\n"
+                else: 
+                    msg += "無\n"
                 
                 msg += "\n【申請歸還】：\n"
                 if not rt_df.empty:
@@ -810,13 +814,13 @@ try:
                         msg += f"{r['book_name']} * {int(r['qty'])} (歸還中)\n"
                 else: msg += "無\n"
                 
-                # 🚀 終極破敵戰術：使用 st.code 召喚原生複製按鈕
                 st.code(msg.strip(), language="text")
                 
         with tabs[1]:
-            st.info("💡 產出目前名下所有準則總數 (已拔除序號)。點擊黑框右上角「📋」複製。")
+            st.info("💡 產出目前名下所有準則總數。點擊黑框右上角「📋」複製。")
             if st.button("🚀 生成清點報表", type="primary"):
-                inv_df = pd.read_sql_query(f"SELECT book_name, status, COUNT(id) as qty FROM books WHERE owner_id='{st.session_state.login_id}' AND status IN ('借閱中', '歸還中') GROUP BY book_name, status ORDER BY book_name", conn)
+                # 🎯 SQL 排序引擎：優先排書名，次要排狀態權重
+                inv_df = pd.read_sql_query(f"SELECT book_name, status, COUNT(id) as qty FROM books WHERE owner_id='{st.session_state.login_id}' AND status IN ('借閱中', '歸還中') GROUP BY book_name, status ORDER BY book_name, CASE status WHEN '借閱中' THEN 4 WHEN '歸還中' THEN 5 ELSE 9 END", conn)
                 msg = f"報告，班隊：{st.session_state.unit}\n準則清點：\n\n"
                 if inv_df.empty: msg += "無\n"
                 else:
@@ -858,7 +862,7 @@ try:
                     
                 req_df = pd.read_sql_query(f"SELECT u.unit, br.book_name, SUM(br.quantity) as qty FROM borrow_requests br JOIN users u ON br.login_id = u.login_id WHERE u.squadron='{target_sq_dyn}' AND br.status='待審核'{unit_filter} GROUP BY u.unit, br.book_name", conn)
                 res_df = pd.read_sql_query(f"SELECT u.unit, b.book_name, COUNT(b.id) as qty FROM books b JOIN users u ON b.owner_id = u.login_id WHERE u.squadron='{target_sq_dyn}' AND b.status='保留待領取'{unit_filter} GROUP BY u.unit, b.book_name", conn)
-                ret_df = pd.read_sql_query(f"SELECT u.unit, b.book_name, COUNT(b.id) as qty FROM books b JOIN users u ON b.owner_id = u.login_id WHERE u.squadron='{target_sq_dyn}' AND b.status='歸還中'{unit_filter} GROUP BY u.unit, b.book_name", conn)
+                ret_df = pd.read_sql_query(f"SELECT u.unit, b.book_name, COUNT(b.id) as qty FROM books b JOIN users u ON b.owner_id = u.login_id WHERE u.squadron='{target_sq_dyn}' AND b.status='歸還中'{unit_filter} GROUP BY u.unit, b.book_name ORDER BY b.book_name", conn)
                 
                 now = datetime.now(timezone(timedelta(hours=8)))
                 tw_wd = ["一", "二", "三", "四", "五", "六", "日"][now.weekday()]
@@ -875,7 +879,7 @@ try:
                     for unit in sorted(list(all_units)):
                         msg += f"==== 【{unit}】 ====\n【申請借閱】：\n"
                         
-                        # 🎯 L4 專屬：合併「申請中」與「已審核」的數量，並拔除狀態文字
+                        # 🎯 動態彙總：將「申請中」與「已審核」數量完美疊加
                         borrow_items = {}
                         u_req = req_df[req_df['unit'] == unit] if not req_df.empty else pd.DataFrame()
                         if not u_req.empty:
@@ -888,8 +892,8 @@ try:
                                 borrow_items[r['book_name']] = borrow_items.get(r['book_name'], 0) + int(r['qty'])
                                 
                         if borrow_items:
-                            for b_name, qty in borrow_items.items():
-                                msg += f"{b_name} * {qty}\n"
+                            for b_name in sorted(borrow_items.keys()):
+                                msg += f"{b_name} * {borrow_items[b_name]}\n"
                         else:
                             msg += "無\n"
                         
@@ -904,7 +908,7 @@ try:
                 st.code(msg.strip(), language="text")
 
         with line_tabs[1]:
-            st.info("💡 產出中隊外散準則之總清單 (已拔除序號)。點擊黑框右上角「📋」複製。")
+            st.info("💡 產出中隊外散準則之總清單。點擊黑框右上角「📋」複製。")
             if is_doc: target_sq_inv = st.selectbox("🏢 目標中隊 (總清點)", sq_list, key="inv_sq")
             else: 
                 target_sq_inv = sq_list[0]
@@ -927,8 +931,8 @@ try:
                     units_str = "'" + "','".join(inv_selected_units) + "'"
                     unit_filter = f" AND u.unit IN ({units_str})"
                     
-                # 🎯 L4 總清點：精準抓取、拔除序號、並加上括號狀態
-                inv_df = pd.read_sql_query(f"SELECT u.unit, b.book_name, b.status, COUNT(b.id) as qty FROM books b JOIN users u ON b.owner_id = u.login_id WHERE u.squadron='{target_sq_inv}' AND b.status IN ('借閱中', '歸還中', '遺失待賠', '少領異常') {unit_filter} GROUP BY u.unit, b.book_name, b.status ORDER BY u.unit, b.book_name", conn)
+                # 🎯 SQL 終極排序引擎：書名優先，狀態權重次之 (少領->借閱->歸還->遺失)
+                inv_df = pd.read_sql_query(f"SELECT u.unit, b.book_name, b.status, COUNT(b.id) as qty FROM books b JOIN users u ON b.owner_id = u.login_id WHERE u.squadron='{target_sq_inv}' AND b.status IN ('借閱中', '歸還中', '遺失待賠', '少領異常') {unit_filter} GROUP BY u.unit, b.book_name, b.status ORDER BY u.unit, b.book_name, CASE b.status WHEN '少領異常' THEN 1 WHEN '借閱中' THEN 4 WHEN '歸還中' THEN 5 WHEN '遺失待賠' THEN 6 ELSE 9 END", conn)
                 
                 now = datetime.now(timezone(timedelta(hours=8)))
                 tw_wd = ["一", "二", "三", "四", "五", "六", "日"][now.weekday()]
