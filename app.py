@@ -1272,7 +1272,7 @@ try:
 
             elif menu == "📥 準則歸還審核":
                 st.subheader("📥 歸還點收與遺失追查")
-                ret_tabs = st.tabs(["📥 待點收清單", "🚨 遺失準則追查榜"])
+                ret_tabs = st.tabs(["📥 待點收清單", "🚨 遺失準則"])
                 
                 with ret_tabs[0]:
                     return_df = pd.read_sql_query(f"SELECT b.id, u.unit as 班隊, b.book_name as 書名, b.serial_number as 序號, b.owner_id FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.status='歸還中' AND u.squadron IN ({sq_in_clause}) ORDER BY u.unit, b.book_name", conn)
@@ -1350,7 +1350,7 @@ try:
                         st.success("目前各班隊皆無待歸還準則！")
 
                 with ret_tabs[1]:
-                    st.markdown("#### 🚨 遺失準則追查榜")
+                    st.markdown("#### 🚨 遺失準則")
                     lost_df = pd.read_sql_query(f"SELECT b.id, u.unit as 班隊, b.book_name as 書名, b.serial_number as 序號 FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.status='遺失待賠' AND u.squadron IN ({sq_in_clause}) ORDER BY u.unit, b.book_name", conn)
                     
                     if not lost_df.empty:
