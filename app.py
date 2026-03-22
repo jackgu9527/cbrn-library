@@ -8,6 +8,7 @@ from psycopg2 import pool
 from psycopg2 import IntegrityError
 import warnings
 import extra_streamlit_components as stx  # 🚀 新增餅乾套件
+import requests  # 🚀 新增 LINE 通訊模組
 
 # 關閉 Pandas 對於未嚴格使用 SQLAlchemy 的警告
 warnings.filterwarnings('ignore', category=UserWarning, module='pandas')
@@ -69,6 +70,19 @@ def release_connection(conn):
         get_pool().putconn(conn)
     except Exception:
         pass
+
+# ==========================================
+# 📱 全局共用：LINE Notify 戰術通報引擎
+# ==========================================
+def send_line_notify(message):
+    try:
+        token = st.secrets.get("LINE_NOTIFY_TOKEN")
+        if not token: return
+        headers = {"Authorization": f"Bearer {token}"}
+        data = {"message": message}
+        requests.post("https://notify-api.line.me/api/notify", headers=headers, data=data)
+    except Exception:
+        pass # 若 LINE 斷線或未設定，系統依然會正常運作不報錯
 
 # ==========================================
 # 🌟 全局共用：準則影子權重排序引擎 (DRY 代碼瘦身)
@@ -417,43 +431,81 @@ with st.sidebar:
 # ==========================================
 conn = get_db_connection()
 try:
+    # 🚨 全局強制防線：沒改密碼前，鎖死整個主畫面！
+    if st.session_state.setup_count > 0:
+        st.error("🆕 **歡迎使用此系統：請先設定您的帳號與密碼**")
+        st.info("💡 修改完成後此視窗將關閉，忘記帳密請聯絡幹部。")
+        with st.container(border=True):
+            col_id, col_pw = st.columns(2)
+            with col_id: new_id = st.text_input("設定新帳號", value=st.session_state.login_id, key="force_setup_id")
+            with col_pw: new_pwd = st.text_input("設定新密碼", type="password", placeholder="建議至少8碼", key="force_setup_pw")
+            
+            if st.button("🚀 確認修改並解鎖", type="primary"):
+                if not new_pwd: st.warning("請輸入密碼！")
+                else:
+                    c = conn.cursor()
+                    c.execute("SELECT COUNT(*) FROM users WHERE login_id=%s AND id!=%s", (new_id, int(st.session_state.id)))
+                    if c.fetchone()[0] > 0: st.error("❌ 此帳號已被使用！")
+                    else:
+                        old_id = st.session_state.login_id
+                        c.execute("UPDATE users SET login_id=%s, password=%s, setup_count=0 WHERE id=%s", (new_id, new_pwd, int(st.session_state.id)))
+                        # 同步連動其他資料表，確保資料不遺失
+                        c.execute("UPDATE books SET owner_id=%s WHERE owner_id=%s", (new_id, old_id))
+                        c.execute("UPDATE borrow_requests SET login_id=%s WHERE login_id=%s", (new_id, old_id))
+                        c.execute("UPDATE action_logs SET user_id=%s WHERE user_id=%s", (new_id, old_id))
+                        conn.commit()
+                        log_action(new_id, "新進設定", "完成強制首次登入帳密修改")
+                        st.success("✅ 設定成功！請重新登入以載入權限。")
+                        import time; time.sleep(1.5); st.session_state.clear(); st.rerun()
+        st.stop() # 🛑 終止往下執行任何畫面 (防線核心)
+
     if menu in ["首頁", "🏠 首頁"]:
         st.header("📊 首頁")
         
-        if st.session_state.role == 'L5':
-            # === 🎯 智慧引導：新進/更換人員強制修改帳密 ===
-            if st.session_state.setup_count > 0:
-                with st.container(border=True):
-                    st.error("🆕 **歡迎使用此系統：請先設定您的帳號與密碼**")
-                    st.info("💡 修改完成後此視窗將關閉，忘記帳密請聯絡幹部。")
-                    col_id, col_pw, col_btn = st.columns([3, 3, 2])
-                    with col_id:
-                        new_id = st.text_input("設定新帳號", value=st.session_state.login_id, key="setup_new_id")
-                    with col_pw:
-                        new_pwd = st.text_input("設定新密碼", type="password", placeholder="建議至少8碼", key="setup_new_pw")
-                    with col_btn:
-                        st.write(" ")
-                        if st.button("🚀 確認修改", type="primary", use_container_width=True):
-                            if not new_pwd:
-                                st.warning("請輸入密碼！")
-                            else:
-                                c = conn.cursor()
-                                c.execute("SELECT COUNT(*) FROM users WHERE login_id=%s AND id!=%s", (new_id, int(st.session_state.id)))
-                                if c.fetchone()[0] > 0:
-                                    st.error("❌ 此帳號已被使用！")
-                                else:
-                                    old_id = st.session_state.login_id
-                                    c.execute("UPDATE users SET login_id=%s, password=%s, setup_count=0 WHERE id=%s", (new_id, new_pwd, int(st.session_state.id)))
-                                    c.execute("UPDATE books SET owner_id=%s WHERE owner_id=%s", (new_id, old_id))
-                                    c.execute("UPDATE borrow_requests SET login_id=%s WHERE login_id=%s", (new_id, old_id))
-                                    c.execute("UPDATE action_logs SET user_id=%s WHERE user_id=%s", (new_id, old_id))
-                                    conn.commit()
-                                    log_action(new_id, "新進設定", "完成首次登入帳密修改")
-                                    st.success("✅ 設定成功！請重新登入。")
-                                    import time; time.sleep(1.5); st.session_state.clear(); st.rerun()
-                st.markdown("---")
+        # ======== 🟢 L1：幹部 / 管理員視角 ========
+        if st.session_state.role == 'L1':
+            target_sq = st.session_state.get('current_sq', '')
+            
+            # 戰情儀表板
+            st.markdown(f"**{st.session_state.title} {st.session_state.name}** 長官好，以下為【{target_sq}】今日戰情概況：")
+            
+            # 透過側邊欄的 global_sq_selector (current_sq) 進行精準打擊
+            sq_filter = f"='{target_sq}'" if target_sq != '大隊部' and target_sq != '管理員' else "IS NOT NULL"
+            
+            pending_reg = pd.read_sql_query(f"SELECT COUNT(*) FROM users WHERE status='待審核' AND squadron {sq_filter}", conn).iloc[0,0]
+            pending_bor = pd.read_sql_query(f"SELECT COUNT(*) FROM borrow_requests br JOIN users u ON br.login_id = u.login_id WHERE br.status='待審核' AND u.squadron {sq_filter}", conn).iloc[0,0]
+            pending_ret = pd.read_sql_query(f"SELECT COUNT(*) FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.status='歸還中' AND u.squadron {sq_filter}", conn).iloc[0,0]
+            pending_abn = pd.read_sql_query(f"SELECT COUNT(*) FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.status='少領異常' AND u.squadron {sq_filter}", conn).iloc[0,0]
+            
+            c_m1, c_m2, c_m3, c_m4 = st.columns(4)
+            c_m1.metric("📝 待審核帳號", f"{pending_reg} 件")
+            c_m2.metric("📥 待借閱準則", f"{pending_bor} 件")
+            c_m3.metric("📤 待歸還準則", f"{pending_ret} 件")
+            c_m4.metric("🔴 借閱異常警示", f"{pending_abn} 件")
+            st.markdown("---")
 
-            # === 📊 訓員戰情看板 (全幅無側邊欄) ===
+            # L1 共用帳密修改面板 (縮小隱藏，不佔空間)
+            with st.expander("⚙️ 個人帳密設置", expanded=False):
+                st.info("💡 此處可修改您的登入帳號與密碼。")
+                new_id = st.text_input("新帳號", value=st.session_state.login_id, key="l1_daily_id")
+                new_pwd = st.text_input("新密碼", type="password", key="l1_daily_pw")
+                if st.button("💾 儲存", key="l1_save_pwd", type="primary"):
+                    if not new_pwd: st.error("請輸入新密碼！")
+                    else:
+                        c = conn.cursor()
+                        uid = int(st.session_state.id)
+                        final_id = new_id.strip() if new_id.strip() else st.session_state.login_id
+                        c.execute("SELECT COUNT(*) FROM users WHERE (login_id=%s OR pending_login_id=%s) AND id!=%s", (final_id, final_id, uid))
+                        if c.fetchone()[0] > 0: st.error("❌ 此帳號已被他人使用！")
+                        else:
+                            c.execute("UPDATE users SET login_id=%s, password=%s WHERE id=%s", (final_id, new_pwd, uid))
+                            conn.commit()
+                            st.success("✅ 帳號與密碼修改成功！系統將自動登出...")
+                            import time; time.sleep(1.5); st.session_state.clear(); st.rerun()
+
+        # ======== 🟢 L2：訓員視角 ========
+        elif st.session_state.role == 'L2':
+            # 訓員戰情看板
             st.markdown(f"**所屬單位：** {st.session_state.squadron} - {st.session_state.unit}")
             if st.session_state.discharge_date:
                 d_date = datetime.strptime(str(st.session_state.discharge_date), '%Y-%m-%d').date()
@@ -480,9 +532,8 @@ try:
             if not status_items:
                 st.success("✨ 您目前沒有任何準則。")
             else:
-                # 🚀 呼叫全局排序引擎！一行搞定！
+                # 🚀 呼叫全局排序引擎！
                 df_items = apply_shadow_sort(pd.DataFrame(status_items))
-                
                 style_map = {'申請中': ('🔵', '#4da6ff'), '已審核': ('🟡', '#ffb84d'), '借閱中': ('🟢', '#4CAF50'), '歸還中': ('🔴', '#ff6666')}
                 
                 for _, r in df_items.iterrows():
@@ -496,115 +547,6 @@ try:
                             <span>(共 {r['qty']} 本)</span><span style="text-align: right;">狀態：{r['status']}</span>
                         </div>
                         """, unsafe_allow_html=True)
-
-            # ======== 🟢 L2 & L3：大隊部/中隊部 (合併共用首頁與帳密區塊) ========
-        elif st.session_state.role in ['L2', 'L3']:
-            
-            # 1. 專屬上半部：L3 顯示戰情儀表板，L2 顯示一般問候
-            if st.session_state.role == 'L3':
-                st.markdown(f"**{display_name}** ，以下為【{st.session_state.squadron}】今日戰情概況：")
-                sq_list = [s.strip() for s in st.session_state.squadron.split(',')]
-                sq_in_clause = "'" + "','".join(sq_list) + "'"
-                
-                pending_reg = pd.read_sql_query(f"SELECT COUNT(*) FROM users WHERE status='待審核' AND squadron IN ({sq_in_clause})", conn).iloc[0,0]
-                pending_bor = pd.read_sql_query(f"SELECT COUNT(*) FROM borrow_requests br JOIN users u ON br.login_id = u.login_id WHERE br.status='待審核' AND u.squadron IN ({sq_in_clause})", conn).iloc[0,0]
-                pending_ret = pd.read_sql_query(f"SELECT COUNT(*) FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.status='歸還中' AND u.squadron IN ({sq_in_clause})", conn).iloc[0,0]
-                pending_abn = pd.read_sql_query(f"SELECT COUNT(*) FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.status='少領異常' AND u.squadron IN ({sq_in_clause})", conn).iloc[0,0]
-                
-                c_m1, c_m2, c_m3, c_m4 = st.columns(4)
-                c_m1.metric("📝 待審核帳號", f"{pending_reg} 件")
-                c_m2.metric("📥 待借閱準則", f"{pending_bor} 件")
-                c_m3.metric("📤 待歸還準則", f"{pending_ret} 件")
-                c_m4.metric("🔴 借閱異常警示", f"{pending_abn} 件")
-                st.markdown("---")
-            else:
-                # 這是給 L2 看的
-                st.markdown(f"**{display_name}** 長官好，歡迎登入系統。")
-                st.markdown("---")
-
-            # 2. 共用下半部：L2 與 L3 共用同一個折疊式帳密修改面板！
-            with st.expander("⚙️ 個人帳密設置", expanded=False):
-                st.info("💡 此處可修改您的登入帳號與密碼。")
-                new_id = st.text_input("新帳號", value=st.session_state.login_id, key="l23_daily_id")
-                new_pwd = st.text_input("新密碼", type="password", key="l23_daily_pw")
-                
-                if st.button("💾 儲存", key="l23_save_pwd", type="primary"):
-                    if not new_pwd:
-                        st.error("請輸入新密碼！")
-                    else:
-                        c = conn.cursor()
-                        uid = int(st.session_state.id)
-                        final_id = new_id.strip() if new_id.strip() else st.session_state.login_id
-                        
-                        c.execute("SELECT COUNT(*) FROM users WHERE (login_id=%s OR pending_login_id=%s) AND id!=%s", (final_id, final_id, uid))
-                        if c.fetchone()[0] > 0:
-                            st.error("❌ 此帳號已被他人使用！")
-                        else:
-                            c.execute("UPDATE users SET login_id=%s, password=%s WHERE id=%s", (final_id, new_pwd, uid))
-                            conn.commit()
-                            # 重大操作，保留緩衝提示
-                            st.success("✅ 帳號與密碼修改成功！系統將自動登出...")
-                            import time; time.sleep(1.5); st.session_state.clear(); st.rerun()
-
-        # ======== 🟢 L4：區隊長/文書兵 ========
-        elif st.session_state.role == 'L4':
-            # === 🎯 智慧引導：新進/更換幹部強制修改 ===
-            if st.session_state.setup_count > 0:
-                with st.container(border=True):
-                    st.error("🆕 **請先設定姓名與帳密**")
-                    st.info("💡 請填寫姓名與密碼，後續更改姓名需由中隊長審核。")
-                    c1, c2, c3 = st.columns(3)
-                    with c1: new_name = st.text_input("姓名", value=st.session_state.name, key="l4_setup_name")
-                    with c2: new_id = st.text_input("帳號", value=st.session_state.login_id, key="l4_setup_id")
-                    with c3: new_pwd = st.text_input("密碼", type="password", key="l4_setup_pw")
-                    
-                    if st.button("🚀 確認開通", type="primary", use_container_width=True):
-                        if not new_pwd or not new_name: st.warning("姓名與密碼為必填！")
-                        else:
-                            c = conn.cursor()
-                            c.execute("SELECT COUNT(*) FROM users WHERE login_id=%s AND id!=%s", (new_id, int(st.session_state.id)))
-                            if c.fetchone()[0] > 0: st.error("❌ 此帳號已被使用！")
-                            else:
-                                c.execute("UPDATE users SET name=%s, login_id=%s, password=%s, setup_count=0 WHERE id=%s", (new_name, new_id, new_pwd, int(st.session_state.id)))
-                                conn.commit()
-                                log_action(new_id, "幹部開通", f"完成首次登入設定，姓名：{new_name}")
-                                st.success("✅ 設定成功！請重新登入。")
-                                import time; time.sleep(1.5); st.session_state.clear(); st.rerun()
-                st.markdown("---")
-
-            col1, col2 = st.columns([2, 1])
-            with col1:
-                st.markdown(f"**{display_name}**，以下為今日概況：")
-                sq_list = [s.strip() for s in st.session_state.squadron.split(',')]
-                sq_in_clause = "'" + "','".join(sq_list) + "'"
-                
-                pending_reg = pd.read_sql_query(f"SELECT COUNT(*) FROM users WHERE status='待審核' AND squadron IN ({sq_in_clause})", conn).iloc[0,0]
-                pending_bor = pd.read_sql_query(f"SELECT COUNT(*) FROM borrow_requests br JOIN users u ON br.login_id = u.login_id WHERE br.status='待審核' AND u.squadron IN ({sq_in_clause})", conn).iloc[0,0]
-                pending_ret = pd.read_sql_query(f"SELECT COUNT(*) FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.status='歸還中' AND u.squadron IN ({sq_in_clause})", conn).iloc[0,0]
-                pending_abn = pd.read_sql_query(f"SELECT COUNT(*) FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.status='少領異常' AND u.squadron IN ({sq_in_clause})", conn).iloc[0,0]
-                
-                c_m1, c_m2, c_m3, c_m4 = st.columns(4)
-                c_m1.metric("📝 待審核帳號", f"{pending_reg} 件")
-                c_m2.metric("📥 待借閱準則", f"{pending_bor} 件")
-                c_m3.metric("📤 待歸還準則", f"{pending_ret} 件")
-                c_m4.metric("🔴 借閱異常警示", f"{pending_abn} 件")
-            
-            with col2:
-                with st.expander("⚙️ 帳密修改", expanded=False):
-                    st.info("💡人員調職需更改姓名請聯絡中隊長 。")
-                    new_id = st.text_input("新帳號", value=st.session_state.login_id, key="l4_daily_id")
-                    new_pwd = st.text_input("新密碼", type="password", key="l4_daily_pw")
-                    if st.button("💾 儲存"):
-                        if not new_pwd: st.error("請輸入新密碼！")
-                        else:
-                            c = conn.cursor()
-                            c.execute("SELECT COUNT(*) FROM users WHERE login_id=%s AND id!=%s", (new_id, int(st.session_state.id)))
-                            if c.fetchone()[0] > 0: st.error("❌ 帳號重複！")
-                            else:
-                                c.execute("UPDATE users SET login_id=%s, password=%s WHERE id=%s", (new_id, new_pwd, int(st.session_state.id)))
-                                conn.commit()
-                                st.success("✅ 修改成功！請重新登入。")
-                                import time; time.sleep(1.5); st.session_state.clear(); st.rerun()
 
     elif menu in ["序號登載", "🏷️ 序號登載"] and st.session_state.role == 'L5':
         st.header("🏷️ 序號登載")
