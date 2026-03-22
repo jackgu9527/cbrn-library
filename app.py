@@ -64,6 +64,12 @@ def get_db_connection():
     return conn
 
 def release_connection(conn):
+    # 用完不關門，而是把連線放回池子裡保留
+    try:
+        get_pool().putconn(conn)
+    except Exception:
+        pass
+
 # ==========================================
 # 🌟 全局共用：準則影子權重排序引擎 (DRY 代碼瘦身)
 # ==========================================
@@ -83,12 +89,6 @@ def apply_shadow_sort(df, has_unit=False):
     sort_order = ['unit', 'min_w', 'book_name', 'w'] if has_unit and 'unit' in df.columns else ['min_w', 'book_name', 'w']
     
     return df.sort_values(by=sort_order).reset_index(drop=True)
-    
-    # 用完不關門，而是把連線放回池子裡保留
-    try:
-        get_pool().putconn(conn)
-    except Exception:
-        pass
 
 def log_action(user_id, action, details):
     conn = get_db_connection()
