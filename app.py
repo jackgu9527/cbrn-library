@@ -17,13 +17,20 @@ warnings.filterwarnings('ignore', category=UserWarning, module='pandas')
 # ==========================================
 st.set_page_config(page_title="大隊部準則管理系統", layout="wide")
 
+# === 🍪 餅乾通行證管理器 ===
+cookie_manager = stx.CookieManager()
+
+# 🚨 終極登出攔截器：確保銷毀指令能完整傳達到瀏覽器
+if st.session_state.get('logout_triggered'):
+    cookie_manager.delete('sys_user_token')
+    st.session_state.clear()
+    st.session_state['force_logout'] = True  # 🛡️ 防禦盾：阻止下方被殭屍餅乾拉回
+    st.session_state['sys_toast'] = "👋 登出成功！安全連線已銷毀。"
+
 # === 🚀 全域快閃通知 (Toast) 接收器 ===
 if 'sys_toast' in st.session_state:
     st.toast(st.session_state['sys_toast'])
     del st.session_state['sys_toast']
-
-# === 🍪 餅乾通行證管理器 ===
-cookie_manager = stx.CookieManager()
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -223,7 +230,8 @@ def run_ghost_cleanup():
 # 2. 登入與註冊模組
 # ==========================================
 # 🍪 嘗試從 Cookie 讀取通行證 (無感自動登入)
-if 'logged_in' not in st.session_state:
+# 🛡️ 加上 force_logout 防禦盾，確保登出瞬間絕對不會觸發自動登入
+if 'logged_in' not in st.session_state and not st.session_state.get('force_logout'):
     stored_user = cookie_manager.get('sys_user_token')
     if stored_user:
         conn = get_db_connection()
@@ -375,8 +383,9 @@ with st.sidebar:
     
     st.markdown("---")
     if st.button("登出"):
-        # 1. 徹底銷毀通行證 (發送指令給瀏覽器)
-        cookie_manager.delete('sys_user_token') 
+        # 射後不理：發射登出信號並瞬間重整，交給頂部的「攔截器」處理
+        st.session_state['logout_triggered'] = True
+        st.rerun() 
         
         # 2. 清空大腦暫存記憶
         st.session_state.clear()
