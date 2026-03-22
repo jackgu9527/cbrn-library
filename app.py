@@ -64,6 +64,26 @@ def get_db_connection():
     return conn
 
 def release_connection(conn):
+# ==========================================
+# 🌟 全局共用：準則影子權重排序引擎 (DRY 代碼瘦身)
+# ==========================================
+def apply_shadow_sort(df, has_unit=False):
+    if df.empty or 'status' not in df.columns or 'book_name' not in df.columns:
+        return df
+    df = df.copy()
+    # 1. 定義系統所有可能出現的狀態絕對權重
+    w_map = {'少領異常': 1, '申請中': 2, '待審核': 2, '保留待領取': 3, '已審核': 3, '借閱中': 4, '歸還中': 5, '遺失待賠': 6}
+    df['w'] = df['status'].map(lambda x: w_map.get(x, 99))
+    
+    # 2. 判斷是否需要按「班隊」分組
+    group_cols = ['unit', 'book_name'] if has_unit and 'unit' in df.columns else ['book_name']
+    
+    # 3. 找出影子權重，將同名準則整組往上拉，並完美排序！
+    df['min_w'] = df.groupby(group_cols)['w'].transform('min')
+    sort_order = ['unit', 'min_w', 'book_name', 'w'] if has_unit and 'unit' in df.columns else ['min_w', 'book_name', 'w']
+    
+    return df.sort_values(by=sort_order).reset_index(drop=True)
+    
     # 用完不關門，而是把連線放回池子裡保留
     try:
         get_pool().putconn(conn)
@@ -445,45 +465,37 @@ try:
 
             st.markdown("#### 📦 準則狀態總覽")
             
-            # 撈取所有狀態資料
             br_df = pd.read_sql_query(f"SELECT book_name, quantity FROM borrow_requests WHERE login_id='{st.session_state.login_id}' AND status='待審核'", conn)
             bk_df = pd.read_sql_query(f"SELECT book_name, status FROM books WHERE owner_id='{st.session_state.login_id}' AND status IN ('保留待領取', '借閱中', '歸還中')", conn)
 
-            # 依狀態與書名進行大數據分組
-            items = {'🔵 申請中': {}, '🟡 待領取': {}, '🟢 借閱中': {}, '🔴 歸還中': {}}
-            for _, r in br_df.iterrows():
-                items['🔵 申請中'][r['book_name']] = items['🔵 申請中'].get(r['book_name'], 0) + r['quantity']
-            for _, r in bk_df.iterrows():
-                st_val = r['status']
-                mapped_st = '🟡 待領取' if st_val == '保留待領取' else '🟢 借閱中' if st_val == '借閱中' else '🔴 歸還中'
-                items[mapped_st][r['book_name']] = items[mapped_st].get(r['book_name'], 0) + 1
+            status_items = []
+            if not br_df.empty:
+                for _, r in br_df.groupby('book_name')['quantity'].sum().reset_index().iterrows():
+                    status_items.append({'book_name': r['book_name'], 'qty': int(r['quantity']), 'status': '申請中'})
+            if not bk_df.empty:
+                st_map = {'保留待領取': '已審核', '借閱中': '借閱中', '歸還中': '歸還中'}
+                for _, r in bk_df.groupby(['book_name', 'status']).size().reset_index(name='qty').iterrows():
+                    status_items.append({'book_name': r['book_name'], 'qty': int(r['qty']), 'status': st_map.get(r['status'], r['status'])})
 
-            has_items = False
-            # 絕對排序與 RWD 顏色設定
-            status_config = [
-                ('🔵 申請中', '🔵', '#4da6ff', '申請中'),
-                ('🟡 待領取', '🟡', '#ffb84d', '已審核'),
-                ('🟢 借閱中', '🟢', '#4CAF50', '借閱中'),
-                ('🔴 歸還中', '🔴', '#ff6666', '歸還中')
-            ]
-
-            for st_key, icon, color, st_desc in status_config:
-                for b_name, qty in items[st_key].items():
-                    has_items = True
+            if not status_items:
+                st.success("✨ 您目前沒有任何準則。")
+            else:
+                # 🚀 呼叫全局排序引擎！一行搞定！
+                df_items = apply_shadow_sort(pd.DataFrame(status_items))
+                
+                style_map = {'申請中': ('🔵', '#4da6ff'), '已審核': ('🟡', '#ffb84d'), '借閱中': ('🟢', '#4CAF50'), '歸還中': ('🔴', '#ff6666')}
+                
+                for _, r in df_items.iterrows():
+                    icon, color = style_map.get(r['status'], ('🔹', 'gray'))
                     with st.container(border=True):
-                        # 幹部指定的完美雙行排版 (顏色全面同步)
                         st.markdown(f"""
                         <div style="font-size: 15px; font-weight: bold; color: {color}; margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-                            {icon} {b_name}
+                            {icon} {r['book_name']}
                         </div>
                         <div style="display: flex; justify-content: space-between; font-size: 14px; color: {color}; padding-left: 28px;">
-                            <span>(共 {qty} 本)</span>
-                            <span style="text-align: right;">狀態：{st_desc}</span>
+                            <span>(共 {r['qty']} 本)</span><span style="text-align: right;">狀態：{r['status']}</span>
                         </div>
                         """, unsafe_allow_html=True)
-
-            if not has_items:
-                st.success("✨ 您目前沒有任何準則。")
 
             # ======== 🟢 L2 & L3：大隊部/中隊部 (合併共用首頁與帳密區塊) ========
         elif st.session_state.role in ['L2', 'L3']:
@@ -597,7 +609,8 @@ try:
     elif menu in ["序號登載", "🏷️ 序號登載"] and st.session_state.role == 'L5':
         st.header("🏷️ 序號登載")
         
-        bk_df = pd.read_sql_query(f"SELECT id, book_name, serial_number, status FROM books WHERE owner_id='{st.session_state.login_id}' AND status IN ('保留待領取', '借閱中') ORDER BY book_name", conn)
+        # 拔除舊版死板的 SQL ORDER BY
+        bk_df = pd.read_sql_query(f"SELECT id, book_name, serial_number, status FROM books WHERE owner_id='{st.session_state.login_id}' AND status IN ('保留待領取', '借閱中')", conn)
 
         if bk_df.empty:
             st.success("✨ 您目前沒有需要登載或校正的準則！")
@@ -605,44 +618,27 @@ try:
             with st.form("serial_entry_form"):
                 form_data = {}
                 
-                # 🟡 待領取區塊 (容許部分送出)
-                pending_df = bk_df[bk_df['status'] == '保留待領取']
-                for b_name in pending_df['book_name'].unique():
-                    b_ids = pending_df[pending_df['book_name'] == b_name]['id'].tolist()
-                    qty = len(b_ids)
-                    with st.container(border=True):
-                        st.markdown(f"""
-                        <div style="font-size: 15px; font-weight: bold; color: #ffb84d; margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-                            🟡 {b_name}
-                        </div>
-                        <div style="font-size: 14px; color: black; padding-left: 28px; margin-bottom: 8px;">
-                            (共 {qty} 本) 📝 請登載序號 (請用 , 隔開)
-                        </div>
-                        """, unsafe_allow_html=True)
-                        
-                        user_input = st.text_input(f"隱藏標題_{b_name}_p", label_visibility="collapsed", key=f"p_{b_name}")
-                        abnormal = st.checkbox(f"☑️ 借閱異常：剩餘準則未借閱到勾選。", key=f"abn_{b_name}")
-                        form_data[f"p_{b_name}"] = {'type': 'pending', 'ids': b_ids, 'input': user_input, 'abnormal': abnormal, 'b_name': b_name}
-
-                # 🟢 借閱中(校正)區塊
-                borrowed_df = bk_df[bk_df['status'] == '借閱中']
-                for b_name in borrowed_df['book_name'].unique():
-                    b_rows = borrowed_df[borrowed_df['book_name'] == b_name]
+                # 🚀 呼叫全局排序引擎！
+                bk_df = apply_shadow_sort(bk_df)
+                
+                # 依序渲染表單，同書名的不同狀態會完美吸附在一起！
+                grouped = bk_df.groupby(['book_name', 'status'], sort=False)
+                for (b_name, st_val), b_rows in grouped:
                     qty = len(b_rows)
-                    current_s = [str(r['serial_number']).strip() for _, r in b_rows.iterrows() if pd.notna(r['serial_number'])]
-                    
-                    with st.container(border=True):
-                        st.markdown(f"""
-                        <div style="font-size: 15px; font-weight: bold; color: #4CAF50; margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-                            🟢 {b_name}
-                        </div>
-                        <div style="font-size: 14px; color: black; padding-left: 28px; margin-bottom: 8px;">
-                            (共 {qty} 本) 📝 校正序號 (請用 , 隔開)
-                        </div>
-                        """, unsafe_allow_html=True)
-                        
-                        user_input = st.text_input(f"隱藏標題_{b_name}_c", value=", ".join(current_s), label_visibility="collapsed", key=f"c_{b_name}")
-                        form_data[f"c_{b_name}"] = {'type': 'correct', 'rows': b_rows.to_dict('records'), 'input': user_input, 'b_name': b_name}
+                    if st_val == '保留待領取':
+                        b_ids = b_rows['id'].tolist()
+                        with st.container(border=True):
+                            st.markdown(f"<div style='font-size: 15px; font-weight: bold; color: #ffb84d; margin-bottom: 8px;'>🟡 {b_name}</div><div style='font-size: 14px; color: black; padding-left: 28px; margin-bottom: 8px;'>(共 {qty} 本) 📝 請登載序號 (請用 , 隔開)</div>", unsafe_allow_html=True)
+                            user_input = st.text_input(f"隱藏標題_{b_name}_p", label_visibility="collapsed", key=f"p_{b_name}")
+                            abnormal = st.checkbox(f"☑️ 借閱異常：剩餘準則未借閱到勾選。", key=f"abn_{b_name}")
+                            form_data[f"p_{b_name}"] = {'type': 'pending', 'ids': b_ids, 'input': user_input, 'abnormal': abnormal, 'b_name': b_name}
+
+                    elif st_val == '借閱中':
+                        current_s = [str(r['serial_number']).strip() for _, r in b_rows.iterrows() if pd.notna(r['serial_number'])]
+                        with st.container(border=True):
+                            st.markdown(f"<div style='font-size: 15px; font-weight: bold; color: #4CAF50; margin-bottom: 8px;'>🟢 {b_name}</div><div style='font-size: 14px; color: black; padding-left: 28px; margin-bottom: 8px;'>(共 {qty} 本) 📝 校正序號 (請用 , 隔開)</div>", unsafe_allow_html=True)
+                            user_input = st.text_input(f"隱藏標題_{b_name}_c", value=", ".join(current_s), label_visibility="collapsed", key=f"c_{b_name}")
+                            form_data[f"c_{b_name}"] = {'type': 'correct', 'rows': b_rows.to_dict('records'), 'input': user_input, 'b_name': b_name}
 
                 st.markdown("---")
                 if st.form_submit_button("💾 儲存序號", type="primary", use_container_width=True):
@@ -790,31 +786,28 @@ try:
             if st.button("🚀 生成借還書清單", type="primary"):
                 br_pending = pd.read_sql_query(f"SELECT book_name, SUM(quantity) as qty FROM borrow_requests WHERE login_id='{st.session_state.login_id}' AND status='待審核' GROUP BY book_name", conn)
                 bk_reserved = pd.read_sql_query(f"SELECT book_name, COUNT(id) as qty FROM books WHERE owner_id='{st.session_state.login_id}' AND status='保留待領取' GROUP BY book_name", conn)
-                rt_df = pd.read_sql_query(f"SELECT book_name, COUNT(id) as qty FROM books WHERE owner_id='{st.session_state.login_id}' AND status='歸還中' GROUP BY book_name ORDER BY book_name", conn)
+                rt_df = pd.read_sql_query(f"SELECT book_name, COUNT(id) as qty FROM books WHERE owner_id='{st.session_state.login_id}' AND status='歸還中' GROUP BY book_name", conn)
                 
                 msg = f"報告，班隊：{st.session_state.unit}\n借還書清單：\n\n【申請借閱】：\n"
                 
                 borrow_items = []
                 if not br_pending.empty:
-                    for _, r in br_pending.iterrows(): borrow_items.append({'n': r['book_name'], 'q': int(r['qty']), 's': '申請中', 'w': 2})
+                    for _, r in br_pending.iterrows(): borrow_items.append({'book_name': r['book_name'], 'qty': int(r['qty']), 'status': '申請中'})
                 if not bk_reserved.empty:
-                    for _, r in bk_reserved.iterrows(): borrow_items.append({'n': r['book_name'], 'q': int(r['qty']), 's': '已審核', 'w': 3})
-                
-                # 🎯 動態權重排序：找出該書的「最高優先級」，將整組書往上拉
-                min_w = {}
-                for x in borrow_items:
-                    min_w[x['n']] = min(min_w.get(x['n'], 99), x['w'])
-                borrow_items.sort(key=lambda x: (min_w[x['n']], x['n'], x['w']))
+                    for _, r in bk_reserved.iterrows(): borrow_items.append({'book_name': r['book_name'], 'qty': int(r['qty']), 'status': '已審核'})
                 
                 if borrow_items:
-                    for i in borrow_items: msg += f"{i['n']} * {i['q']} ({i['s']})\n"
+                    # 🚀 呼叫全局排序引擎
+                    df_b = apply_shadow_sort(pd.DataFrame(borrow_items))
+                    for _, r in df_b.iterrows(): msg += f"{r['book_name']} * {r['qty']} ({r['status']})\n"
                 else: 
                     msg += "無\n"
                 
                 msg += "\n【申請歸還】：\n"
                 if not rt_df.empty:
-                    for _, r in rt_df.iterrows(): 
-                        msg += f"{r['book_name']} * {int(r['qty'])} (歸還中)\n"
+                    rt_df['status'] = '歸還中'
+                    rt_df = apply_shadow_sort(rt_df)
+                    for _, r in rt_df.iterrows(): msg += f"{r['book_name']} * {int(r['qty'])} (歸還中)\n"
                 else: msg += "無\n"
                 
                 st.code(msg.strip(), language="text")
@@ -826,12 +819,8 @@ try:
                 msg = f"報告，班隊：{st.session_state.unit}\n準則清點：\n\n"
                 if inv_df.empty: msg += "無\n"
                 else:
-                    # 🎯 Pandas 權重引擎
-                    w_map = {'少領異常': 1, '申請中': 2, '已審核': 3, '借閱中': 4, '歸還中': 5, '遺失待賠': 6}
-                    inv_df['w'] = inv_df['status'].map(lambda x: w_map.get(x, 99))
-                    inv_df['min_w'] = inv_df.groupby('book_name')['w'].transform('min')
-                    inv_df.sort_values(by=['min_w', 'book_name', 'w'], inplace=True)
-                    
+                    # 🚀 呼叫全局排序引擎
+                    inv_df = apply_shadow_sort(inv_df)
                     for _, r in inv_df.iterrows():
                         msg += f"{r['book_name']} * {int(r['qty'])} ({r['status']})\n"
                 
@@ -859,22 +848,15 @@ try:
                 dyn_selected_units = st.multiselect("📌 請加入要回報的班隊 (可多選)：", avail_units, key="dyn_units")
                 
             if st.button("🚀 生成借還動態報表", type="primary"):
-                unit_filter = ""
-                if dyn_mode == "只回報特定班隊":
-                    if not dyn_selected_units:
-                        st.warning("請至少選擇一個班隊！")
-                        st.stop()
-                    units_str = "'" + "','".join(dyn_selected_units) + "'"
-                    unit_filter = f" AND u.unit IN ({units_str})"
+                unit_filter = f" AND u.unit IN ('{chr(39).join(dyn_selected_units)}')" if dyn_mode == "只回報特定班隊" and dyn_selected_units else ""
                     
                 req_df = pd.read_sql_query(f"SELECT u.unit, br.book_name, SUM(br.quantity) as qty FROM borrow_requests br JOIN users u ON br.login_id = u.login_id WHERE u.squadron='{target_sq_dyn}' AND br.status='待審核'{unit_filter} GROUP BY u.unit, br.book_name", conn)
                 res_df = pd.read_sql_query(f"SELECT u.unit, b.book_name, COUNT(b.id) as qty FROM books b JOIN users u ON b.owner_id = u.login_id WHERE u.squadron='{target_sq_dyn}' AND b.status='保留待領取'{unit_filter} GROUP BY u.unit, b.book_name", conn)
-                ret_df = pd.read_sql_query(f"SELECT u.unit, b.book_name, COUNT(b.id) as qty FROM books b JOIN users u ON b.owner_id = u.login_id WHERE u.squadron='{target_sq_dyn}' AND b.status='歸還中'{unit_filter} GROUP BY u.unit, b.book_name", conn)
+                ret_df = pd.read_sql_query(f"SELECT u.unit, b.book_name, COUNT(b.id) as qty FROM books b JOIN users u ON b.owner_id = u.login_id WHERE u.squadron='{target_sq_dyn}' AND b.status='歸還中'{unit_filter} GROUP BY u.unit, b.book_name ORDER BY b.book_name", conn)
                 
                 now = datetime.now(timezone(timedelta(hours=8)))
                 tw_wd = ["一", "二", "三", "四", "五", "六", "日"][now.weekday()]
-                date_str = f"{now.month}/{now.day}（{tw_wd}）"
-                msg = f"報告，{target_sq_dyn}借還書清單\n時間：{date_str}\n\n"
+                msg = f"報告，{target_sq_dyn}借還書清單\n時間：{now.month}/{now.day}（{tw_wd}）\n\n"
                 
                 all_units = set()
                 if not req_df.empty: all_units.update(req_df['unit'].tolist())
@@ -885,34 +867,21 @@ try:
                 else:
                     for unit in sorted(list(all_units)):
                         msg += f"==== 【{unit}】 ====\n【申請借閱】：\n"
-                        
                         borrow_items = {}
-                        u_req = req_df[req_df['unit'] == unit] if not req_df.empty else pd.DataFrame()
-                        if not u_req.empty:
-                            for _, r in u_req.iterrows(): 
-                                borrow_items[r['book_name']] = borrow_items.get(r['book_name'], 0) + int(r['qty'])
-                                
-                        u_res = res_df[res_df['unit'] == unit] if not res_df.empty else pd.DataFrame()
-                        if not u_res.empty:
-                            for _, r in u_res.iterrows(): 
-                                borrow_items[r['book_name']] = borrow_items.get(r['book_name'], 0) + int(r['qty'])
+                        if not req_df.empty:
+                            for _, r in req_df[req_df['unit'] == unit].iterrows(): borrow_items[r['book_name']] = borrow_items.get(r['book_name'], 0) + int(r['qty'])
+                        if not res_df.empty:
+                            for _, r in res_df[res_df['unit'] == unit].iterrows(): borrow_items[r['book_name']] = borrow_items.get(r['book_name'], 0) + int(r['qty'])
                                 
                         if borrow_items:
-                            for b_name in sorted(borrow_items.keys()):
-                                msg += f"{b_name} * {borrow_items[b_name]}\n"
-                        else:
-                            msg += "無\n"
+                            for b_name in sorted(borrow_items.keys()): msg += f"{b_name} * {borrow_items[b_name]}\n"
+                        else: msg += "無\n"
                         
                         msg += "\n【申請歸還】：\n"
-                        u_ret = ret_df[ret_df['unit'] == unit] if not ret_df.empty else pd.DataFrame()
-                        if not u_ret.empty:
-                            # 歸還清單依字母排序
-                            u_ret.sort_values(by='book_name', inplace=True)
-                            for _, r in u_ret.iterrows(): 
-                                msg += f"{r['book_name']} * {int(r['qty'])}\n"
+                        if not ret_df.empty and not ret_df[ret_df['unit'] == unit].empty:
+                            for _, r in ret_df[ret_df['unit'] == unit].iterrows(): msg += f"{r['book_name']} * {int(r['qty'])}\n"
                         else: msg += "無\n"
                         msg += "\n"
-                
                 st.code(msg.strip(), language="text")
 
         with line_tabs[1]:
@@ -931,13 +900,7 @@ try:
                 inv_selected_units = st.multiselect("📌 請加入要回報的班隊 (可多選)：", avail_units, key="inv_units")
                 
             if st.button("🚀 生成準則總清點報表", type="primary"):
-                unit_filter = ""
-                if inv_mode == "只回報特定班隊":
-                    if not inv_selected_units:
-                        st.warning("請至少選擇一個班隊！")
-                        st.stop()
-                    units_str = "'" + "','".join(inv_selected_units) + "'"
-                    unit_filter = f" AND u.unit IN ({units_str})"
+                unit_filter = f" AND u.unit IN ('{chr(39).join(inv_selected_units)}')" if inv_mode == "只回報特定班隊" and inv_selected_units else ""
                     
                 inv_df = pd.read_sql_query(f"SELECT u.unit, b.book_name, b.status, COUNT(b.id) as qty FROM books b JOIN users u ON b.owner_id = u.login_id WHERE u.squadron='{target_sq_inv}' AND b.status IN ('借閱中', '歸還中', '遺失待賠', '少領異常') {unit_filter} GROUP BY u.unit, b.book_name, b.status", conn)
                 
@@ -947,21 +910,12 @@ try:
                 
                 if inv_df.empty: inv_msg += "目前無外散之準則。\n"
                 else:
-                    # 🎯 終極 Pandas 權重引擎
-                    # 1. 賦予各狀態絕對權重
-                    w_map = {'少領異常': 1, '申請中': 2, '已審核': 3, '借閱中': 4, '歸還中': 5, '遺失待賠': 6}
-                    inv_df['w'] = inv_df['status'].map(lambda x: w_map.get(x, 99))
-                    
-                    # 2. 核心魔法：算出每一本書在該班隊中的「最高優先級(數字最小)」，讓弱勢狀態跟著強勢狀態走！
-                    inv_df['min_w'] = inv_df.groupby(['unit', 'book_name'])['w'].transform('min')
-                    
-                    # 3. 完美排序：先看班隊 -> 再看該書最高權重 -> 書名 -> 該行狀態權重
-                    inv_df.sort_values(by=['unit', 'min_w', 'book_name', 'w'], inplace=True)
+                    # 🚀 呼叫全局排序引擎 (有班隊參數)
+                    inv_df = apply_shadow_sort(inv_df, has_unit=True)
                     
                     for unit in inv_df['unit'].unique():
                         inv_msg += f"==== 【{unit}】 ====\n"
-                        u_df = inv_df[inv_df['unit'] == unit]
-                        for _, r in u_df.iterrows():
+                        for _, r in inv_df[inv_df['unit'] == unit].iterrows():
                             inv_msg += f"📘 {r['book_name']} * {int(r['qty'])} ({r['status']})\n"
                         inv_msg += "\n"
                 
@@ -1622,31 +1576,39 @@ try:
         else:
             for unit_name in units_df['unit']:
                 with st.expander(f"🏢 班隊：【{unit_name}】"):
-                    books_df = pd.read_sql_query(f"SELECT b.book_name, COUNT(b.id) as qty FROM books b JOIN users u ON b.owner_id = u.login_id WHERE u.unit='{unit_name}' AND b.status IN ('借閱中', '保留待領取', '少領異常', '歸還中') GROUP BY b.book_name", conn)
+                    # 🚀 一次性撈取書名、狀態與序號
+                    books_df = pd.read_sql_query(f"SELECT b.book_name, b.status, b.serial_number FROM books b JOIN users u ON b.owner_id = u.login_id WHERE u.unit='{unit_name}' AND b.status IN ('借閱中', '保留待領取', '少領異常', '歸還中')", conn)
                     
-                    for _, book_row in books_df.iterrows():
-                        book_title = book_row['book_name']
-                        b_qty = book_row['qty']
-                        st.markdown(f"**📘 {book_title}** (共 **{b_qty}** 本)")
-                        serials_df = pd.read_sql_query(f"SELECT b.serial_number, b.status FROM books b JOIN users u ON b.owner_id = u.login_id WHERE u.unit='{unit_name}' AND b.book_name='{book_title}' AND b.status IN ('借閱中', '保留待領取', '少領異常', '歸還中')", conn)
+                    if not books_df.empty:
+                        # 🚀 呼叫全局排序引擎！
+                        books_df = apply_shadow_sort(books_df)
                         
-                        display_serials = []
-                        for _, s_row in serials_df.iterrows():
-                            sn = s_row['serial_number']
-                            st_val = s_row['status']
-                            if st_val == '借閱中': display_serials.append(f"{sn}")
-                            else: display_serials.append(f"{sn} ({st_val})")
-                                
-                        serials_text = ", ".join(display_serials)
-                        nested_html = f"""
-                        <details style="margin-left: 20px; margin-bottom: 15px;">
-                            <summary style="cursor: pointer; color: #A0A0A0; font-size: 0.9em; outline: none;">🔖 點擊展開詳細序號清單</summary>
-                            <div style="margin-top: 8px; padding: 10px; border-left: 3px solid #4CAF50; background-color: rgba(255,255,255,0.05); color: #E0E0E0; font-family: monospace; word-wrap: break-word; border-radius: 0 5px 5px 0;">
-                                {serials_text}
-                            </div>
-                        </details>
-                        """
-                        st.markdown(nested_html, unsafe_allow_html=True)
+                        grouped = books_df.groupby(['book_name', 'status'], sort=False)
+                        for (b_name, st_val), b_rows in grouped:
+                            qty = len(b_rows)
+                            st_display = "已審核" if st_val == '保留待領取' else st_val
+                            icon = '🔴' if st_val in ['少領異常', '歸還中'] else '🟡' if st_val == '保留待領取' else '🟢'
+                            
+                            st.markdown(f"**{icon} {b_name}** * {qty} ({st_display})")
+                            
+                            display_serials = []
+                            for _, s_row in b_rows.iterrows():
+                                if pd.notna(s_row['serial_number']):
+                                    display_serials.append(str(s_row['serial_number']).strip())
+                                    
+                            if display_serials:
+                                serials_text = ", ".join(display_serials)
+                                nested_html = f"""
+                                <details style="margin-left: 20px; margin-bottom: 15px;">
+                                    <summary style="cursor: pointer; color: #A0A0A0; font-size: 0.9em; outline: none;">🔖 點擊展開詳細序號清單</summary>
+                                    <div style="margin-top: 8px; padding: 10px; border-left: 3px solid #4CAF50; background-color: rgba(255,255,255,0.05); color: #E0E0E0; font-family: monospace; word-wrap: break-word; border-radius: 0 5px 5px 0;">
+                                        {serials_text}
+                                    </div>
+                                </details>
+                                """
+                                st.markdown(nested_html, unsafe_allow_html=True)
+                            else:
+                                st.markdown("<div style='margin-bottom: 15px;'></div>", unsafe_allow_html=True)
 
     elif menu in ["操作紀錄", "🗂️ 操作紀錄"] and st.session_state.role in ['L1', 'L2', 'L3', 'L4']:
         st.header("🗂️ 系統操作紀錄")
