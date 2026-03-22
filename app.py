@@ -1423,7 +1423,7 @@ try:
                         inv_df = pd.read_sql_query(f"SELECT u.unit, b.book_name, b.serial_number, b.status FROM books b JOIN users u ON b.owner_id = u.login_id WHERE u.squadron='{target_squadron_inv}' AND b.status IN ('借閱中', '歸還中', '遺失待賠') ORDER BY u.unit, b.book_name", conn)
                         now = datetime.now(timezone(timedelta(hours=8)))
                         tw_wd = ["一", "二", "三", "四", "五", "六", "日"][now.weekday()]
-                        inv_msg = f"劉姐好，{target_squadron_inv}準則清點總表\n時間：{now.month}/{now.day}（{tw_wd}）\n\n"
+                        inv_msg = f"{target_squadron_inv}準則清點總表\n時間：{now.month}/{now.day}（{tw_wd}）\n\n"
                         
                         if inv_df.empty: inv_msg += "目前無外散之準則。\n"
                         else:
