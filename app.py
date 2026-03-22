@@ -1083,17 +1083,29 @@ try:
                                             new_st = st.selectbox("狀態", status_opts, index=idx, key=f"l1_st_{uid}")
                                             new_sc = st.number_input("修改權限次數", value=int(row['setup_count']), min_value=0, key=f"l1_sc_{uid}")
                                             
-                                            if st.button("💾 強制儲存", key=f"l1_s_{uid}", type="primary", use_container_width=True):
-                                                try:
-                                                    c = conn.cursor()
-                                                    c.execute("""UPDATE users SET login_id=%s, password=%s, squadron=%s, unit=%s, title=%s, name=%s, status=%s, setup_count=%s WHERE id=%s""", 
-                                                              (new_login, new_pwd, new_sq, new_unit, new_ti, new_na, new_st, new_sc, uid))
-                                                    conn.commit()
-                                                    st.session_state['sys_toast'] = "✅ 更新成功！"
-                                                    st.rerun()
-                                                except Exception as e:
-                                                    st.error(f"❌ 儲存失敗：{e}")
-
+                                            col_save, col_del = st.columns(2)
+                                            with col_save:
+                                                if st.button("💾 強制儲存", key=f"l1_s_{uid}", type="primary", use_container_width=True):
+                                                    try:
+                                                        c = conn.cursor()
+                                                        c.execute("""UPDATE users SET login_id=%s, password=%s, squadron=%s, unit=%s, title=%s, name=%s, status=%s, setup_count=%s WHERE id=%s""", 
+                                                                  (new_login, new_pwd, new_sq, new_unit, new_ti, new_na, new_st, new_sc, uid))
+                                                        conn.commit()
+                                                        st.session_state['sys_toast'] = "✅ 更新成功！"
+                                                        st.rerun()
+                                                    except Exception as e:
+                                                        st.error(f"❌ 儲存失敗：{e}")
+                                            
+                                            with col_del:
+                                                if st.button("🗑️ 刪除帳號", key=f"l1_d_{uid}", use_container_width=True):
+                                                    try:
+                                                        c = conn.cursor()
+                                                        c.execute("DELETE FROM users WHERE id=%s", (uid,))
+                                                        conn.commit()
+                                                        st.session_state['sys_toast'] = "🗑️ 帳號已徹底刪除！"
+                                                        st.rerun()
+                                                    except Exception as e:
+                                                        st.error(f"❌ 刪除失敗：{e}")
             st.markdown("---")
             st.subheader("📥 準則資料庫擴充與同步")
             st.info("💡 當您更新了 GitHub 上的 `準則資料庫.csv` 後，點擊此按鈕即可將【新增加的書目或數量】匯入系統，不會影響現有的借閱紀錄。")
