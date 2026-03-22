@@ -228,7 +228,10 @@ if 'logged_in' not in st.session_state:
     if stored_user:
         conn = get_db_connection()
         try:
-            user = pd.read_sql_query("SELECT * FROM users WHERE login_id=%s", conn, params=(stored_user,))
+            # 🛡️ 防呆升級：強制將 Cookie 讀取到的內容轉為「字串」，防止純數字帳號引發資料庫型態衝突！
+            safe_user_id = str(stored_user)
+            user = pd.read_sql_query("SELECT * FROM users WHERE login_id=%s", conn, params=(safe_user_id,))
+            
             if not user.empty and user.iloc[0]['status'] not in ['待審核', '停權', '結訓凍結']:
                 for col in user.columns:
                     st.session_state[col] = user.iloc[0][col]
@@ -372,10 +375,17 @@ with st.sidebar:
     
     st.markdown("---")
     if st.button("登出"):
-        log_action(st.session_state.login_id, "登出", "使用者登出系統")
-        cookie_manager.delete('sys_user_token') # 🍪 徹底銷毀通行證
+        # 1. 徹底銷毀通行證 (發送指令給瀏覽器)
+        cookie_manager.delete('sys_user_token') 
+        
+        # 2. 清空大腦暫存記憶
         st.session_state.clear()
-        import time; time.sleep(0.5)
+        
+        # 3. 縮短強制等待時間 (只需 0.2 秒讓瀏覽器反應即可)
+        import time; time.sleep(0.2)
+        
+        # 4. 塞入快閃通知，讓使用者回到登入頁時有安心感
+        st.session_state['sys_toast'] = "👋 登出成功！安全連線已銷毀。"
         st.rerun()
 
 # ==========================================
