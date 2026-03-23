@@ -31,6 +31,36 @@ if st.session_state.get('logout_triggered'):
     st.session_state.clear()
     st.session_state['force_logout'] = True
     st.session_state['sys_toast'] = "👋 登出成功！安全連線已銷毀。"
+    
+# ==========================================
+# 🎨 系統全域 UI 鋼鐵防線 (底層 CSS 注入)
+# ==========================================
+st.markdown("""
+    <style>
+    /* 1. 強制讓所有卡片標題與單位名稱不換行 */
+    .single-line-text {
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+        display: block !important;
+        width: 100% !important;
+    }
+
+    /* 2. 針對手機端優化：讓摺疊面板 (Expander) 的標題文字也能盡量單行 */
+    .st-emotion-cache-p5m61y p {
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+    }
+
+    /* 3. 針對側邊欄 L2 班隊名稱進行鎖定 */
+    section[data-testid="stSidebar"] .stMarkdown p {
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
 # === 🚀 全域快閃通知 (Toast) 接收器 ===
 if 'sys_toast' in st.session_state:
