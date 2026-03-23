@@ -974,7 +974,7 @@ try:
                 else:
                     st.success("✨ 目前無可管理的訓員資料。")
 
-       elif menu == "📤 準則借閱審核":
+        elif menu == "📤 準則借閱審核":
             # 🚀 升級 Tooltip
             st.subheader("📚 借閱準則審核", help="可批次或單獨審核各班隊的借閱申請。審核通過後，庫房準則將鎖定並轉為「保留待領取」狀態。")
             req_df = pd.read_sql_query(f"SELECT br.id as 單號, br.login_id as 帳號, u.title as 班隊, br.book_name as 書名, br.quantity as 申請數量 FROM borrow_requests br JOIN users u ON br.login_id = u.login_id WHERE br.status='待審核' AND u.squadron IN ({sq_in_clause}) ORDER BY u.title, br.book_name, br.id", conn)
