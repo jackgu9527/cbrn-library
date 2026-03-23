@@ -405,34 +405,6 @@ with st.sidebar:
 # ==========================================
 conn = get_db_connection()
 try:
-    # 🚨 全局強制防線：沒改密碼前，鎖死整個主畫面！
-    if st.session_state.setup_count > 0:
-        st.error("🆕 **歡迎使用此系統：請先設定您的帳號與密碼**")
-        st.info("💡 修改完成後此視窗將關閉，忘記帳密請聯絡幹部。")
-        with st.container(border=True):
-            col_id, col_pw = st.columns(2)
-            with col_id: new_id = st.text_input("設定新帳號", value=st.session_state.login_id, key="force_setup_id")
-            with col_pw: new_pwd = st.text_input("設定新密碼", type="password", placeholder="建議至少8碼", key="force_setup_pw")
-            
-            if st.button("🚀 確認修改並解鎖", type="primary"):
-                if not new_pwd: st.warning("請輸入密碼！")
-                else:
-                    c = conn.cursor()
-                    c.execute("SELECT COUNT(*) FROM users WHERE login_id=%s AND id!=%s", (new_id, int(st.session_state.id)))
-                    if c.fetchone()[0] > 0: st.error("❌ 此帳號已被使用！")
-                    else:
-                        old_id = st.session_state.login_id
-                        c.execute("UPDATE users SET login_id=%s, password=%s, setup_count=0 WHERE id=%s", (new_id, new_pwd, int(st.session_state.id)))
-                        # 同步連動其他資料表，確保資料不遺失
-                        c.execute("UPDATE books SET owner_id=%s WHERE owner_id=%s", (new_id, old_id))
-                        c.execute("UPDATE borrow_requests SET login_id=%s WHERE login_id=%s", (new_id, old_id))
-                        c.execute("UPDATE action_logs SET user_id=%s WHERE user_id=%s", (new_id, old_id))
-                        conn.commit()
-                        log_action(new_id, "新進設定", "完成強制首次登入帳密修改")
-                        st.success("✅ 設定成功！請重新登入以載入權限。")
-                        import time; time.sleep(1.5); st.session_state.clear(); st.rerun()
-        st.stop() # 🛑 終止往下執行任何畫面 (防線核心)
-
     if menu in ["首頁", "🏠 首頁"]:
         st.header("📊 首頁")
         
@@ -503,43 +475,49 @@ try:
                         </div>
                         """, unsafe_allow_html=True)
                         
-        # ======== 🟢 全局共用：無限次更改姓名/帳密面板 ========
+        # ======== 🟢 全局共用：個人帳密與資料設置 (無限次修改) ========
         st.markdown("---")
-        with st.expander("⚙️ 個人帳號與姓名設置 (無限次更改)", expanded=False):
-            st.info("💡 此處可隨時修改您的顯示姓名、登入帳號與密碼。")
+        with st.expander("⚙️ 個人帳號與資料設置", expanded=False):
+            if st.session_state.role == 'L1':
+                st.info("💡 幹部可隨時修改您的顯示姓名、登入帳號與密碼。")
+                current_name = st.session_state.name if pd.notna(st.session_state.name) and st.session_state.name != '代表' else ""
+                col_n, col_i, col_p = st.columns(3)
+                with col_n: new_name = st.text_input("顯示姓名", value=current_name, placeholder="例如：王大明", key="daily_name")
+                with col_i: new_id = st.text_input("登入帳號", value=st.session_state.login_id, key="daily_id")
+                with col_p: new_pwd = st.text_input("登入密碼", type="password", placeholder="若不修改請留空", key="daily_pw")
+            else:
+                st.info("💡 訓員可隨時修改您的專屬登入帳號與密碼。")
+                new_name = st.session_state.name # L2 不可改名，維持原值
+                col_i, col_p = st.columns(2)
+                with col_i: new_id = st.text_input("登入帳號", value=st.session_state.login_id, key="daily_id")
+                with col_p: new_pwd = st.text_input("登入密碼", type="password", placeholder="若不修改請留空", key="daily_pw")
             
-            # 讀取現有姓名 (若無則顯示空白)
-            current_name = st.session_state.name if pd.notna(st.session_state.name) and st.session_state.name != '代表' else ""
-            
-            col_n, col_i, col_p = st.columns(3)
-            with col_n: new_name = st.text_input("顯示姓名", value=current_name, placeholder="例如：王大明", key="daily_name")
-            with col_i: new_id = st.text_input("登入帳號", value=st.session_state.login_id, key="daily_id")
-            with col_p: new_pwd = st.text_input("登入密碼", type="password", key="daily_pw")
-            
-            if st.button("💾 儲存設定", key="save_daily_pwd", type="primary"):
-                if not new_pwd: st.warning("⚠️ 為了安全起見，儲存變更請務必輸入密碼！")
+            if st.button("💾 儲存設定", key="save_daily_settings", type="primary"):
+                c = conn.cursor()
+                uid = int(st.session_state.id)
+                final_id = new_id.strip() if new_id.strip() else st.session_state.login_id
+                final_name = new_name.strip() if st.session_state.role == 'L1' else new_name
+                
+                # 判斷密碼是否修改
+                pw_update_sql = ", password=%s" if new_pwd else ""
+                sql_params = [final_id, new_pwd, final_name, uid] if new_pwd else [final_id, final_name, uid]
+                
+                c.execute("SELECT COUNT(*) FROM users WHERE login_id=%s AND id!=%s", (final_id, uid))
+                if c.fetchone()[0] > 0: 
+                    st.error("❌ 此帳號已被他人使用！請更換其他帳號。")
                 else:
-                    c = conn.cursor()
-                    uid = int(st.session_state.id)
-                    final_id = new_id.strip() if new_id.strip() else st.session_state.login_id
-                    final_name = new_name.strip()
+                    old_id = st.session_state.login_id
+                    c.execute(f"UPDATE users SET login_id=%s{pw_update_sql}, name=%s WHERE id=%s", tuple(sql_params))
                     
-                    c.execute("SELECT COUNT(*) FROM users WHERE login_id=%s AND id!=%s", (final_id, uid))
-                    if c.fetchone()[0] > 0: st.error("❌ 此帳號已被他人使用！")
-                    else:
-                        old_id = st.session_state.login_id
-                        c.execute("UPDATE users SET login_id=%s, password=%s, name=%s WHERE id=%s", (final_id, new_pwd, final_name, uid))
+                    # 帳號連動更新防護
+                    if old_id != final_id:
+                        c.execute("UPDATE books SET owner_id=%s WHERE owner_id=%s", (final_id, old_id))
+                        c.execute("UPDATE borrow_requests SET login_id=%s WHERE login_id=%s", (final_id, old_id))
+                        c.execute("UPDATE action_logs SET user_id=%s WHERE user_id=%s", (final_id, old_id))
                         
-                        # 如果帳號有更改，連動更新其他資料表
-                        if old_id != final_id:
-                            c.execute("UPDATE books SET owner_id=%s WHERE owner_id=%s", (final_id, old_id))
-                            c.execute("UPDATE borrow_requests SET login_id=%s WHERE login_id=%s", (final_id, old_id))
-                            c.execute("UPDATE action_logs SET user_id=%s WHERE user_id=%s", (final_id, old_id))
-                            
-                        conn.commit()
-                        st.session_state['sys_toast'] = "✅ 資料修改成功！即將重新載入..."
-                        st.success("✅ 資料修改成功！系統將自動登出以套用新設定...")
-                        import time; time.sleep(1.5); st.session_state.clear(); st.rerun()
+                    conn.commit()
+                    st.success("✅ 設定已儲存！系統將重新載入...")
+                    import time; time.sleep(1); st.session_state.clear(); st.rerun()
 
     elif menu in ["序號登載", "🏷️ 序號登載"] and st.session_state.role == 'L5':
         st.header("🏷️ 序號登載")
