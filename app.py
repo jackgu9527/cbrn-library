@@ -836,7 +836,7 @@ try:
                 st.error("❌ 系統找不到 CSV 檔案！請確認 GitHub 上的檔案名稱。")
 
     # ======== 🟢 幹部 (L1) 共用業務與審核區 ========
-    elif st.session_state.role == 'L1':
+    elif st.session_state.role == 'L1' and menu in ["👥 帳號管理", "📤 準則借閱審核", "📥 準則歸還審核", "💬 回報專區"]:
         sq_in_clause = st.session_state.sq_in_clause
         
         if menu == "👥 帳號管理":
@@ -1225,7 +1225,7 @@ try:
                 st.dataframe(res, use_container_width=True)
 
     elif menu == "📊 準則現況":
-        st.header("📊 所屬班隊準則持有現況")
+        st.header(f"📊 【{st.session_state.squadron}】所屬班隊準則持有現況")
         st.info("💡 點擊下方各班隊名稱，即可展開查看該班隊目前持有的所有準則與詳細序號。")
         
         # 🚀 權限精準隔離：L1 套用全域中隊映射矩陣，L2 只能看自己！
@@ -1237,7 +1237,7 @@ try:
             
         units_df = pd.read_sql_query(unit_query, conn)
         if units_df.empty:
-            st.success("✨ 目前所屬中隊無任何班隊持有準則 (皆已歸還或無借閱)。")
+            st.success("✨ 目前無任何班隊持有準則 (皆已歸還或無借閱)。")
         else:
             for unit_name in units_df['unit']:
                 with st.expander(f"🏢 班隊：【{unit_name}】"):
