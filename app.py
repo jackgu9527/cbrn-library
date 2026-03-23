@@ -449,8 +449,8 @@ try:
 
     # ======== 🟢 L2 專屬業務區 ========
     elif menu in ["序號登載", "🏷️ 序號登載"] and st.session_state.role == 'L2':
-        st.header("🏷️ 序號登載")
-        bk_df = pd.read_sql_query(f"SELECT id, book_name, serial_number, status FROM books WHERE owner_id='{st.session_state.login_id}' AND status IN ('保留待領取', '借閱中')", conn)
+        # 🚀 升級 Tooltip
+        st.header("🏷️ 序號登載", help="請將領取到的實體準則序號登載入系統。若有多本請用「半形逗號 ( , )」隔開；若發生實體數量短少，可勾選『借閱異常』進行通報。")
 
         if bk_df.empty:
             st.success("✨ 您目前沒有需要登載或校正的準則！")
@@ -560,10 +560,11 @@ try:
             st.markdown("---")
             
             st.markdown("---")
-            # 🚀 升級 Tooltip (將 markdown 改為 subheader 以支援 help 參數)
+            # 🚀 升級 Tooltip
             st.subheader("📚 第二步：選擇準則", help="請從下拉選單中挑選您需要的準則。選取後，下方會自動展開該準則的數量設定卡片。")
             book_options = [f"{b[0]} (庫存: {b[1]}本)" for b in available_books]
-            
+            selected_books = st.multiselect("選擇要借閱的準則", book_options)  # 👈 就是這行剛才被吃掉了！
+              
             if selected_books:
                 borrow_requests = {}
                 can_submit = True 
