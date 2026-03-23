@@ -775,17 +775,25 @@ try:
         squadrons = [s for s in all_users['squadron'].unique() if pd.notna(s) and str(s).strip() != ""]
         
         for sq in squadrons:
-            sq_df = all_users[all_users['squadron'] == sq]
-            with st.expander(f"🔽 {sq} (共 {len(sq_df)} 人)"):
-                titles = sq_df['title'].unique()
-                if len(titles) > 0:
-                    tabs = st.tabs([f"🎖️ {t} ({len(sq_df[sq_df['title']==t])}人)" for t in titles])
-                    for i, t in enumerate(titles):
+            # 複製一份 DataFrame 以免報錯
+            sq_df = all_users[all_users['squadron'] == sq].copy()
+            with st.expander(f"🔽 {sq} (共 {len(sq_df)} 個帳號)"):
+                
+                # ✨ 智慧分組引擎：如果是 L2 強制歸類到「訓員」標籤，L1 則依照「職務」分類
+                sq_df['display_group'] = sq_df.apply(lambda x: "訓員" if x['role'] == 'L2' else str(x['title']), axis=1)
+                
+                groups = sq_df['display_group'].unique()
+                if len(groups) > 0:
+                    # 依據智慧分組生成 Tabs
+                    tabs = st.tabs([f"🎖️ {g} ({len(sq_df[sq_df['display_group']==g])}個)" for g in groups])
+                    for i, g in enumerate(groups):
                         with tabs[i]:
-                            t_df = sq_df[sq_df['title'] == t]
-                            for _, row in t_df.iterrows():
+                            # 篩選出該標籤下的所有人
+                            g_df = sq_df[sq_df['display_group'] == g]
+                            for _, row in g_df.iterrows():
                                 uid = row['id']
                                 with st.container(border=True):
+                                    # 👤 這裡依然會精準顯示他的「職務」或「班隊全銜」(row['title'])
                                     st.markdown(f"**👤 {row['title']}** ({row['role']})  \n🆔 帳號: `{row['login_id']}`  \n🔑 密碼: `{row['password']}`  \n{'🟢' if row['status']=='啟用' else '🔴'} 狀態: `{row['status']}`")
                                     
                                     with st.expander("✏️ 編輯詳細資料與權限"):
@@ -794,7 +802,7 @@ try:
                                             new_login = st.text_input("帳號", value=row['login_id'], key=f"l1_id_{uid}")
                                             new_pwd = st.text_input("密碼", value=row['password'], key=f"l1_pw_{uid}")
                                             
-                                            # ✨ 新增：L1/L2 身分切換器
+                                            # ✨ L1/L2 身分切換器
                                             role_opts = ["L1", "L2"]
                                             r_idx = role_opts.index(row['role']) if row['role'] in role_opts else 0
                                             new_role = st.selectbox("身分權限", role_opts, index=r_idx, key=f"l1_ro_{uid}")
@@ -812,7 +820,6 @@ try:
                                             if st.button("💾 強制儲存", key=f"l1_s_{uid}", type="primary", use_container_width=True):
                                                 try:
                                                     c = conn.cursor()
-                                                    # ✨ UPDATE 語法正式將 role 加入修改範圍
                                                     c.execute("""UPDATE users SET login_id=%s, password=%s, role=%s, squadron=%s, title=%s, status=%s WHERE id=%s""", 
                                                                 (new_login, new_pwd, new_role, new_sq, new_ti, new_st, uid))
                                                     conn.commit()
