@@ -738,6 +738,39 @@ try:
         st.error("👑 系統管理員模式：全域人事卡片化管理")
         st.info("💡 點開【中隊】，再點擊【職務/班隊標籤】，即可查看與修改所有人員的專屬卡片。")
         
+        # ======== 🚀 新增：全域手動配發帳號中心 ========
+        with st.expander("➕ 新增人員 / 班隊帳號 (管理員直配)", expanded=False):
+            st.markdown("#### 📝 直接配發新帳號")
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                add_role = st.selectbox("身分", ["L1 (幹部)", "L2 (訓員)"], key="add_role")
+                add_sq = st.selectbox("所屬中隊", ["大隊部", "學員一中隊", "學員二中隊", "學生一中隊", "學生二中隊", "聯合中隊①", "聯合中隊②"], key="add_sq")
+            with col2:
+                add_title = st.text_input("職務 / 班隊全銜", placeholder="例如：中隊長 或 煙幕班115-1期", key="add_title")
+                add_id = st.text_input("登入帳號", key="add_id")
+            with col3:
+                add_pw = st.text_input("登入密碼", key="add_pw")
+                add_status = st.selectbox("初始狀態", ["啟用", "待審核", "結訓凍結"], key="add_status")
+                
+            if st.button("🚀 立即建立帳號", type="primary"):
+                if add_title and add_id and add_pw:
+                    c = conn.cursor()
+                    c.execute("SELECT COUNT(*) FROM users WHERE login_id=%s", (add_id,))
+                    if c.fetchone()[0] > 0:
+                        st.error("❌ 此帳號已被使用！請更換帳號名稱。")
+                    else:
+                        r_val = "L1" if "L1" in add_role else "L2"
+                        c.execute("INSERT INTO users (login_id, password, role, squadron, title, status) VALUES (%s,%s,%s,%s,%s,%s)",
+                                  (add_id, add_pw, r_val, add_sq, add_title, add_status))
+                        conn.commit()
+                        st.session_state['sys_toast'] = f"✅ 成功建立 {r_val} 帳號：{add_title}！"
+                        st.rerun()
+                else:
+                    st.warning("⚠️ 請填寫完整資料 (職務/帳號/密碼不可為空)！")
+        
+        st.markdown("---")
+        
+        # ======== 🚀 現有帳號管理 (加入 L1/L2 調整功能) ========
         all_users = pd.read_sql_query("SELECT id, login_id, password, role, squadron, title, status FROM users ORDER BY id", conn)
         squadrons = [s for s in all_users['squadron'].unique() if pd.notna(s) and str(s).strip() != ""]
         
@@ -755,23 +788,33 @@ try:
                                 with st.container(border=True):
                                     st.markdown(f"**👤 {row['title']}** ({row['role']})  \n🆔 帳號: `{row['login_id']}`  \n🔑 密碼: `{row['password']}`  \n{'🟢' if row['status']=='啟用' else '🔴'} 狀態: `{row['status']}`")
                                     
-                                    with st.expander("✏️ 編輯詳細資料"):
-                                        new_login = st.text_input("帳號", value=row['login_id'], key=f"l1_id_{uid}")
-                                        new_pwd = st.text_input("密碼", value=row['password'], key=f"l1_pw_{uid}")
-                                        new_sq = st.text_input("中隊", value=row['squadron'], key=f"l1_sq_{uid}")
-                                        new_ti = st.text_input("職務/班隊", value=row['title'], key=f"l1_ti_{uid}")
-                                        
-                                        status_opts = ["啟用", "待審核", "結訓凍結", "停權"]
-                                        idx = status_opts.index(row['status']) if row['status'] in status_opts else 0
-                                        new_st = st.selectbox("狀態", status_opts, index=idx, key=f"l1_st_{uid}")
+                                    with st.expander("✏️ 編輯詳細資料與權限"):
+                                        col_edit1, col_edit2 = st.columns(2)
+                                        with col_edit1:
+                                            new_login = st.text_input("帳號", value=row['login_id'], key=f"l1_id_{uid}")
+                                            new_pwd = st.text_input("密碼", value=row['password'], key=f"l1_pw_{uid}")
+                                            
+                                            # ✨ 新增：L1/L2 身分切換器
+                                            role_opts = ["L1", "L2"]
+                                            r_idx = role_opts.index(row['role']) if row['role'] in role_opts else 0
+                                            new_role = st.selectbox("身分權限", role_opts, index=r_idx, key=f"l1_ro_{uid}")
+                                            
+                                        with col_edit2:
+                                            new_sq = st.text_input("中隊", value=row['squadron'], key=f"l1_sq_{uid}")
+                                            new_ti = st.text_input("職務/班隊", value=row['title'], key=f"l1_ti_{uid}")
+                                            
+                                            status_opts = ["啟用", "待審核", "結訓凍結", "停權"]
+                                            idx = status_opts.index(row['status']) if row['status'] in status_opts else 0
+                                            new_st = st.selectbox("狀態", status_opts, index=idx, key=f"l1_st_{uid}")
                                         
                                         col_save, col_del = st.columns(2)
                                         with col_save:
                                             if st.button("💾 強制儲存", key=f"l1_s_{uid}", type="primary", use_container_width=True):
                                                 try:
                                                     c = conn.cursor()
-                                                    c.execute("""UPDATE users SET login_id=%s, password=%s, squadron=%s, title=%s, status=%s WHERE id=%s""", 
-                                                                (new_login, new_pwd, new_sq, new_ti, new_st, uid))
+                                                    # ✨ UPDATE 語法正式將 role 加入修改範圍
+                                                    c.execute("""UPDATE users SET login_id=%s, password=%s, role=%s, squadron=%s, title=%s, status=%s WHERE id=%s""", 
+                                                                (new_login, new_pwd, new_role, new_sq, new_ti, new_st, uid))
                                                     conn.commit()
                                                     st.session_state['sys_toast'] = "✅ 更新成功！"
                                                     st.rerun()
@@ -788,7 +831,6 @@ try:
                                                     st.rerun()
                                                 except Exception as e:
                                                     st.error(f"❌ 刪除失敗：{e}")
-        st.markdown("---")
         st.subheader("📥 準則資料庫擴充與同步")
         st.info("💡 當您更新了 GitHub 上的 `準則資料庫.csv` 後，點擊此按鈕即可將【新增加的書目或數量】匯入系統，不會影響現有的借閱紀錄。")
         if st.button("🔄 從最新 CSV 同步新增準則", type="primary", use_container_width=True):
