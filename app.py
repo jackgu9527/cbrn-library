@@ -152,12 +152,23 @@ def init_db():
         if c.fetchone()[0] == 0:
             default_users = [
                 # 👑 系統管理員 (擁有全中隊視野 + 管理員標籤)
-                ('admin', 'admin123', 'L1', '大隊部', '管理員,學生一中隊,學生二中隊,學員一中隊,學員二中隊', '系統管理員', '大隊長', None, 0, '啟用'),
-                # 👮 各中隊預設 1 名值星官
-                ('stu1', '1234', 'L1', '學生一中隊', '學生一中隊', '值星官', '幹部', None, 0, '啟用'),
-                ('stu2', '1234', 'L1', '學生二中隊', '學生二中隊', '值星官', '幹部', None, 0, '啟用'),
-                ('aca1', '1234', 'L1', '學員一中隊', '學員一中隊', '值星官', '幹部', None, 0, '啟用'),
-                ('aca2', '1234', 'L1', '學員二中隊', '學員二中隊', '值星官', '幹部', None, 0, '啟用')
+                ('cbrn1', 'cbrn123', 'L1', '大隊部', '管理員,學生一中隊,學生二中隊,學員一中隊,學員二中隊', '系統管理員', '', None, 0, '啟用'),
+                ('cbrn2', 'cbrn123', 'L1', '大隊部', '管理員,學生一中隊,學生二中隊,學員一中隊,學員二中隊', '大隊長', '', None, 0, '啟用'),
+                ('cbrn3', 'cbrn123', 'L1', '大隊部', '管理員,學生一中隊,學生二中隊,學員一中隊,學員二中隊', '大隊輔導長', '', None, 0, '啟用'),
+                ('cbrn4', 'cbrn123', 'L1', '學員一中隊', '學員一中隊', '隊長', '', None, 0, '啟用'),
+                ('cbrn5', 'cbrn123', 'L1', '學員一中隊', '學員一中隊', '輔導長', '', None, 0, '啟用'),
+                ('cbrn6', 'cbrn123', 'L1', '學員一中隊', '學員一中隊', '值星官', '', None, 0, '啟用'),
+                ('cbrn7', 'cbrn123', 'L1', '學員二中隊', '學員二中隊', '隊長', '', None, 0, '啟用'),
+                ('cbrn8', 'cbrn123', 'L1', '學員二中隊', '學員二中隊', '輔導長', '', None, 0, '啟用'),
+                ('cbrn9', 'cbrn123', 'L1', '學員二中隊', '學員二中隊', '值星官', '', None, 0, '啟用'),
+                ('cbrn10', 'cbrn123', 'L1', '學生一中隊', '學生一中隊', '隊長', '', None, 0, '啟用'),
+                ('cbrn11', 'cbrn123', 'L1', '學生一中隊', '學生一中隊', '輔導長', '', None, 0, '啟用'),
+                ('cbrn12', 'cbrn123', 'L1', '學生一中隊', '學生一中隊', '值星官', '', None, 0, '啟用'),
+                ('cbrn13', 'cbrn123', 'L1', '學生二中隊', '學生二中隊', '隊長', '', None, 0, '啟用'),
+                ('cbrn14', 'cbrn123', 'L1', '學生二中隊', '學生二中隊', '輔導長', '', None, 0, '啟用'),
+                ('cbrn15', 'cbrn123', 'L1', '學生二中隊', '學生二中隊', '值星官', '', None, 0, '啟用'),
+                ('cbrn16', 'cbrn123', 'L1', '聯合中隊', '學員一中隊,學生一中隊', '文書兵', '', None, 0, '啟用'),
+                ('cbrn17', 'cbrn123', 'L1', '聯合中隊', '學員二中隊,學生二中隊', '文書兵', '', None, 0, '啟用')
             ]
             c.executemany("INSERT INTO users (login_id, password, role, unit, squadron, title, name, discharge_date, setup_count, status) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)", default_users)
         
@@ -343,74 +354,49 @@ if 'logged_in' not in st.session_state:
 run_ghost_cleanup()
 
 # ==========================================
-# 3. 介面顯示邏輯與左側選單
+# 3. 介面顯示邏輯與左側指揮樞紐
 # ==========================================
-if st.session_state.role in ['L1', 'L2', 'L3']:
-    display_name = f"{st.session_state.squadron}{st.session_state.title} {st.session_state.name}"
-elif st.session_state.role == 'L4':
-    display_name = f"{st.session_state.squadron}{st.session_state.title} {st.session_state.name}"
-else:
-    display_name = f"{st.session_state.unit}"
+# 🎯 解析使用者的所有管轄中隊
+sq_list = [s.strip() for s in str(st.session_state.squadron).split(',') if s.strip()]
+is_admin = '管理員' in sq_list
 
+# 將 '管理員' 標籤從顯示名單中剔除，確保下拉選單只有實際中隊
+display_sq_list = [s for s in sq_list if s != '管理員']
+
+# 🎯 側邊欄全局指揮樞紐 (Global Context Selector)
 with st.sidebar:
-    st.markdown(f"### {display_name}")
-    st.markdown(f"ID: {st.session_state.login_id}")
+    st.markdown(f"### 🧑‍✈️ {st.session_state.title} {st.session_state.name}")
+    st.markdown(f"🆔 {st.session_state.login_id}")
     st.markdown("---")
     
-    # 根據不同階級與職務，給予專屬的左側導覽列
-    if st.session_state.role == 'L5':
-        menu = st.radio("功能導覽", [
-            "🏠 首頁", 
-            "📤 準則借閱", 
-            "🏷️ 序號登載", 
-            "📥 準則歸還", 
-            "💬 回報專區", 
-            "🔍 綜合查詢"
-        ])
-    elif st.session_state.role == 'L4':
-        # 判斷是否為文書兵
-        is_doc = "人事" in st.session_state.title or "文書" in st.session_state.title
-        if is_doc:
-            menu = st.radio("文書作業", [
-                "🏠 首頁", 
-                "👥 帳號管理", 
-                "📤 準則借閱審核", 
-                "📥 準則歸還審核", 
-                "💬 回報專區", 
-                "📊 準則現況", 
-                "🔍 綜合查詢", 
-                "🗂️ 操作紀錄"
-            ])
+    # 🟢 L1 幹部的專屬中隊切換器
+    if st.session_state.role == 'L1':
+        if len(display_sq_list) > 1:
+            st.session_state['current_sq'] = st.selectbox("🏢 當前指揮視角", display_sq_list, key="global_sq_selector")
+        elif len(display_sq_list) == 1:
+            st.session_state['current_sq'] = display_sq_list[0]
+            st.markdown(f"📍 **管轄中隊：** `{st.session_state['current_sq']}`")
         else:
-            menu = st.radio("幹部管理", [
-                "🏠 首頁", 
-                "👥 帳號管理", 
-                "📥 準則歸還審核", 
-                "💬 回報專區", 
-                "📊 準則現況", 
-                "🔍 綜合查詢", 
-                "🗂️ 操作紀錄"
-            ])
-    elif st.session_state.role == 'L3':
-        menu = st.radio("高階督導", [
-            "🏠 首頁", 
-            "👥 人事管理", 
-            "📊 準則現況", 
-            "🔍 綜合查詢", 
-            "🗂️ 操作紀錄"
-        ])
-    elif st.session_state.role in ['L1', 'L2']:
-        menu = st.radio("系統管理", [
-            "🏠 首頁", 
-            "⚙️ 系統管理", 
-            "📊 準則現況", 
-            "🔍 綜合查詢", 
-            "🗂️ 操作紀錄"
-        ])
+            st.session_state['current_sq'] = "未知中隊"
+    else:
+        # 🟢 L2 訓員視角
+        st.session_state['current_sq'] = st.session_state.squadron
+        st.markdown(f"📍 **所屬中隊：** `{st.session_state['current_sq']}`")
+        
+    st.markdown("---")
+    
+    # 🎯 終極雙軌選單 (L1/L2 介面高度統一)
+    if st.session_state.role == 'L1':
+        menu_options = ["🏠 首頁", "👥 帳號管理", "📤 準則借閱審核", "📥 準則歸還審核", "💬 回報專區", "📊 準則現況", "🔍 綜合查詢", "🗂️ 操作紀錄"]
+        if is_admin: 
+            menu_options.insert(2, "⚙️ 系統管理") # 👑 管理員專屬暗門解鎖！
+    else:
+        menu_options = ["🏠 首頁", "📤 準則借閱", "🏷️ 序號登載", "📥 準則歸還", "💬 回報專區", "🔍 綜合查詢"]
+        
+    menu = st.radio("功能導覽", menu_options)
     
     st.markdown("---")
-    if st.button("登出"):
-        # 射後不理：發射登出信號並瞬間重整，交給頂部的「攔截器」處理
+    if st.button("🚪 登出系統"):
         st.session_state['logout_triggered'] = True
         st.rerun()
 
