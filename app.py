@@ -1097,12 +1097,10 @@ try:
             else:
                 st.success("目前無所屬的 L4 幹部資料。")
 
-        # ======== 🟢 L4：區隊長/文書兵 ========
-        elif st.session_state.role == 'L4':
-            sq_list = [s.strip() for s in st.session_state.squadron.split(',')]
-            sq_in_clause = "'" + "','".join(sq_list) + "'"
-            is_doc = "人事" in st.session_state.title or "文書" in st.session_state.title
-
+        # ======== 🟢 幹部 (L1) 共用業務與審核區 ========
+        elif st.session_state.role == 'L1':
+            sq_in_clause = st.session_state.sq_in_clause # 讀取全域映射矩陣
+            
             if menu == "👥 帳號管理":
                 st.subheader("👥 人事與帳號管理中心")
                 acc_tabs = st.tabs(["📝 新進班隊開通", "👤 結訓日與復權救援"])
@@ -1110,14 +1108,14 @@ try:
                 with acc_tabs[0]:
                     st.markdown("#### 📝 待審核名單")
                     st.info("💡 點擊卡片下方的按鈕，即可直接完成開通或刪除。")
-                    reg_df = pd.read_sql_query(f"SELECT id, squadron as 中隊, unit as 班隊, login_id as 帳號, discharge_date as 結訓日 FROM users WHERE status='待審核' AND squadron IN ({sq_in_clause})", conn)
+                    # 🚀 注意：這裡將 title 作為「班隊全銜」讀取
+                    reg_df = pd.read_sql_query(f"SELECT id, squadron as 中隊, title as 班隊, login_id as 帳號, discharge_date as 結訓日 FROM users WHERE status='待審核' AND squadron IN ({sq_in_clause})", conn)
                     
                     if not reg_df.empty:
                         for _, row in reg_df.iterrows():
                             uid = row['id']
                             with st.container(border=True):
-                                # 🚀 升級：依照幹部指定格式，顯示所屬中隊
-                                st.markdown(f"🏢 **班隊：** `{row['班隊']}`  \n📍 **所屬中隊：** `{row['中隊']}`  \n📅 **結訓：** `{row['結訓日']}`")
+                                st.markdown(f"🎓 **班隊全銜：** `{row['班隊']}`  \n📍 **所屬中隊：** `{row['中隊']}`  \n🆔 **申請帳號：** `{row['帳號']}`  \n📅 **結訓日期：** `{row['結訓日']}`")
                                 
                                 col1, col2 = st.columns(2)
                                 with col1:
@@ -1139,38 +1137,42 @@ try:
 
                 with acc_tabs[1]:
                     st.markdown("#### 👤 結訓日與權限救援中心")
-                    st.info("💡 點開班隊，直接查看帳密。修改結訓日並儲存後，若帳號原為凍結狀態，系統將自動為其解除凍結。")
+                    st.info("💡 點開班隊卡片即可修改結訓日，或重置密碼。修改結訓日後，若帳號原為凍結狀態，系統將自動為其解除凍結。")
                     
-                    l5_users = pd.read_sql_query(f"SELECT id, squadron as 中隊, unit as 班隊, login_id as 訓員帳號, password as 密碼, status as 狀態, discharge_date as 結訓日, setup_count FROM users WHERE role='L5' AND status IN ('啟用', '結訓凍結') AND squadron IN ({sq_in_clause}) ORDER BY unit", conn)
+                    # 🚀 注意：將舊版 L5 改為 L2，並讀取 title 作為班隊
+                    l2_users = pd.read_sql_query(f"SELECT id, squadron as 中隊, title as 班隊, login_id as 訓員帳號, status as 狀態, discharge_date as 結訓日 FROM users WHERE role='L2' AND status IN ('啟用', '結訓凍結') AND squadron IN ({sq_in_clause}) ORDER BY title", conn)
                     
-                    if not l5_users.empty:
-                        for unit_name in l5_users['班隊'].unique():
-                            u_df = l5_users[l5_users['班隊'] == unit_name]
+                    if not l2_users.empty:
+                        for unit_name in l2_users['班隊'].unique():
+                            u_df = l2_users[l2_users['班隊'] == unit_name]
                             
-                            with st.expander(f"🔽 {unit_name}"):
+                            with st.expander(f"🔽 {unit_name} (共 {len(u_df)} 個帳號)"):
                                 for _, row in u_df.iterrows():
                                     uid = row['id']
                                     with st.container(border=True):
-                                        # 極簡六行卡片呈現
-                                        status_emoji = '🟢' if row['狀態'] == '啟用' else '🔴'
-                                        st.markdown(f"👤 **帳號：** `{row['訓員帳號']}`  \n🔑 **密碼：** `{row['密碼']}`  \n{status_emoji} **狀態：** `{row['狀態']}`")
+                                        status_emoji = '🟢' if row['狀態'] == '啟用' else '❄️'
+                                        st.markdown(f"🆔 **登入帳號：** `{row['訓員帳號']}` ｜ {status_emoji} **狀態：** `{row['狀態']}`")
                                         
                                         def_date = pd.to_datetime(row['結訓日']).date() if pd.notna(row['結訓日']) else datetime.now(timezone(timedelta(hours=8))).date()
                                         new_date = st.date_input("📅 結訓日期 (點擊修改)", value=def_date, key=f"d_{uid}")
                                         
-                                        grant_auth = st.checkbox("☑️ 發放「修改帳密」權限 (1次)", value=(row['setup_count']>0), key=f"g_{uid}")
-                                        
-                                        if st.button("💾 儲存變更", key=f"s_{uid}", type="primary", use_container_width=True):
-                                            c = conn.cursor()
-                                            new_status = '啟用' if row['狀態'] == '結訓凍結' else row['狀態']
-                                            c.execute("UPDATE users SET discharge_date=%s, status=%s WHERE id=%s", (new_date, new_status, uid))
-                                            
-                                            if grant_auth: c.execute("UPDATE users SET setup_count=1 WHERE id=%s", (uid,))
-                                            else: c.execute("UPDATE users SET setup_count=0 WHERE id=%s", (uid,))
-                                            
-                                            conn.commit()
-                                            st.session_state['sys_toast'] = "✅ 儲存成功！(若原為凍結已自動復權)"
-                                            st.rerun()
+                                        col_s, col_r = st.columns(2)
+                                        with col_s:
+                                            if st.button("💾 儲存結訓日變更", key=f"s_{uid}", type="primary", use_container_width=True):
+                                                c = conn.cursor()
+                                                new_status = '啟用' if row['狀態'] == '結訓凍結' else row['狀態']
+                                                c.execute("UPDATE users SET discharge_date=%s, status=%s WHERE id=%s", (new_date, new_status, uid))
+                                                conn.commit()
+                                                st.session_state['sys_toast'] = "✅ 結訓日已更新！(若原為凍結已自動復權)"
+                                                st.rerun()
+                                        with col_r:
+                                            # 🚀 保留長官指定的一鍵重置密碼功能
+                                            if st.button("🔑 重置密碼為 abc123", key=f"r_{uid}", use_container_width=True):
+                                                c = conn.cursor()
+                                                c.execute("UPDATE users SET password='abc123' WHERE id=%s", (uid,))
+                                                conn.commit()
+                                                st.session_state['sys_toast'] = "✅ 密碼已重置為預設！"
+                                                st.rerun()
                     else:
                         st.success("✨ 目前無可管理的訓員資料。")
 
