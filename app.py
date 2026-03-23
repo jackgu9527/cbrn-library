@@ -451,6 +451,8 @@ try:
     elif menu in ["序號登載", "🏷️ 序號登載"] and st.session_state.role == 'L2':
         # 🚀 升級 Tooltip
         st.header("🏷️ 序號登載", help="請將領取到的實體準則序號登載入系統。若有多本請用「半形逗號 ( , )」隔開；若發生實體數量短少，可勾選『借閱異常』進行通報。")
+        # ⚠️ 補回這行被吃掉的關鍵查詢！
+        bk_df = pd.read_sql_query(f"SELECT id, book_name, serial_number, status FROM books WHERE owner_id='{st.session_state.login_id}' AND status IN ('保留待領取', '借閱中')", conn)
 
         if bk_df.empty:
             st.success("✨ 您目前沒有需要登載或校正的準則！")
