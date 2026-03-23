@@ -1225,15 +1225,15 @@ try:
                 st.dataframe(res, use_container_width=True)
 
     elif menu == "📊 準則現況":
-        st.header(f"📊 【{st.session_state.squadron}】所屬班隊準則持有現況")
+        st.header("📊 所屬班隊準則持有現況")
         st.info("💡 點擊下方各班隊名稱，即可展開查看該班隊目前持有的所有準則與詳細序號。")
         
-        if st.session_state.role in ['L1', 'L2']:
-            unit_query = "SELECT DISTINCT u.title as unit FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.status IN ('借閱中', '保留待領取', '少領異常', '歸還中')"
-        else:
-            sq_list = [s.strip() for s in st.session_state.squadron.split(',')]
-            sq_in_clause = "'" + "','".join(sq_list) + "'"
+        # 🚀 權限精準隔離：L1 套用全域中隊映射矩陣，L2 只能看自己！
+        if st.session_state.role == 'L1':
+            sq_in_clause = st.session_state.sq_in_clause
             unit_query = f"SELECT DISTINCT u.title as unit FROM books b JOIN users u ON b.owner_id = u.login_id WHERE u.squadron IN ({sq_in_clause}) AND b.status IN ('借閱中', '保留待領取', '少領異常', '歸還中')"
+        else:
+            unit_query = f"SELECT DISTINCT u.title as unit FROM books b JOIN users u ON b.owner_id = u.login_id WHERE u.login_id = '{st.session_state.login_id}' AND b.status IN ('借閱中', '保留待領取', '少領異常', '歸還中')"
             
         units_df = pd.read_sql_query(unit_query, conn)
         if units_df.empty:
