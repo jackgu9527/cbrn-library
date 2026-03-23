@@ -1089,50 +1089,49 @@ try:
             
             with ret_tabs[0]:
                 return_df = pd.read_sql_query(f"SELECT b.id, u.title as 班隊, b.book_name as 書名, b.serial_number as 序號, b.owner_id FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.status='歸還中' AND u.squadron IN ({sq_in_clause}) ORDER BY u.title, b.book_name", conn)
+                
                 if not return_df.empty:
-                    unit_actions, book_actions, edited_receive_dfs = {}, {}, {}
+                    st.info("💡 支援階層式點收：您可以直接選擇「班隊全點收」、「單書全點收」，或展開進行「逐本點收」。")
+                    
+                    # 預先準備容器，收集最後的點收結果
+                    received_ids, rejected_ids = [], []
                     
                     for unit_name in return_df['班隊'].unique():
                         with st.container(border=True):
-                            st.markdown(f"### 【{unit_name}】")
-                            unit_actions[unit_name] = st.radio(f"【{unit_name}】批次處理", ["🔽展開","✅全審核","❌全踢退"], horizontal=True, key=f"u_rad_{unit_name}", label_visibility="collapsed")
+                            st.markdown(f"### 🏢 【{unit_name}】")
+                            unit_action = st.radio(f"【{unit_name}】批次處理", ["🔽 展開個別處理", "✅ 班隊全數點收", "❌ 班隊全轉遺失"], horizontal=True, key=f"u_rad_{unit_name}", label_visibility="collapsed")
                             
-                            if unit_actions[unit_name] not in ["✅全審核", "❌全踢退"]:
+                            if unit_action == "✅ 班隊全數點收":
+                                received_ids.extend(return_df[return_df['班隊'] == unit_name]['id'].tolist())
+                            elif unit_action == "❌ 班隊全轉遺失":
+                                rejected_ids.extend(return_df[return_df['班隊'] == unit_name]['id'].tolist())
+                            else:
                                 st.divider()
                                 unit_df = return_df[return_df['班隊'] == unit_name]
                                 for b_name in unit_df['書名'].unique():
-                                    b_df = unit_df[unit_df['書名'] == b_name].reset_index(drop=True)
+                                    b_df = unit_df[unit_df['書名'] == b_name]
                                     u_b_key = f"{unit_name}_{b_name}"
-                                    st.markdown(f"**📘 {b_name}** (待處理 {len(b_df)} 本)")
-                                    book_actions[u_b_key] = st.radio(f"{b_name} 處理", ["📋明細", "✅ 審核", "❌ 踢退"], horizontal=True, key=f"b_rad_{u_b_key}", label_visibility="collapsed")
                                     
-                                    if book_actions[u_b_key] not in ["✅ 審核", "❌ 踢退"]:
-                                        with st.expander("🔽 展開序號"):
-                                            b_df.insert(0, "❌踢退", False); b_df.insert(0, "✅審核", False)
-                                            edited_receive_dfs[u_b_key] = st.data_editor(
-                                                b_df, hide_index=True, disabled=["id", "班隊", "書名", "序號", "owner_id"], use_container_width=True, 
-                                                column_config={"✅審核": st.column_config.CheckboxColumn("✅審核"), "❌踢退": st.column_config.CheckboxColumn("❌踢退(轉遺失)"), "id": None, "班隊": None, "書名": None, "owner_id": None}, 
-                                                key=f"editor_{u_b_key}"
-                                            )
-                                    st.write("")
+                                    st.markdown(f"**📘 {b_name}** (待點收: {len(b_df)} 本)")
+                                    b_action = st.radio(f"{b_name} 處理", ["📋 逐本處理", "✅ 此書全點收", "❌ 此書全轉遺失"], horizontal=True, key=f"b_rad_{u_b_key}", label_visibility="collapsed")
+                                    
+                                    if b_action == "✅ 此書全點收":
+                                        received_ids.extend(b_df['id'].tolist())
+                                    elif b_action == "❌ 此書全轉遺失":
+                                        rejected_ids.extend(b_df['id'].tolist())
+                                    else:
+                                        # 展開單獨序號的卡片選項
+                                        for _, row in b_df.iterrows():
+                                            c1, c2 = st.columns([5, 5])
+                                            c1.markdown(f"🔖 序號: `{row['序號']}`")
+                                            item_act = c2.radio("操作", ["✅ 點收", "❌ 遺失"], horizontal=True, key=f"ret_item_{row['id']}", label_visibility="collapsed")
+                                            
+                                            if item_act == "✅ 點收": received_ids.append(row['id'])
+                                            else: rejected_ids.append(row['id'])
+                                    st.write("") # 增加底部間距
                             
                     st.markdown("---")
                     if st.button("💾 送出點收結果", type="primary", use_container_width=True):
-                        received_ids, rejected_ids = [], []
-                        for unit_name in return_df['班隊'].unique():
-                            if unit_actions[unit_name] == "✅全審核": received_ids.extend(return_df[return_df['班隊'] == unit_name]['id'].tolist())
-                            elif unit_actions[unit_name] == "❌全踢退": rejected_ids.extend(return_df[return_df['班隊'] == unit_name]['id'].tolist())
-                            else:
-                                unit_df = return_df[return_df['班隊'] == unit_name]
-                                for b_name in unit_df['書名'].unique():
-                                    u_b_key = f"{unit_name}_{b_name}"
-                                    if book_actions.get(u_b_key) == "✅ 審核": received_ids.extend(unit_df[unit_df['書名'] == b_name]['id'].tolist())
-                                    elif book_actions.get(u_b_key) == "❌ 踢退": rejected_ids.extend(unit_df[unit_df['書名'] == b_name]['id'].tolist())
-                                    elif edited_receive_dfs.get(u_b_key) is not None:
-                                        edited_df = edited_receive_dfs[u_b_key]
-                                        received_ids.extend(edited_df[edited_df["✅審核"] == True]["id"].tolist())
-                                        rejected_ids.extend(edited_df[edited_df["❌踢退"] == True]["id"].tolist())
-                
                         has_action = False
                         c = conn.cursor()
                         now_time = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S")
@@ -1152,34 +1151,38 @@ try:
                             rej_details = c.fetchall()
                             c.execute(f"UPDATE books SET status='遺失待賠' WHERE id IN ({id_list_str})")
                             for u_name, b_name, qty in rej_details:
-                                c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", (now_time, st.session_state.login_id, "歸還踢退", f"踢退 {u_name} 歸還 {b_name} {qty} 本，轉列遺失追查"))
+                                c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", (now_time, st.session_state.login_id, "歸還踢退", f"未收訖 {u_name} 的 {b_name} {qty} 本，轉列遺失追查"))
                             has_action = True
                             
                         if has_action:
                             conn.commit()
-                            st.session_state['sys_toast'] ="✅ 審核完成！"
+                            st.session_state['sys_toast'] ="✅ 審核點收完成！"
                             st.rerun()
                 else:
-                    st.success("目前各班隊皆無待歸還準則！")
+                    st.success("目前各班隊皆無待歸還點收之準則！")
 
             with ret_tabs[1]:
-                st.markdown("#### 🚨 遺失準則")
+                st.markdown("#### 🚨 遺失準則 (待賠償/待尋獲)")
                 lost_df = pd.read_sql_query(f"SELECT b.id, u.title as 班隊, b.book_name as 書名, b.serial_number as 序號 FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.status='遺失待賠' AND u.squadron IN ({sq_in_clause}) ORDER BY u.title, b.book_name", conn)
                 
                 if not lost_df.empty:
-                    lost_df.insert(0, "✅ 尋獲/賠償結案", False)
-                    edited_lost = st.data_editor(lost_df, hide_index=True, disabled=["id", "班隊", "書名", "序號"], width='stretch', column_config={"✅ 尋獲/賠償結案": st.column_config.CheckboxColumn("✅ 尋獲/賠償結案"), "id": None}, key="lost_recovery_table")
-                    if st.button("🚔 批次執行結案退庫", type="primary"):
-                        resolved_rows = edited_lost[edited_lost["✅ 尋獲/賠償結案"] == True]
-                        resolved_ids = resolved_rows["id"].tolist()
-                        if resolved_ids:
-                            c = conn.cursor()
-                            now_time = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S")
-                            c.execute(f"UPDATE books SET status='在庫', owner_id='在庫' WHERE id IN ({','.join(map(str, resolved_ids))})")
-                            c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", (now_time, st.session_state.login_id, "遺失結案", f"尋獲或完成賠償，退庫共 {len(resolved_ids)} 本準則"))
-                            conn.commit()
-                            st.session_state['sys_toast'] ="✅ 成功結案！"
-                            st.rerun()
+                    st.info("💡 每本遺失準則皆為獨立卡片，尋獲或完成賠償時，點擊右側按鈕即可單獨結案！")
+                    for _, row in lost_df.iterrows():
+                        l_id = row['id']
+                        with st.container(border=True):
+                            col1, col2 = st.columns([7, 3])
+                            with col1:
+                                st.markdown(f"🎓 **班隊：** `{row['班隊']}`  \n📘 **書名：** `{row['書名']}`  \n🔖 **序號：** `{row['序號']}`")
+                            with col2:
+                                st.write("") # 往下推一點對齊
+                                if st.button("✅ 尋獲/結案", key=f"lost_res_{l_id}", type="primary", use_container_width=True):
+                                    c = conn.cursor()
+                                    now_time = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S")
+                                    c.execute(f"UPDATE books SET status='在庫', owner_id='在庫' WHERE id={l_id}")
+                                    c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", (now_time, st.session_state.login_id, "遺失結案", f"尋獲或完成賠償，退庫: {row['書名']} ({row['序號']})"))
+                                    conn.commit()
+                                    st.session_state['sys_toast'] ="✅ 結案成功！已退回庫房。"
+                                    st.rerun()
                 else:
                     st.success("✨ 準則妥善率 100%！目前中隊無任何遺失待賠之準則！")
 
