@@ -925,62 +925,49 @@ try:
         else:
             st.success("✨ 您名下目前沒有需要歸還的準則！")
 
-    elif menu in ["審核與管理", "⚙️ 系統管理", "👥 人事管理", "👥 帳號管理", "📤 準則借閱審核", "📥 準則歸還審核", "💬 回報專區"] and st.session_state.role in ['L1', 'L2', 'L3', 'L4']:
-        
-        # ======== 🟢 L1：系統管理員 ========
-        if st.session_state.role == 'L1':
+    # ======== 🟢 系統管理員專屬暗門 ========
+        elif menu == "⚙️ 系統管理" and st.session_state.role == 'L1' and str(st.session_state.squadron).strip() == '大隊部':
             st.error("👑 系統管理員模式：全域人事卡片化管理")
-            st.info("💡 點開【中隊】，再點擊【職務標籤】，即可查看與修改所有人員的專屬卡片。")
+            st.info("💡 點開【中隊】，再點擊【職務/班隊標籤】，即可查看與修改所有人員的專屬卡片。")
             
-            all_users = pd.read_sql_query("SELECT id, login_id, password, role, squadron, unit, title, name, status, setup_count FROM users ORDER BY id", conn)
+            # 🚀 完美對接極簡架構：只讀取 login_id, password, role, squadron, title, status
+            all_users = pd.read_sql_query("SELECT id, login_id, password, role, squadron, title, status FROM users ORDER BY id", conn)
             
-            # 處理可能為空的單位
             squadrons = [s for s in all_users['squadron'].unique() if pd.notna(s) and str(s).strip() != ""]
             
             for sq in squadrons:
                 sq_df = all_users[all_users['squadron'] == sq]
                 with st.expander(f"🔽 {sq} (共 {len(sq_df)} 人)"):
                     
-                    # 智慧標籤分類 (將 L5 統一稱為訓員)
-                    def get_display_title(r):
-                        if r['role'] == 'L5': return "訓員"
-                        return str(r['title']) if pd.notna(r['title']) and str(r['title']).strip() != "" else r['role']
-                    
-                    sq_df = sq_df.copy()
-                    sq_df['display_title'] = sq_df.apply(get_display_title, axis=1)
-                    
-                    titles = sq_df['display_title'].unique()
+                    # 🚀 L1 與 L2 統一使用 title 進行分類 (職務/班隊全銜)
+                    titles = sq_df['title'].unique()
                     if len(titles) > 0:
-                        tabs = st.tabs([f"🎖️ {t} ({len(sq_df[sq_df['display_title']==t])}人)" for t in titles])
+                        tabs = st.tabs([f"🎖️ {t} ({len(sq_df[sq_df['title']==t])}人)" for t in titles])
                         for i, t in enumerate(titles):
                             with tabs[i]:
-                                t_df = sq_df[sq_df['display_title'] == t]
+                                t_df = sq_df[sq_df['title'] == t]
                                 for _, row in t_df.iterrows():
                                     uid = row['id']
                                     with st.container(border=True):
-                                        display_name = row['name'] if pd.notna(row['name']) else row['unit']
-                                        st.markdown(f"**👤 {display_name}** ({row['role']})  \n🆔 帳號: `{row['login_id']}`  \n🔑 密碼: `{row['password']}`  \n{'🟢' if row['status']=='啟用' else '🔴'} 狀態: `{row['status']}`")
+                                        st.markdown(f"**👤 {row['title']}** ({row['role']})  \n🆔 帳號: `{row['login_id']}`  \n🔑 密碼: `{row['password']}`  \n{'🟢' if row['status']=='啟用' else '🔴'} 狀態: `{row['status']}`")
                                         
                                         with st.expander("✏️ 編輯詳細資料"):
                                             new_login = st.text_input("帳號", value=row['login_id'], key=f"l1_id_{uid}")
                                             new_pwd = st.text_input("密碼", value=row['password'], key=f"l1_pw_{uid}")
                                             new_sq = st.text_input("中隊", value=row['squadron'], key=f"l1_sq_{uid}")
-                                            new_unit = st.text_input("班隊", value=row['unit'], key=f"l1_un_{uid}")
-                                            new_ti = st.text_input("職務", value=row['title'], key=f"l1_ti_{uid}")
-                                            new_na = st.text_input("姓名", value=row['name'], key=f"l1_na_{uid}")
+                                            new_ti = st.text_input("職務/班隊", value=row['title'], key=f"l1_ti_{uid}")
                                             
                                             status_opts = ["啟用", "待審核", "結訓凍結", "停權"]
                                             idx = status_opts.index(row['status']) if row['status'] in status_opts else 0
                                             new_st = st.selectbox("狀態", status_opts, index=idx, key=f"l1_st_{uid}")
-                                            new_sc = st.number_input("修改權限次數", value=int(row['setup_count']), min_value=0, key=f"l1_sc_{uid}")
                                             
                                             col_save, col_del = st.columns(2)
                                             with col_save:
                                                 if st.button("💾 強制儲存", key=f"l1_s_{uid}", type="primary", use_container_width=True):
                                                     try:
                                                         c = conn.cursor()
-                                                        c.execute("""UPDATE users SET login_id=%s, password=%s, squadron=%s, unit=%s, title=%s, name=%s, status=%s, setup_count=%s WHERE id=%s""", 
-                                                                  (new_login, new_pwd, new_sq, new_unit, new_ti, new_na, new_st, new_sc, uid))
+                                                        c.execute("""UPDATE users SET login_id=%s, password=%s, squadron=%s, title=%s, status=%s WHERE id=%s""", 
+                                                                  (new_login, new_pwd, new_sq, new_ti, new_st, uid))
                                                         conn.commit()
                                                         st.session_state['sys_toast'] = "✅ 更新成功！"
                                                         st.rerun()
@@ -1099,7 +1086,7 @@ try:
 
         # ======== 🟢 幹部 (L1) 共用業務與審核區 ========
         elif st.session_state.role == 'L1':
-            sq_in_clause = st.session_state.sq_in_clause # 讀取全域映射矩陣
+            sq_in_clause = st.session_state.sq_in_clause # 🚀 讀取全域映射矩陣
             
             if menu == "👥 帳號管理":
                 st.subheader("👥 人事與帳號管理中心")
@@ -1108,7 +1095,6 @@ try:
                 with acc_tabs[0]:
                     st.markdown("#### 📝 待審核名單")
                     st.info("💡 點擊卡片下方的按鈕，即可直接完成開通或刪除。")
-                    # 🚀 注意：這裡將 title 作為「班隊全銜」讀取
                     reg_df = pd.read_sql_query(f"SELECT id, squadron as 中隊, title as 班隊, login_id as 帳號, discharge_date as 結訓日 FROM users WHERE status='待審核' AND squadron IN ({sq_in_clause})", conn)
                     
                     if not reg_df.empty:
@@ -1139,7 +1125,6 @@ try:
                     st.markdown("#### 👤 結訓日與權限救援中心")
                     st.info("💡 點開班隊卡片即可修改結訓日，或重置密碼。修改結訓日後，若帳號原為凍結狀態，系統將自動為其解除凍結。")
                     
-                    # 🚀 注意：將舊版 L5 改為 L2，並讀取 title 作為班隊
                     l2_users = pd.read_sql_query(f"SELECT id, squadron as 中隊, title as 班隊, login_id as 訓員帳號, status as 狀態, discharge_date as 結訓日 FROM users WHERE role='L2' AND status IN ('啟用', '結訓凍結') AND squadron IN ({sq_in_clause}) ORDER BY title", conn)
                     
                     if not l2_users.empty:
@@ -1166,7 +1151,6 @@ try:
                                                 st.session_state['sys_toast'] = "✅ 結訓日已更新！(若原為凍結已自動復權)"
                                                 st.rerun()
                                         with col_r:
-                                            # 🚀 保留長官指定的一鍵重置密碼功能
                                             if st.button("🔑 重置密碼為 abc123", key=f"r_{uid}", use_container_width=True):
                                                 c = conn.cursor()
                                                 c.execute("UPDATE users SET password='abc123' WHERE id=%s", (uid,))
