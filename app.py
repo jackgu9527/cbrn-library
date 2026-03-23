@@ -339,7 +339,8 @@ st.session_state.dynamic_sq_in_clause = "'" + "','".join(target_sq_list) + "'"
 conn = get_db_connection()
 try:
     if menu in ["首頁", "🏠 首頁"]:
-        st.header("📊 首頁")
+        # 🚀 升級 Tooltip
+        st.header("📊 首頁", help="查看今日營區戰情概況、待辦事項總覽與個人準則狀態。")
         
         # ======== 🟢 L1：幹部 / 管理員視角 ========
         if st.session_state.role == 'L1':
@@ -558,9 +559,10 @@ try:
             default_req_qty = st.number_input("請輸入欲借閱的數量 (例如：貴班隊人數)", min_value=1, value=1)
             st.markdown("---")
             
-            st.markdown("#### 📚 第二步：選擇準則")
+            st.markdown("---")
+            # 🚀 升級 Tooltip (將 markdown 改為 subheader 以支援 help 參數)
+            st.subheader("📚 第二步：選擇準則", help="請從下拉選單中挑選您需要的準則。選取後，下方會自動展開該準則的數量設定卡片。")
             book_options = [f"{b[0]} (庫存: {b[1]}本)" for b in available_books]
-            selected_books = st.multiselect("選擇要借閱的準則", book_options)
             
             if selected_books:
                 borrow_requests = {}
@@ -972,8 +974,9 @@ try:
                 else:
                     st.success("✨ 目前無可管理的訓員資料。")
 
-        elif menu == "📤 準則借閱審核":
-            st.subheader("📚 借閱準則審核")
+       elif menu == "📤 準則借閱審核":
+            # 🚀 升級 Tooltip
+            st.subheader("📚 借閱準則審核", help="可批次或單獨審核各班隊的借閱申請。審核通過後，庫房準則將鎖定並轉為「保留待領取」狀態。")
             req_df = pd.read_sql_query(f"SELECT br.id as 單號, br.login_id as 帳號, u.title as 班隊, br.book_name as 書名, br.quantity as 申請數量 FROM borrow_requests br JOIN users u ON br.login_id = u.login_id WHERE br.status='待審核' AND u.squadron IN ({sq_in_clause}) ORDER BY u.title, br.book_name, br.id", conn)
             
             if not req_df.empty:
@@ -1296,7 +1299,8 @@ try:
 
     # ======== 🟢 跨階級共用功能 ========
     elif menu in ["綜合查詢", "🔍 綜合查詢"]:
-        st.header("🔍 綜合查詢")
+        # 🚀 升級 Tooltip
+        st.header("🔍 綜合查詢", help="可透過「查書名」觀看各班隊持有該準則的數量；或透過「查序號」精準追蹤單本準則的目前流向與狀態。")
         search_type = st.radio("查詢模式", ["查書名", "查序號"], horizontal=True)
 
         keyword = st.text_input("請輸入關鍵字")
@@ -1359,9 +1363,9 @@ try:
                                 st.markdown("<div style='margin-bottom: 15px;'></div>", unsafe_allow_html=True)
 
     elif menu in ["操作紀錄", "🗂️ 操作紀錄"]:
-        st.header("🗂️ 系統操作紀錄")
+        # 🚀 升級 Tooltip
+        st.header("🗂️ 系統操作紀錄", help="追蹤全系統的借還、審核、設定異動與異常處理等歷史軌跡。支援關鍵字模糊搜尋 (如輸入：姓名、班隊名稱、或特定動作)。")
         search_keyword = st.text_input("🔍 搜尋紀錄 (可輸入班隊、動作、準則名稱等)", placeholder="例如：借閱、M2A2、第一中隊...")
-        
         log_query = """
             SELECT a.timestamp as 時間, 
                    COALESCE(
