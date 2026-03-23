@@ -458,25 +458,6 @@ try:
             c_m4.metric("🔴 借閱異常警示", f"{pending_abn} 件")
             st.markdown("---")
 
-            # L1 共用帳密修改面板 (縮小隱藏，不佔空間)
-            with st.expander("⚙️ 個人帳密設置", expanded=False):
-                st.info("💡 此處可修改您的登入帳號與密碼。")
-                new_id = st.text_input("新帳號", value=st.session_state.login_id, key="l1_daily_id")
-                new_pwd = st.text_input("新密碼", type="password", key="l1_daily_pw")
-                if st.button("💾 儲存", key="l1_save_pwd", type="primary"):
-                    if not new_pwd: st.error("請輸入新密碼！")
-                    else:
-                        c = conn.cursor()
-                        uid = int(st.session_state.id)
-                        final_id = new_id.strip() if new_id.strip() else st.session_state.login_id
-                        c.execute("SELECT COUNT(*) FROM users WHERE (login_id=%s OR pending_login_id=%s) AND id!=%s", (final_id, final_id, uid))
-                        if c.fetchone()[0] > 0: st.error("❌ 此帳號已被他人使用！")
-                        else:
-                            c.execute("UPDATE users SET login_id=%s, password=%s WHERE id=%s", (final_id, new_pwd, uid))
-                            conn.commit()
-                            st.success("✅ 帳號與密碼修改成功！系統將自動登出...")
-                            import time; time.sleep(1.5); st.session_state.clear(); st.rerun()
-
         # ======== 🟢 L2：訓員視角 ========
         elif st.session_state.role == 'L2':
             # 訓員戰情看板
@@ -521,6 +502,44 @@ try:
                             <span>(共 {r['qty']} 本)</span><span style="text-align: right;">狀態：{r['status']}</span>
                         </div>
                         """, unsafe_allow_html=True)
+                        
+        # ======== 🟢 全局共用：無限次更改姓名/帳密面板 ========
+        st.markdown("---")
+        with st.expander("⚙️ 個人帳號與姓名設置 (無限次更改)", expanded=False):
+            st.info("💡 此處可隨時修改您的顯示姓名、登入帳號與密碼。")
+            
+            # 讀取現有姓名 (若無則顯示空白)
+            current_name = st.session_state.name if pd.notna(st.session_state.name) and st.session_state.name != '代表' else ""
+            
+            col_n, col_i, col_p = st.columns(3)
+            with col_n: new_name = st.text_input("顯示姓名", value=current_name, placeholder="例如：王大明", key="daily_name")
+            with col_i: new_id = st.text_input("登入帳號", value=st.session_state.login_id, key="daily_id")
+            with col_p: new_pwd = st.text_input("登入密碼", type="password", key="daily_pw")
+            
+            if st.button("💾 儲存設定", key="save_daily_pwd", type="primary"):
+                if not new_pwd: st.warning("⚠️ 為了安全起見，儲存變更請務必輸入密碼！")
+                else:
+                    c = conn.cursor()
+                    uid = int(st.session_state.id)
+                    final_id = new_id.strip() if new_id.strip() else st.session_state.login_id
+                    final_name = new_name.strip()
+                    
+                    c.execute("SELECT COUNT(*) FROM users WHERE login_id=%s AND id!=%s", (final_id, uid))
+                    if c.fetchone()[0] > 0: st.error("❌ 此帳號已被他人使用！")
+                    else:
+                        old_id = st.session_state.login_id
+                        c.execute("UPDATE users SET login_id=%s, password=%s, name=%s WHERE id=%s", (final_id, new_pwd, final_name, uid))
+                        
+                        # 如果帳號有更改，連動更新其他資料表
+                        if old_id != final_id:
+                            c.execute("UPDATE books SET owner_id=%s WHERE owner_id=%s", (final_id, old_id))
+                            c.execute("UPDATE borrow_requests SET login_id=%s WHERE login_id=%s", (final_id, old_id))
+                            c.execute("UPDATE action_logs SET user_id=%s WHERE user_id=%s", (final_id, old_id))
+                            
+                        conn.commit()
+                        st.session_state['sys_toast'] = "✅ 資料修改成功！即將重新載入..."
+                        st.success("✅ 資料修改成功！系統將自動登出以套用新設定...")
+                        import time; time.sleep(1.5); st.session_state.clear(); st.rerun()
 
     elif menu in ["序號登載", "🏷️ 序號登載"] and st.session_state.role == 'L5':
         st.header("🏷️ 序號登載")
