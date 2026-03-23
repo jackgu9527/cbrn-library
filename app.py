@@ -282,12 +282,15 @@ run_ghost_cleanup()
 # ==========================================
 user_sq = str(st.session_state.squadron).strip()
 
-if user_sq == '大隊部': sq_list = ['學員一中隊', '學員二中隊', '學生一中隊', '學生二中隊']
-elif user_sq == '聯合中隊①': sq_list = ['學員一中隊', '學生一中隊']
-elif user_sq == '聯合中隊②': sq_list = ['學員二中隊', '學生二中隊']
-else: sq_list = [user_sq]
-
-st.session_state.sq_in_clause = "'" + "','".join(sq_list) + "'" 
+# 🚀 1. 給下拉選單用的清單 (加入統整視角)
+if user_sq == '大隊部': 
+    sq_list = ['大隊部', '聯合中隊①', '聯合中隊②', '學員一中隊', '學員二中隊', '學生一中隊', '學生二中隊']
+elif user_sq == '聯合中隊①': 
+    sq_list = ['聯合中隊①', '學員一中隊', '學生一中隊']
+elif user_sq == '聯合中隊②': 
+    sq_list = ['聯合中隊②', '學員二中隊', '學生二中隊']
+else: 
+    sq_list = [user_sq]
 
 with st.sidebar:
     st.markdown(f"### {'🧑‍✈️' if st.session_state.role == 'L1' else '🎓'} {st.session_state.title}")
@@ -320,6 +323,19 @@ with st.sidebar:
         st.session_state['logout_triggered'] = True
         st.rerun()
 
+# 🚀 2. 解析真實查詢範圍 (把集合視角轉換為真實底層的中隊，交給後端資料庫搜尋)
+target_sq = st.session_state.get('current_sq', user_sq)
+if target_sq == '大隊部':
+    target_sq_list = ['大隊部', '學員一中隊', '學員二中隊', '學生一中隊', '學生二中隊']
+elif target_sq == '聯合中隊①':
+    target_sq_list = ['聯合中隊①', '學員一中隊', '學生一中隊']
+elif target_sq == '聯合中隊②':
+    target_sq_list = ['聯合中隊②', '學員二中隊', '學生二中隊']
+else:
+    target_sq_list = [target_sq]
+    
+st.session_state.dynamic_sq_in_clause = "'" + "','".join(target_sq_list) + "'"
+
 # ==========================================
 # 4. 主畫面邏輯
 # ==========================================
@@ -333,7 +349,9 @@ try:
             target_sq = st.session_state.get('current_sq', '')
             st.markdown(f"**{st.session_state.title}** 長官好，以下為【{target_sq}】今日戰情概況：")
             
-            sq_filter = f"='{target_sq}'" if target_sq != '大隊部' else "IS NOT NULL"
+            # 🚀 替換為全域動態查詢
+            dyn_in = st.session_state.dynamic_sq_in_clause
+            sq_filter = f"IN ({dyn_in})"
             
             pending_reg = pd.read_sql_query(f"SELECT COUNT(*) FROM users WHERE status='待審核' AND squadron {sq_filter}", conn).iloc[0,0]
             pending_bor = pd.read_sql_query(f"SELECT COUNT(*) FROM borrow_requests br JOIN users u ON br.login_id = u.login_id WHERE br.status='待審核' AND u.squadron {sq_filter}", conn).iloc[0,0]
@@ -886,7 +904,9 @@ try:
 
     # ======== 🟢 幹部 (L1) 共用業務與審核區 ========
     elif st.session_state.role == 'L1' and menu in ["👥 帳號管理", "📤 準則借閱審核", "📥 準則歸還審核", "💬 回報專區"]:
-        sq_in_clause = st.session_state.sq_in_clause
+        # 🚀 核心修復：強制綁定左側「當前指揮視角」，拔除舊版的寬鬆掃描！
+        target_sq = st.session_state.get('current_sq', '')
+        sq_in_clause = st.session_state.dynamic_sq_in_clause # 🚀 直接讀取展開後的矩陣
         
         if menu == "👥 帳號管理":
             st.subheader("👥 人事與帳號管理中心")
@@ -1166,39 +1186,38 @@ try:
         elif menu in ["💬 回報專區", "回報專區"]:
             st.subheader("💬 Line 報表自動生成器")
             line_tabs = st.tabs(["🚚 借還動態彙總", "📦 準則總清點(含遺失)"])
-            sq_list = [s.strip() for s in st.session_state.squadron.split(',')]
             
             with line_tabs[0]:
                 st.info("💡 產出今日動態物流清單。點擊黑框右上角「📋」複製。")
-                if len(sq_list) > 1: 
-                    target_sq_dyn = st.selectbox("🏢 目標中隊", sq_list, key="dyn_sq")
-                else: 
-                    target_sq_dyn = sq_list[0]
-                    st.markdown(f"📍 **目前產出中隊：** `{target_sq_dyn}`")
-                    
+                st.markdown(f"📍 **目前產出中隊：** `{target_sq}`")
+                
                 dyn_mode = st.radio("🎯 回報範圍", ["整個中隊彙總", "只回報特定班隊"], horizontal=True, key="dyn_mode")
                 dyn_selected_units = []
                 if dyn_mode == "只回報特定班隊":
                     c = conn.cursor()
-                    c.execute(f"SELECT DISTINCT title FROM users WHERE squadron='{target_sq_dyn}' AND role='L2'")
+                    # 🚀 使用 sq_in_clause 來展開搜尋
+                    c.execute(f"SELECT DISTINCT title FROM users WHERE squadron IN ({sq_in_clause}) AND role='L2'")
                     avail_units = [row[0] for row in c.fetchall()]
                     dyn_selected_units = st.multiselect("📌 請加入要回報的班隊 (可多選)：", avail_units, key="dyn_units")
                     
                 if st.button("🚀 生成借還動態報表", type="primary"):
                     unit_filter = f" AND u.title IN ('{chr(39).join(dyn_selected_units)}')" if dyn_mode == "只回報特定班隊" and dyn_selected_units else ""
-                        
-                    req_df = pd.read_sql_query(f"SELECT u.title as unit, br.book_name, SUM(br.quantity) as qty FROM borrow_requests br JOIN users u ON br.login_id = u.login_id WHERE u.squadron='{target_sq_dyn}' AND br.status='待審核'{unit_filter} GROUP BY u.title, br.book_name", conn)
-                    res_df = pd.read_sql_query(f"SELECT u.title as unit, b.book_name, COUNT(b.id) as qty FROM books b JOIN users u ON b.owner_id = u.login_id WHERE u.squadron='{target_sq_dyn}' AND b.status='保留待領取'{unit_filter} GROUP BY u.title, b.book_name", conn)
-                    ret_df = pd.read_sql_query(f"SELECT u.title as unit, b.book_name, COUNT(b.id) as qty FROM books b JOIN users u ON b.owner_id = u.login_id WHERE u.squadron='{target_sq_dyn}' AND b.status='歸還中'{unit_filter} GROUP BY u.title, b.book_name ORDER BY b.book_name", conn)
+                    
+                    # 🚀 SQL 條件全部改為 IN ({sq_in_clause})
+                    req_df = pd.read_sql_query(f"SELECT u.title as unit, br.book_name, SUM(br.quantity) as qty FROM borrow_requests br JOIN users u ON br.login_id = u.login_id WHERE u.squadron IN ({sq_in_clause}) AND br.status='待審核'{unit_filter} GROUP BY u.title, br.book_name", conn)
+                    res_df = pd.read_sql_query(f"SELECT u.title as unit, b.book_name, COUNT(b.id) as qty FROM books b JOIN users u ON b.owner_id = u.login_id WHERE u.squadron IN ({sq_in_clause}) AND b.status='保留待領取'{unit_filter} GROUP BY u.title, b.book_name", conn)
+                    ret_df = pd.read_sql_query(f"SELECT u.title as unit, b.book_name, COUNT(b.id) as qty FROM books b JOIN users u ON b.owner_id = u.login_id WHERE u.squadron IN ({sq_in_clause}) AND b.status='歸還中'{unit_filter} GROUP BY u.title, b.book_name ORDER BY b.book_name", conn)
                     
                     now = datetime.now(timezone(timedelta(hours=8)))
                     tw_wd = ["一", "二", "三", "四", "五", "六", "日"][now.weekday()]
-                    msg = f"報告，{target_sq_dyn}借還書清單\n時間：{now.month}/{now.day}（{tw_wd}）\n\n"
+                    msg = f"報告，{target_sq}借還書清單\n時間：{now.month}/{now.day}（{tw_wd}）\n\n"
                     
+                    # ...(中間組裝 msg 邏輯不用動)...
                     all_units = set()
                     if not req_df.empty: all_units.update(req_df['unit'].tolist())
                     if not res_df.empty: all_units.update(res_df['unit'].tolist())
                     if not ret_df.empty: all_units.update(ret_df['unit'].tolist())
+                    all_units = set()
                     
                     if not all_units: msg += "今日無待辦物流。\n"
                     else:
@@ -1223,29 +1242,26 @@ try:
 
             with line_tabs[1]:
                 st.info("💡 產出中隊外散準則之總清單。點擊黑框右上角「📋」複製。")
-                if len(sq_list) > 1: 
-                    target_sq_inv = st.selectbox("🏢 目標中隊 (總清點)", sq_list, key="inv_sq")
-                else: 
-                    target_sq_inv = sq_list[0]
-                    st.markdown(f"📍 **目前產出中隊：** `{target_sq_inv}`")
+                st.markdown(f"📍 **目前產出中隊：** `{target_sq}`")
                     
                 inv_mode = st.radio("🎯 回報範圍", ["整個中隊彙總", "只回報特定班隊"], horizontal=True, key="inv_mode")
                 inv_selected_units = []
                 if inv_mode == "只回報特定班隊":
                     c = conn.cursor()
-                    c.execute(f"SELECT DISTINCT title FROM users WHERE squadron='{target_sq_inv}' AND role='L2'")
+                    c.execute(f"SELECT DISTINCT title FROM users WHERE squadron IN ({sq_in_clause}) AND role='L2'")
                     avail_units = [row[0] for row in c.fetchall()]
                     inv_selected_units = st.multiselect("📌 請加入要回報的班隊 (可多選)：", avail_units, key="inv_units")
                     
                 if st.button("🚀 生成準則總清點報表", type="primary"):
                     unit_filter = f" AND u.title IN ('{chr(39).join(inv_selected_units)}')" if inv_mode == "只回報特定班隊" and inv_selected_units else ""
                         
-                    inv_df = pd.read_sql_query(f"SELECT u.title as unit, b.book_name, b.status, COUNT(b.id) as qty FROM books b JOIN users u ON b.owner_id = u.login_id WHERE u.squadron='{target_sq_inv}' AND b.status IN ('借閱中', '歸還中', '遺失待賠', '少領異常') {unit_filter} GROUP BY u.title, b.book_name, b.status", conn)
+                    inv_df = pd.read_sql_query(f"SELECT u.title as unit, b.book_name, b.status, COUNT(b.id) as qty FROM books b JOIN users u ON b.owner_id = u.login_id WHERE u.squadron IN ({sq_in_clause}) AND b.status IN ('借閱中', '歸還中', '遺失待賠', '少領異常') {unit_filter} GROUP BY u.title, b.book_name, b.status", conn)
                     
                     now = datetime.now(timezone(timedelta(hours=8)))
                     tw_wd = ["一", "二", "三", "四", "五", "六", "日"][now.weekday()]
-                    inv_msg = f"報告，{target_sq_inv}準則清點總表\n時間：{now.month}/{now.day}（{tw_wd}）\n\n"
+                    inv_msg = f"報告，{target_sq}準則清點總表\n時間：{now.month}/{now.day}（{tw_wd}）\n\n"
                     
+                    # ...(顯示邏輯不用動)...
                     if inv_df.empty: inv_msg += "目前無外散之準則。\n"
                     else:
                         inv_df = apply_shadow_sort(inv_df, has_unit=True)
@@ -1274,12 +1290,12 @@ try:
                 st.dataframe(res, use_container_width=True)
 
     elif menu == "📊 準則現況":
-        st.header(f"📊 【{st.session_state.squadron}】所屬班隊準則持有現況")
+        current_view_sq = st.session_state.get('current_sq', st.session_state.squadron)
+        st.header(f"📊 【{current_view_sq}】所屬班隊準則持有現況")
         st.info("💡 點擊下方各班隊名稱，即可展開查看該班隊目前持有的所有準則與詳細序號。")
         
-        # 🚀 權限精準隔離：L1 套用全域中隊映射矩陣，L2 只能看自己！
         if st.session_state.role == 'L1':
-            sq_in_clause = st.session_state.sq_in_clause
+            sq_in_clause = st.session_state.dynamic_sq_in_clause # 🚀 直接讀取展開後的矩陣
             unit_query = f"SELECT DISTINCT u.title as unit FROM books b JOIN users u ON b.owner_id = u.login_id WHERE u.squadron IN ({sq_in_clause}) AND b.status IN ('借閱中', '保留待領取', '少領異常', '歸還中')"
         else:
             unit_query = f"SELECT DISTINCT u.title as unit FROM books b JOIN users u ON b.owner_id = u.login_id WHERE u.login_id = '{st.session_state.login_id}' AND b.status IN ('借閱中', '保留待領取', '少領異常', '歸還中')"
