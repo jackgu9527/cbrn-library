@@ -123,13 +123,12 @@ def init_db():
     try:
         c = conn.cursor()
         
-        # ======== 1. 保持長官原本的資料表設定，完全不動！ ========
+        # ======== 1. 核心資料表 (捨棄 name, unit, setup_count) ========
         c.execute('''CREATE TABLE IF NOT EXISTS users (
                         id SERIAL PRIMARY KEY,
-                        login_id TEXT UNIQUE, password TEXT, role TEXT, unit TEXT,
-                        squadron TEXT, title TEXT, name TEXT, discharge_date DATE, 
-                        setup_count INTEGER DEFAULT 1, status TEXT DEFAULT '啟用',
-                        pending_name TEXT, pending_login_id TEXT
+                        login_id TEXT UNIQUE, password TEXT, role TEXT, 
+                        squadron TEXT, title TEXT, discharge_date DATE, 
+                        status TEXT DEFAULT '啟用'
                     )''')
         
         c.execute('''CREATE TABLE IF NOT EXISTS books (
@@ -137,6 +136,7 @@ def init_db():
                         book_name TEXT, serial_number TEXT UNIQUE, owner_id TEXT, status TEXT
                     )''')
                     
+        # 注意：borrow_requests 原本的 unit 欄位，現在改存 L2 的 title (班隊全銜)
         c.execute('''CREATE TABLE IF NOT EXISTS borrow_requests (
                         id SERIAL PRIMARY KEY,
                         login_id TEXT, unit TEXT, book_name TEXT, quantity INTEGER, status TEXT
@@ -147,36 +147,25 @@ def init_db():
                         timestamp TEXT, user_id TEXT, action TEXT, details TEXT
                     )''')
         
-        # ======== 2. 這裡換成全新的「雙軌制兵表」與「無損升級引擎」 ========
+        # ======== 2. 全新極簡雙軌預設兵表 ========
         c.execute("SELECT COUNT(*) FROM users")
         if c.fetchone()[0] == 0:
             default_users = [
-                # 👑 系統管理員 (擁有全中隊視野 + 管理員標籤)
-                ('cbrn1', 'cbrn123', 'L1', '大隊部', '管理員,學生一中隊,學生二中隊,學員一中隊,學員二中隊', '系統管理員', '', None, 0, '啟用'),
-                ('cbrn2', 'cbrn123', 'L1', '大隊部', '管理員,學生一中隊,學生二中隊,學員一中隊,學員二中隊', '大隊長', '', None, 0, '啟用'),
-                ('cbrn3', 'cbrn123', 'L1', '大隊部', '管理員,學生一中隊,學生二中隊,學員一中隊,學員二中隊', '大隊輔導長', '', None, 0, '啟用'),
-                ('cbrn4', 'cbrn123', 'L1', '學員一中隊', '學員一中隊', '隊長', '', None, 0, '啟用'),
-                ('cbrn5', 'cbrn123', 'L1', '學員一中隊', '學員一中隊', '輔導長', '', None, 0, '啟用'),
-                ('cbrn6', 'cbrn123', 'L1', '學員一中隊', '學員一中隊', '值星官', '', None, 0, '啟用'),
-                ('cbrn7', 'cbrn123', 'L1', '學員二中隊', '學員二中隊', '隊長', '', None, 0, '啟用'),
-                ('cbrn8', 'cbrn123', 'L1', '學員二中隊', '學員二中隊', '輔導長', '', None, 0, '啟用'),
-                ('cbrn9', 'cbrn123', 'L1', '學員二中隊', '學員二中隊', '值星官', '', None, 0, '啟用'),
-                ('cbrn10', 'cbrn123', 'L1', '學生一中隊', '學生一中隊', '隊長', '', None, 0, '啟用'),
-                ('cbrn11', 'cbrn123', 'L1', '學生一中隊', '學生一中隊', '輔導長', '', None, 0, '啟用'),
-                ('cbrn12', 'cbrn123', 'L1', '學生一中隊', '學生一中隊', '值星官', '', None, 0, '啟用'),
-                ('cbrn13', 'cbrn123', 'L1', '學生二中隊', '學生二中隊', '隊長', '', None, 0, '啟用'),
-                ('cbrn14', 'cbrn123', 'L1', '學生二中隊', '學生二中隊', '輔導長', '', None, 0, '啟用'),
-                ('cbrn15', 'cbrn123', 'L1', '學生二中隊', '學生二中隊', '值星官', '', None, 0, '啟用'),
-                ('cbrn16', 'cbrn123', 'L1', '聯合中隊', '學員一中隊,學生一中隊', '文書兵', '', None, 0, '啟用'),
-                ('cbrn17', 'cbrn123', 'L1', '聯合中隊', '學員二中隊,學生二中隊', '文書兵', '', None, 0, '啟用')
+                # L1 幹部 (title = 職務姓名)
+                ('admin', '1234', 'L1', '大隊部', '系統管理員', None, '啟用'),
+                ('l1_s1', '1234', 'L1', '學生一中隊', '中隊長', None, '啟用'),
+                ('l1_s2', '1234', 'L1', '學生二中隊', '中隊長', None, '啟用'),
+                ('l1_a1', '1234', 'L1', '學員一中隊', '中隊長', None, '啟用'),
+                ('l1_a2', '1234', 'L1', '學員二中隊', '中隊長', None, '啟用'),
+                ('l1_u1', '1234', 'L1', '聯合中隊①', '文書兵', None, '啟用'),
+                ('l1_u2', '1234', 'L1', '聯合中隊②', '文書兵', None, '啟用'),
+                
+                # L2 訓員 (title 直接存班隊全銜)
+                ('l2_test', '1234', 'L2', '學生一中隊', '煙幕士兵班115-1期', '2026-12-31', '啟用')
             ]
-            c.executemany("INSERT INTO users (login_id, password, role, unit, squadron, title, name, discharge_date, setup_count, status) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)", default_users)
+            c.executemany("INSERT INTO users (login_id, password, role, squadron, title, discharge_date, status) VALUES (%s,%s,%s,%s,%s,%s,%s)", default_users)
         
-        # 🚀 【無損升級引擎】：將舊版的 L5 升級為 L2，舊版的 L2~L4 收編為 L1！
-        c.execute("UPDATE users SET role='L2' WHERE role='L5'")
-        c.execute("UPDATE users SET role='L1' WHERE role IN ('L2', 'L3', 'L4')")
-
-        # ======== 3. 保持長官原本的 CSV 自動匯入引擎，完全不動！ ========
+        # ======== 3. 準則 CSV 自動匯入引擎 (保持不動) ========
         c.execute("SELECT COUNT(*) FROM books")
         if c.fetchone()[0] == 0:
             if CSV_FILE and os.path.exists(CSV_FILE):
@@ -190,28 +179,14 @@ def init_db():
                     for index, row in df_books.iterrows():
                         if '書刊名稱' in row and pd.notna(row['書刊名稱']):
                             raw_title = str(row['書刊名稱']).strip()
-                            
-                            pub_date = ""
-                            if '出版日期' in row and pd.notna(row['出版日期']):
-                                raw_date = str(row['出版日期']).strip()
-                                if raw_date.endswith('.0'): raw_date = raw_date[:-2]
-                                pub_date = raw_date
-                                
+                            pub_date = str(row['出版日期']).strip()[:-2] if '出版日期' in row and pd.notna(row['出版日期']) and str(row['出版日期']).strip().endswith('.0') else str(row.get('出版日期', '')).strip()
                             book_title = f"{raw_title} [{pub_date}]" if pub_date else raw_title
                             
-                            qty = 1
-                            if '數量' in row and pd.notna(row['數量']):
-                                qty = int(row['數量'])
-                            elif '化訓準則館' in row and pd.notna(row['化訓準則館']):
-                                qty = int(row['化訓準則館'])
-                                
+                            qty = int(row['數量']) if '數量' in row and pd.notna(row['數量']) else int(row.get('化訓準則館', 1))
                             for i in range(1, qty + 1):
-                                serial = f"{book_title}-{i:03d}"
-                                insert_data.append((book_title, serial, '在庫', '在庫'))
-                    
+                                insert_data.append((book_title, f"{book_title}-{i:03d}", '在庫', '在庫'))
                     c.executemany("INSERT INTO books (book_name, serial_number, owner_id, status) VALUES (%s,%s,%s,%s)", insert_data)
-                except Exception as e:
-                    pass
+                except Exception as e: pass
                 
         conn.commit()
     finally:
@@ -321,27 +296,26 @@ if 'logged_in' not in st.session_state:
 
     with tab2:
         st.info("新進班隊請在此註冊，送出後將由幹部審核開通。")
-        reg_squadron = st.selectbox("所屬中隊", [ "學員一中隊","學員二中隊","學生一中隊", "學生二中隊" ])
-        reg_unit = st.text_input("班隊全銜 (例：煙幕士兵班115-1期)")
+        reg_squadron = st.selectbox("所屬中隊", ["學員一中隊", "學員二中隊", "學生一中隊", "學生二中隊", "聯合中隊①", "聯合中隊②", "大隊部"])
+        reg_title = st.text_input("班隊全銜 (將作為系統顯示名稱)")
         reg_id = st.text_input("設定登入帳號")
         reg_pw = st.text_input("設定登入密碼", type="password")
         reg_date = st.date_input("結訓日期")
         
         if st.button("送出註冊申請"):
-            if reg_unit and reg_id and reg_pw:
+            if reg_title and reg_id and reg_pw:
                 conn = get_db_connection()
                 try:
                     c = conn.cursor()
-                    c.execute("SELECT COUNT(*) FROM users WHERE login_id=%s OR pending_login_id=%s", (reg_id, reg_id))
+                    c.execute("SELECT COUNT(*) FROM users WHERE login_id=%s", (reg_id,))
                     if c.fetchone()[0] > 0:
                         st.error("❌ 此帳號已被使用！")
                     else:
-                        c.execute("INSERT INTO users (login_id, password, role, unit, squadron, title, name, discharge_date, status, setup_count) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
-                                  (reg_id, reg_pw, 'L5', reg_unit, reg_squadron, '訓員', '代表', reg_date.strftime('%Y-%m-%d'), '待審核', 1))
+                        # 🚀 直接將 reg_title 寫入 title 欄位，捨棄 name 與 setup_count
+                        c.execute("INSERT INTO users (login_id, password, role, squadron, title, discharge_date, status) VALUES (%s,%s,%s,%s,%s,%s,%s)",
+                                  (reg_id, reg_pw, 'L2', reg_squadron, reg_title, reg_date.strftime('%Y-%m-%d'), '待審核'))
                         conn.commit()
-                        log_action(reg_id, "註冊申請", f"{reg_squadron} {reg_unit} 提出註冊申請")
-                        
-                        # 🚀 註冊成功的 Toast 瞬間重整
+                        log_action(reg_id, "註冊申請", f"{reg_squadron} {reg_title} 提出註冊申請")
                         st.session_state['sys_toast'] = "✅ 註冊申請已送出！請等待幹部審核後即可登入。"
                         st.rerun()
                 finally:
@@ -356,28 +330,34 @@ run_ghost_cleanup()
 # ==========================================
 # 3. 介面顯示邏輯與左側指揮樞紐
 # ==========================================
-# 🎯 解析使用者的所有管轄中隊
-sq_list = [s.strip() for s in str(st.session_state.squadron).split(',') if s.strip()]
-is_admin = '管理員' in sq_list
+user_sq = str(st.session_state.squadron).strip()
 
-# 將 '管理員' 標籤從顯示名單中剔除，確保下拉選單只有實際中隊
-display_sq_list = [s for s in sq_list if s != '管理員']
+# 🎯 全域中隊管轄映射矩陣
+if user_sq == '大隊部':
+    sq_list = ['學員一中隊', '學員二中隊', '學生一中隊', '學生二中隊']
+elif user_sq == '聯合中隊①':
+    sq_list = ['學員一中隊', '學生一中隊']
+elif user_sq == '聯合中隊②':
+    sq_list = ['學員二中隊', '學生二中隊']
+else:
+    sq_list = [user_sq]
 
-# 🎯 側邊欄全局指揮樞紐 (Global Context Selector)
+# 存入 session 供後續所有 SQL 查詢使用
+st.session_state.sq_in_clause = "'" + "','".join(sq_list) + "'" 
+
 with st.sidebar:
-    st.markdown(f"### 🧑‍✈️ {st.session_state.title} {st.session_state.name}")
+    # 🟢 左上角識別證：L1 顯示職務姓名，L2 顯示班隊全銜 (兩者皆存於 title)
+    st.markdown(f"### {'🧑‍✈️' if st.session_state.role == 'L1' else '🎓'} {st.session_state.title}")
     st.markdown(f"🆔 {st.session_state.login_id}")
     st.markdown("---")
     
-    # 🟢 L1 幹部的專屬中隊切換器
+    # 🟢 L1 幹部視角：多中隊給下拉選單，單一中隊給純文字
     if st.session_state.role == 'L1':
-        if len(display_sq_list) > 1:
-            st.session_state['current_sq'] = st.selectbox("🏢 當前指揮視角", display_sq_list, key="global_sq_selector")
-        elif len(display_sq_list) == 1:
-            st.session_state['current_sq'] = display_sq_list[0]
-            st.markdown(f"📍 **管轄中隊：** `{st.session_state['current_sq']}`")
+        if len(sq_list) > 1:
+            st.session_state['current_sq'] = st.selectbox("🏢 當前指揮視角", sq_list, key="global_sq_selector")
         else:
-            st.session_state['current_sq'] = "未知中隊"
+            st.session_state['current_sq'] = sq_list[0]
+            st.markdown(f"📍 **管轄中隊：** `{st.session_state['current_sq']}`")
     else:
         # 🟢 L2 訓員視角
         st.session_state['current_sq'] = st.session_state.squadron
@@ -385,11 +365,11 @@ with st.sidebar:
         
     st.markdown("---")
     
-    # 🎯 終極雙軌選單 (L1/L2 介面高度統一)
+    # 🎯 終極雙軌選單
     if st.session_state.role == 'L1':
         menu_options = ["🏠 首頁", "👥 帳號管理", "📤 準則借閱審核", "📥 準則歸還審核", "💬 回報專區", "📊 準則現況", "🔍 綜合查詢", "🗂️ 操作紀錄"]
-        if is_admin: 
-            menu_options.insert(2, "⚙️ 系統管理") # 👑 管理員專屬暗門解鎖！
+        if user_sq == '大隊部': 
+            menu_options.insert(2, "⚙️ 系統管理") # 👑 只有大隊部解鎖暗門
     else:
         menu_options = ["🏠 首頁", "📤 準則借閱", "🏷️ 序號登載", "📥 準則歸還", "💬 回報專區", "🔍 綜合查詢"]
         
@@ -475,19 +455,18 @@ try:
                         </div>
                         """, unsafe_allow_html=True)
                         
-        # ======== 🟢 全局共用：個人帳密與資料設置 (無限次修改) ========
+        # ======== 🟢 全局共用：個人設定修改面板 ========
         st.markdown("---")
         with st.expander("⚙️ 個人帳號與資料設置", expanded=False):
             if st.session_state.role == 'L1':
-                st.info("💡 幹部可隨時修改您的顯示姓名、登入帳號與密碼。")
-                current_name = st.session_state.name if pd.notna(st.session_state.name) and st.session_state.name != '代表' else ""
-                col_n, col_i, col_p = st.columns(3)
-                with col_n: new_name = st.text_input("顯示姓名", value=current_name, placeholder="例如：王大明", key="daily_name")
+                st.info("💡 幹部可隨時修改您的顯示職稱/姓名、登入帳號與密碼。")
+                col_t, col_i, col_p = st.columns(3)
+                with col_t: new_title = st.text_input("職務/姓名", value=st.session_state.title, key="daily_title")
                 with col_i: new_id = st.text_input("登入帳號", value=st.session_state.login_id, key="daily_id")
                 with col_p: new_pwd = st.text_input("登入密碼", type="password", placeholder="若不修改請留空", key="daily_pw")
             else:
-                st.info("💡 訓員可隨時修改您的專屬登入帳號與密碼。")
-                new_name = st.session_state.name # L2 不可改名，維持原值
+                st.info("💡 訓員可隨時修改您的登入帳號與密碼。(班隊全銜由幹部統一管理)")
+                new_title = st.session_state.title # L2 維持原班隊全銜，畫面不顯示輸入框
                 col_i, col_p = st.columns(2)
                 with col_i: new_id = st.text_input("登入帳號", value=st.session_state.login_id, key="daily_id")
                 with col_p: new_pwd = st.text_input("登入密碼", type="password", placeholder="若不修改請留空", key="daily_pw")
@@ -496,18 +475,17 @@ try:
                 c = conn.cursor()
                 uid = int(st.session_state.id)
                 final_id = new_id.strip() if new_id.strip() else st.session_state.login_id
-                final_name = new_name.strip() if st.session_state.role == 'L1' else new_name
-                
-                # 判斷密碼是否修改
-                pw_update_sql = ", password=%s" if new_pwd else ""
-                sql_params = [final_id, new_pwd, final_name, uid] if new_pwd else [final_id, final_name, uid]
+                final_title = new_title.strip() if new_title.strip() else st.session_state.title
                 
                 c.execute("SELECT COUNT(*) FROM users WHERE login_id=%s AND id!=%s", (final_id, uid))
                 if c.fetchone()[0] > 0: 
-                    st.error("❌ 此帳號已被他人使用！請更換其他帳號。")
+                    st.error("❌ 此帳號已被使用！")
                 else:
+                    pw_update = ", password=%s" if new_pwd else ""
+                    params = [final_id, new_pwd, final_title, uid] if new_pwd else [final_id, final_title, uid]
+                    
                     old_id = st.session_state.login_id
-                    c.execute(f"UPDATE users SET login_id=%s{pw_update_sql}, name=%s WHERE id=%s", tuple(sql_params))
+                    c.execute(f"UPDATE users SET login_id=%s{pw_update}, title=%s WHERE id=%s", tuple(params))
                     
                     # 帳號連動更新防護
                     if old_id != final_id:
