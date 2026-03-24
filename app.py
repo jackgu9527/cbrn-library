@@ -824,8 +824,12 @@ try:
                             edited_return_dfs[b_name] = st.data_editor(
                                 b_df, 
                                 hide_index=True, 
-                                disabled=["序號"], 
+                                disabled=["id", "書名", "序號"], 
                                 width='stretch', 
+                                column_config={
+                                    "id": None,    # 👈 真正的隱藏魔法在這裡：設為 None 就會從畫面上消失
+                                    "書名": None   # 👈 隱藏書名欄位
+                                },
                                 key=editor_key
                             )
             st.markdown("---") 
