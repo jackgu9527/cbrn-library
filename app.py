@@ -762,7 +762,7 @@ try:
             st.subheader("📱 準則清點回報", help="產出目前名下所有準則總數。點擊黑框右上角「📋」複製。")
             if st.button("🚀 生成清點報表", type="primary"):
                 inv_df = pd.read_sql_query(f"SELECT book_name, status, COUNT(id) as qty FROM books WHERE owner_id='{st.session_state.login_id}' AND status IN ('借閱中', '歸還中') GROUP BY book_name, status", conn)
-                msg = f"報告，班隊：{st.session_state.title}\n準則清點：\n\n"
+                msg = f"班隊：{st.session_state.title}\n準則清點：\n\n"
                 if inv_df.empty: msg += "無\n"
                 else:
                     inv_df = apply_shadow_sort(inv_df)
@@ -772,7 +772,7 @@ try:
                 st.code(msg.strip(), language="text")
 
     elif menu in ["準則歸還", "📥 準則歸還"] and st.session_state.role == 'L2':
-        st.header("📤 準則歸還", help="【快捷歸還】：勾選各準則標題旁的「☑️ 全數歸還此項」即可將該類準則全數歸還。\n\n【部分歸還】：展開個別序號清單，單獨勾選要歸還的序號。")
+        st.header("📤 準則歸還", help="勾選準則標題旁的「☑️ 全數歸還此項」即可將該類準則全數歸還。\n\n【部分歸還】：展開個別序號清單，單獨勾選要歸還的序號。")
         books_df = pd.read_sql_query(f"SELECT id, book_name as 書名, serial_number as 序號 FROM books WHERE owner_id='{st.session_state.login_id}' AND status='借閱中'", conn)
         
         if not books_df.empty:
@@ -824,7 +824,7 @@ try:
                             edited_return_dfs[b_name] = st.data_editor(
                                 b_df, 
                                 hide_index=True, 
-                                disabled=["id", "書名", "序號"], 
+                                disabled=["序號"], 
                                 width='stretch', 
                                 key=editor_key
                             )
