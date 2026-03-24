@@ -374,6 +374,10 @@ def run_ghost_cleanup():
             c.execute("SELECT COUNT(*) FROM books WHERE owner_id=%s", (f_login,))
             leftover_qty = c.fetchone()[0]
             if leftover_qty == 0:
+                # 🚀 幽靈連帶刪除：連同「尚未審核的借閱申請單」一起撕毀！
+                c.execute("DELETE FROM borrow_requests WHERE login_id=%s", (f_login,))
+                
+                # 原本就有的刪車輛與刪帳號
                 c.execute("DELETE FROM vehicles WHERE account_id=%s", (f_login,))
                 c.execute("DELETE FROM users WHERE id=%s", (f_id,))
                 c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", (now_time, "SYSTEM", "帳號註銷", f"班隊 {f_title} 準則已結清，徹底刪除帳號。"))
