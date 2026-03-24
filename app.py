@@ -19,52 +19,6 @@ warnings.filterwarnings('ignore', category=UserWarning, module='pandas')
 # ==========================================
 st.set_page_config(page_title="大隊部準則管理系統", layout="wide")
 
-# === 🍪 餅乾通行證管理器 ===
-# 🚀 增加一個 key，讓組件在重啟時更穩定
-cookie_manager = stx.CookieManager(key="main_cookie_auth")
-
-# 🚨 終極登出攔截器 (保持原樣，這段是正確的)
-if st.session_state.get('logout_triggered'):
-    try:
-        cookie_manager.delete('sys_user_token')
-    except KeyError:
-        pass
-    st.session_state.clear()
-    st.session_state['force_logout'] = True
-    st.session_state['sys_toast'] = "👋 登出成功！安全連線已銷毀。"
-
-# ==========================================
-# 🔑 餅乾哨角：自動登入偵測機制 (修復自動登出的關鍵)
-# ==========================================
-# 1. 先抓出目前瀏覽器裡所有的餅乾
-all_cookies = cookie_manager.get_all()
-
-# 2. 判斷是否需要執行「餅乾救援」
-if 'logged_in' not in st.session_state and not st.session_state.get('force_logout'):
-    # 🚀 改用 get_all() 來檢查，比單獨 get 更能避開組件讀取失敗
-    if all_cookies and 'sys_user_token' in all_cookies:
-        stored_user = all_cookies['sys_user_token']
-        
-        # 進入資料庫查驗
-        conn = get_db_connection()
-        try:
-            safe_user_id = str(stored_user)
-            user_data = pd.read_sql_query("SELECT * FROM users WHERE login_id=%s", conn, params=(safe_user_id,))
-            
-            if not user_data.empty and user_data.iloc[0]['status'] not in ['待審核', '停權', '結訓凍結']:
-                # 把資料填回系統記憶體 (Session State)
-                for col in user_data.columns: 
-                    st.session_state[col] = user_data.iloc[0][col]
-                st.session_state['logged_in'] = True
-                
-                # 🎯 最重要的一步：成功識別後「立刻重啟一次網頁」
-                # 這能讓整個介面瞬間從「登入模式」切換成「首頁模式」，不會卡住。
-                st.rerun()
-        except Exception as e:
-            send_line_notify(f"🚨 【自動登入失敗】帳號 {stored_user} 嘗試自動登入時出錯：{e}")
-        finally:
-            release_connection(conn)
-    
 # ==========================================
 # 🎨 系統全域 UI 鋼鐵防線 (底層 CSS 注入)
 # ==========================================
@@ -311,6 +265,52 @@ def run_ghost_cleanup():
     finally:
         release_connection(conn)
         st.session_state['ghost_engine_ran'] = True
+
+# === 🍪 餅乾通行證管理器 ===
+# 🚀 增加一個 key，讓組件在重啟時更穩定
+cookie_manager = stx.CookieManager(key="main_cookie_auth")
+
+# 🚨 終極登出攔截器 (保持原樣，這段是正確的)
+if st.session_state.get('logout_triggered'):
+    try:
+        cookie_manager.delete('sys_user_token')
+    except KeyError:
+        pass
+    st.session_state.clear()
+    st.session_state['force_logout'] = True
+    st.session_state['sys_toast'] = "👋 登出成功！安全連線已銷毀。"
+
+# ==========================================
+# 🔑 餅乾哨角：自動登入偵測機制 (修復自動登出的關鍵)
+# ==========================================
+# 1. 先抓出目前瀏覽器裡所有的餅乾
+all_cookies = cookie_manager.get_all()
+
+# 2. 判斷是否需要執行「餅乾救援」
+if 'logged_in' not in st.session_state and not st.session_state.get('force_logout'):
+    # 🚀 改用 get_all() 來檢查，比單獨 get 更能避開組件讀取失敗
+    if all_cookies and 'sys_user_token' in all_cookies:
+        stored_user = all_cookies['sys_user_token']
+        
+        # 進入資料庫查驗
+        conn = get_db_connection()
+        try:
+            safe_user_id = str(stored_user)
+            user_data = pd.read_sql_query("SELECT * FROM users WHERE login_id=%s", conn, params=(safe_user_id,))
+            
+            if not user_data.empty and user_data.iloc[0]['status'] not in ['待審核', '停權', '結訓凍結']:
+                # 把資料填回系統記憶體 (Session State)
+                for col in user_data.columns: 
+                    st.session_state[col] = user_data.iloc[0][col]
+                st.session_state['logged_in'] = True
+                
+                # 🎯 最重要的一步：成功識別後「立刻重啟一次網頁」
+                # 這能讓整個介面瞬間從「登入模式」切換成「首頁模式」，不會卡住。
+                st.rerun()
+        except Exception as e:
+            send_line_notify(f"🚨 【自動登入失敗】帳號 {stored_user} 嘗試自動登入時出錯：{e}")
+        finally:
+            release_connection(conn)
 
 if 'logged_in' not in st.session_state:
     st.markdown("##  大隊部準則管理系統")
