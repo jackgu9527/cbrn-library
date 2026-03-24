@@ -1192,7 +1192,7 @@ try:
                     u_status = unit_df.iloc[0]['帳號狀態']
                     status_emoji = "❄️(已凍結)" if u_status == '結訓凍結' else "🟢(啟用中)"
                     
-                    st.markdown(f"### 【{selected_unit}】待審核: {len(unit_df)} 筆")
+                    st.markdown(f"### 【{selected_unit}】  待審核: {len(unit_df)} 筆")
                     
                     owned_counts = []
                     c = conn.cursor()
