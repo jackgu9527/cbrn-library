@@ -554,24 +554,19 @@ try:
         # ======== 🟢 全局共用：個人設定修改面板 ========
         st.markdown("---")
         with st.expander("⚙️ 帳密設置", expanded=False):
-            if st.session_state.role == 'L1':
-                st.markdown("#### ⚙️ 個人設定", help="修改登入帳號與密碼。")
-                col_i, col_p = st.columns(2)
-                with col_i: new_id = st.text_input("登入帳號", value=st.session_state.login_id, key="daily_id")
-                with col_p: new_pwd = st.text_input("登入密碼", type="password", placeholder="若不修改請留空", key="daily_pw")
-            else:
-                st.markdown("#### ⚙️ 個人設定", help="修改登入帳號與密碼。")
-                new_title = st.session_state.title 
-                col_i, col_p = st.columns(2)
-                with col_i: new_id = st.text_input("登入帳號", value=st.session_state.login_id, key="daily_id")
-                with col_p: new_pwd = st.text_input("登入密碼", type="password", placeholder="若不修改請留空", key="daily_pw")
+            st.markdown("#### ⚙️ 個人設定", help="修改登入帳號與密碼。")
+            col_i, col_p = st.columns(2)
+            with col_i: new_id = st.text_input("登入帳號", value=st.session_state.login_id, key="daily_id")
+            with col_p: new_pwd = st.text_input("登入密碼", type="password", placeholder="若不修改請留空", key="daily_pw")
             
             if st.button("💾 儲存", key="save_daily_settings", type="primary"):
                 try:
                     c = conn.cursor()
                     uid = int(st.session_state.id)
                     final_id = new_id.strip() if new_id.strip() else st.session_state.login_id
-                    final_title = new_title.strip() if new_title.strip() else st.session_state.title
+                    
+                    # 💡 直接從系統記憶體抓取目前的 title，因為此介面並無開放修改 title
+                    final_title = st.session_state.title
                     
                     c.execute("SELECT COUNT(*) FROM users WHERE login_id=%s AND id!=%s", (final_id, uid))
                     if c.fetchone()[0] > 0: 
@@ -599,7 +594,7 @@ try:
                         st.success("✅ 設定已儲存！系統將重新載入...")
                         import time; time.sleep(1); st.session_state.clear(); st.rerun()
                 except Exception as e:
-                    conn.rollback()
+                    conn.rollback() # 🚀 防護網：錯誤時回滾
                     st.error(f"❌ 儲存失敗：{e}")
 
     # ======== 🟢 L2 專屬業務區 (加入車輛登載) ========
