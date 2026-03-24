@@ -1314,7 +1314,7 @@ try:
                                         st.write("")
                         
                         st.markdown("---")
-                        if st.button(f"💾 送出【{sel_ret_unit}】點收結果", type="primary", use_container_width=True):
+                        if st.button(f"💾 送出【{sel_ret_unit}】點收結果", type="primary", use_container_width=
                             to_stock_ids, to_borrowed_ids, to_lost_ids = [], [], []
                             
                             if unit_action == "✅ 全點收":
