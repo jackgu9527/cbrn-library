@@ -1293,7 +1293,7 @@ try:
                 if not return_df.empty:
                     # 🚀 UI 優化：消滅 Expander Hell，改用 Selectbox
                     ret_unit_list = return_df['班隊'].unique()
-                    sel_ret_unit = st.selectbox("📌 選擇要審核的班隊", ret_unit_list)
+                    sel_ret_unit = st.selectbox("📌 選擇要點收的班隊", ret_unit_list)
                     
                     unit_df = return_df[return_df['班隊'] == sel_ret_unit]
                     u_status = unit_df.iloc[0]['帳號狀態']
@@ -1349,7 +1349,7 @@ try:
                                             if u_status == '結訓凍結': to_lost_ids.append(row['id'])
                                             else: to_borrowed_ids.append(row['id'])
                                             
-                        # 🚀 把分好的清單，丟給對話框去彈出二次確認！
+                        # 🚀 這裡就是靈魂所在：把分好的清單，丟給對話框去彈出二次確認！
                         admin_return_approve_dialog(sel_ret_unit, to_stock_ids, to_borrowed_ids, to_lost_ids)
                 else:
                     st.success("目前各班隊皆無待準則歸還之準則！")
