@@ -402,8 +402,11 @@ if 'logged_in' not in st.session_state:
                     c.execute("SELECT COUNT(*) FROM users WHERE login_id=%s", (reg_id,))
                     if c.fetchone()[0] > 0: st.error("❌ 此帳號已被使用！")
                     else:
+                        # 🔒 資安升級：將明碼註冊轉換為 Hash 加密
+                        hashed_pw = generate_password_hash(reg_pw)
+                        
                         c.execute("INSERT INTO users (login_id, password, role, squadron, title, discharge_date, status) VALUES (%s,%s,%s,%s,%s,%s,%s)",
-                                  (reg_id, reg_pw, 'L2', reg_squadron, reg_title, reg_date.strftime('%Y-%m-%d'), '待審核'))
+                                  (reg_id, hashed_pw, 'L2', reg_squadron, reg_title, reg_date.strftime('%Y-%m-%d'), '待審核'))
                         conn.commit()
                         log_action(reg_id, "註冊申請", f"{reg_squadron} {reg_title} 提出註冊申請")
                         st.session_state['sys_toast'] = "✅ 註冊申請已送出！請等待幹部審核後即可登入。"
