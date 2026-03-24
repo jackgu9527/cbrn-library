@@ -218,12 +218,21 @@ def run_ghost_cleanup():
         today_str = datetime.now(tz_tw).strftime('%Y-%m-%d')
         now_time = datetime.now(tz_tw).strftime("%Y-%m-%d %H:%M:%S")
         
-        c.execute(f"SELECT id, login_id, title FROM users WHERE role='L2' AND discharge_date < '{today_str}' AND status='啟用'")
-        overdue_users = c.fetchall()
-        for u_id, u_login, u_title in overdue_users:
-            c.execute(f"UPDATE books SET status='歸還中' WHERE owner_id='{u_login}' AND status IN ('借閱中', '保留待領取', '少領異常')")
-            c.execute(f"UPDATE users SET status='結訓凍結' WHERE id={u_id}")
-            c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", (now_time, "SYSTEM", "結訓凍結", f"班隊 {u_title} 已結訓，自動代為歸還並凍結帳號。"))
+        # (大約在 180 行附近)
+        c.execute("SELECT id, login_id, title FROM users WHERE role='L2' AND status='結訓凍結'")
+        frozen_users = c.fetchall()
+        for f_id, f_login, f_title in frozen_users:
+            
+            # 🚀 終極淨化防呆：如果系統裡有「狀態已在庫，但所有人還是他」的隱形 Bug 紀錄，強制將其斷開綁定！
+            c.execute(f"UPDATE books SET owner_id='在庫' WHERE owner_id='{f_login}' AND status='在庫'")
+            
+            # 淨化完畢後，再來計算他身上是不是真的沒書了
+            c.execute(f"SELECT COUNT(*) FROM books WHERE owner_id='{f_login}'")
+            if c.fetchone()[0] == 0:
+                # 🚀 幽靈連帶刪除：砍掉該帳號名下綁定的車輛
+                c.execute(f"DELETE FROM vehicles WHERE account_id='{f_login}'")
+                c.execute(f"DELETE FROM users WHERE id={f_id}")
+                c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", (now_time, "SYSTEM", "帳號註銷", f"班隊 {f_title} 準則已結清，自動刪除凍結帳號與所屬車輛資料。"))
                 
         c.execute("SELECT id, login_id, title FROM users WHERE role='L2' AND status='結訓凍結'")
         frozen_users = c.fetchall()
@@ -1213,13 +1222,13 @@ try:
 
         elif menu == "📥 準則歸還審核":
             st.subheader("📥 準則歸還與遺失")
-            ret_tabs = st.tabs(["📥 待點收清單", "🚨 遺失準則"])
+            ret_tabs = st.tabs(["📥 準則歸還清單", "🚨 遺失準則"])
             
             with ret_tabs[0]:
                 return_df = pd.read_sql_query(f"SELECT b.id, u.title as 班隊, b.book_name as 書名, b.serial_number as 序號, b.owner_id, u.status as 帳號狀態 FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.status='歸還中' AND u.squadron IN ({sq_in_clause}) ORDER BY u.title, b.book_name", conn)
                 
                 if not return_df.empty:
-                    st.subheader("📥 待點收清單", help="點開【班隊】👉 點開【準則名稱】👉 處理【個別序號】。\n\n**智慧踢退邏輯**：一般帳號踢退將退回「借閱中」，凍結帳號踢退將自動轉入「遺失待賠」。")
+                    st.subheader("📥 準則歸還清單", help="點開【班隊】👉 點開【準則名稱】👉 處理【個別序號】。\n\n踢退將退回「借閱中」，凍結帳號踢退將轉入「遺失準則」。")
                     
                     unit_actions, book_actions, item_actions = {}, {}, {}
                     
@@ -1229,7 +1238,7 @@ try:
                         status_emoji = "❄️(已凍結)" if u_status == '結訓凍結' else "🟢(啟用中)"
                         
                         with st.expander(f"🎓 班隊：【{unit_name}】 ｜ 狀態: {status_emoji} ｜ 待點收: {len(unit_df)} 本"):
-                            unit_actions[unit_name] = st.radio(f"【{unit_name}】批次處理", ["🔽", "✅ 班隊全數點收", "❌ 全踢退"], horizontal=True, key=f"u_rad_{unit_name}")
+                            unit_actions[unit_name] = st.radio(f"【{unit_name}】批次處理", ["🔽","✅ 全審核","❌ 全踢退"], horizontal=True, key=f"u_rad_{unit_name}")
                             
                             if unit_actions[unit_name] == "🔽":
                                 st.divider()
@@ -1238,25 +1247,25 @@ try:
                                     u_b_key = f"{unit_name}_{b_name}"
                                     
                                     with st.expander(f"📘 {b_name} (共 {len(b_df)} 本)"):
-                                        book_actions[u_b_key] = st.radio(f"{b_name} 處理", ["📋 逐本處理", "✅ 此書全點收", "❌ 此書全踢退"], horizontal=True, key=f"b_rad_{u_b_key}")
+                                        book_actions[u_b_key] = st.radio(f"{b_name} 處理", ["📋","✅ 全審核","❌ 全踢退"], horizontal=True, key=f"b_rad_{u_b_key}")
                                         
-                                        if book_actions[u_b_key] == "📋 逐本處理":
+                                        if book_actions[u_b_key] == "📋":
                                             st.markdown("---")
                                             for _, row in b_df.iterrows():
                                                 c1, c2 = st.columns([5, 5])
                                                 c1.markdown(f"🔖 序號: `{row['序號']}`")
-                                                item_actions[row['id']] = c2.radio("操作", ["✅ 點收", "❌ 踢退"], horizontal=True, key=f"ret_item_{row['id']}", label_visibility="collapsed")
+                                                item_actions[row['id']] = c2.radio("操作", ["✅ 審核", "❌ 踢退"], horizontal=True, key=f"ret_item_{row['id']}", label_visibility="collapsed")
                                             st.write("")
                                             
                     st.markdown("---")
-                    if st.button("💾 送出點收結果", type="primary", use_container_width=True):
+                    if st.button("💾 送出審核結果", type="primary", use_container_width=True):
                         to_stock_ids, to_borrowed_ids, to_lost_ids = [], [], []
                         
                         for unit_name in return_df['班隊'].unique():
                             unit_df = return_df[return_df['班隊'] == unit_name]
                             u_status = unit_df.iloc[0]['帳號狀態']
                             
-                            if unit_actions[unit_name] == "✅ 班隊全數點收":
+                            if unit_actions[unit_name] == "✅ 全審核":
                                 to_stock_ids.extend(unit_df['id'].tolist())
                             elif unit_actions[unit_name] == "❌ 全踢退":
                                 if u_status == '結訓凍結': to_lost_ids.extend(unit_df['id'].tolist())
@@ -1266,9 +1275,9 @@ try:
                                     b_df = unit_df[unit_df['書名'] == b_name]
                                     u_b_key = f"{unit_name}_{b_name}"
                                     
-                                    if book_actions[u_b_key] == "✅ 此書全點收":
+                                    if book_actions[u_b_key] == "✅ 全審核":
                                         to_stock_ids.extend(b_df['id'].tolist())
-                                    elif book_actions[u_b_key] == "❌ 此書全踢退":
+                                    elif book_actions[u_b_key] == "❌ 全踢退":
                                         if u_status == '結訓凍結': to_lost_ids.extend(b_df['id'].tolist())
                                         else: to_borrowed_ids.extend(b_df['id'].tolist())
                                     else:
@@ -1312,13 +1321,13 @@ try:
                             
                         if has_action:
                             conn.commit()
-                            st.session_state['sys_toast'] ="✅ 審核點收完成！"
+                            st.session_state['sys_toast'] ="✅ 審核完成！"
                             st.rerun()
                 else:
                     st.success("目前各班隊皆無待準則歸還之準則！")
 
             with ret_tabs[1]:
-                st.subheader("🚨 遺失準則 (待賠償/待尋獲)", help="每本遺失準則皆為獨立卡片，尋獲或完成賠償時，點擊右側按鈕即可單獨結案退庫！")
+                st.subheader("🚨 遺失準則", help="尋獲時，點擊右側按鈕即可結案！")
                 lost_df = pd.read_sql_query(f"SELECT b.id, u.title as 班隊, b.book_name as 書名, b.serial_number as 序號 FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.status='遺失待賠' AND u.squadron IN ({sq_in_clause}) ORDER BY u.title, b.book_name", conn)
                 
                 if not lost_df.empty:
@@ -1330,7 +1339,7 @@ try:
                                 st.markdown(f"🎓 **班隊：** `{row['班隊']}`  \n📘 **書名：** `{row['書名']}`  \n🔖 **序號：** `{row['序號']}`")
                             with col2:
                                 st.write("")
-                                if st.button("✅ 尋獲/結案", key=f"lost_res_{l_id}", type="primary", use_container_width=True):
+                                if st.button("✅ 尋獲", key=f"lost_res_{l_id}", type="primary", use_container_width=True):
                                     c = conn.cursor()
                                     now_time = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S")
                                     c.execute(f"UPDATE books SET status='在庫', owner_id='在庫' WHERE id={l_id}")
@@ -1339,17 +1348,17 @@ try:
                                     st.session_state['sys_toast'] ="✅ 結案成功！已退回庫房。"
                                     st.rerun()
                 else:
-                    st.success("✨ 準則妥善率 100%！目前中隊無任何遺失待賠之準則！")
+                    st.success("✨ 準則妥善率 100%！目前中隊無任何遺失之準則！")
 
         elif menu in ["💬 回報專區", "回報專區"]:
             st.subheader("💬 Line 報表自動生成器")
-            line_tabs = st.tabs(["🚚 借還動態彙總", "📦 準則總清點(含遺失)"])
+            line_tabs = st.tabs(["🚚 準則借還訊息生成", "📦 準則清點"])
             
             with line_tabs[0]:
-                st.subheader("🚚 借還動態彙總", help="產出今日動態物流清單。點擊黑框右上角「📋」複製。")
+                st.subheader("🚚 準則借還訊息生成", help="生成當下準則借還訊息，點擊生成訊息黑框右上角「📋」複製。")
                 st.markdown(f"📍 **目前產出中隊：** `{target_sq}`")
                 
-                dyn_mode = st.radio("🎯 回報範圍", ["整個中隊彙總", "只回報特定班隊"], horizontal=True, key="dyn_mode")
+                dyn_mode = st.radio("🎯 回報範圍", ["中隊彙總", "特定班隊"], horizontal=True, key="dyn_mode")
                 dyn_selected_units = []
                 if dyn_mode == "只回報特定班隊":
                     c = conn.cursor()
@@ -1357,7 +1366,7 @@ try:
                     avail_units = [row[0] for row in c.fetchall()]
                     dyn_selected_units = st.multiselect("📌 請加入要回報的班隊 (可多選)：", avail_units, key="dyn_units")
                     
-                if st.button("🚀 生成借還動態報表", type="primary"):
+                if st.button("🚀 生成準則借還訊息", type="primary"):
                     unit_filter = f" AND u.title IN ('{chr(39).join(dyn_selected_units)}')" if dyn_mode == "只回報特定班隊" and dyn_selected_units else ""
                     
                     req_df = pd.read_sql_query(f"SELECT u.title as unit, br.book_name, SUM(br.quantity) as qty FROM borrow_requests br JOIN users u ON br.login_id = u.login_id WHERE u.squadron IN ({sq_in_clause}) AND br.status='待審核'{unit_filter} GROUP BY u.title, br.book_name", conn)
@@ -1366,14 +1375,14 @@ try:
                     
                     now = datetime.now(timezone(timedelta(hours=8)))
                     tw_wd = ["一", "二", "三", "四", "五", "六", "日"][now.weekday()]
-                    msg = f"報告，{target_sq}借還書清單\n時間：{now.month}/{now.day}（{tw_wd}）\n\n"
+                    msg = f"劉姐好，{target_sq}借還書清單\n時間：{now.month}/{now.day}（{tw_wd}）\n\n"
                     
                     all_units = set()
                     if not req_df.empty: all_units.update(req_df['unit'].tolist())
                     if not res_df.empty: all_units.update(res_df['unit'].tolist())
                     if not ret_df.empty: all_units.update(ret_df['unit'].tolist())
                     
-                    if not all_units: msg += "今日無待辦物流。\n"
+                    if not all_units: msg += "無借還書清單。\n"
                     else:
                         for unit in sorted(list(all_units)):
                             msg += f"==== 【{unit}】 ====\n【申請借閱】：\n"
@@ -1395,10 +1404,10 @@ try:
                     st.code(msg.strip(), language="text")
 
             with line_tabs[1]:
-                st.subheader("📦 準則總清點(含遺失)", help="產出中隊外散準則之總清單。點擊黑框右上角「📋」複製。")
+                st.subheader("📦 準則清點", help="生成當下準則清點訊息，點擊生成訊息黑框右上角「📋」複製。")
                 st.markdown(f"📍 **目前產出中隊：** `{target_sq}`")
                     
-                inv_mode = st.radio("🎯 回報範圍", ["整個中隊彙總", "只回報特定班隊"], horizontal=True, key="inv_mode")
+                inv_mode = st.radio("🎯 回報範圍", ["中隊彙總", "特定班隊"], horizontal=True, key="inv_mode")
                 inv_selected_units = []
                 if inv_mode == "只回報特定班隊":
                     c = conn.cursor()
@@ -1406,16 +1415,16 @@ try:
                     avail_units = [row[0] for row in c.fetchall()]
                     inv_selected_units = st.multiselect("📌 請加入要回報的班隊 (可多選)：", avail_units, key="inv_units")
                     
-                if st.button("🚀 生成準則總清點報表", type="primary"):
+                if st.button("🚀 生成準則清點訊息", type="primary"):
                     unit_filter = f" AND u.title IN ('{chr(39).join(inv_selected_units)}')" if inv_mode == "只回報特定班隊" and inv_selected_units else ""
                         
                     inv_df = pd.read_sql_query(f"SELECT u.title as unit, b.book_name, b.status, COUNT(b.id) as qty FROM books b JOIN users u ON b.owner_id = u.login_id WHERE u.squadron IN ({sq_in_clause}) AND b.status IN ('借閱中', '歸還中', '遺失待賠', '少領異常') {unit_filter} GROUP BY u.title, b.book_name, b.status", conn)
                     
                     now = datetime.now(timezone(timedelta(hours=8)))
                     tw_wd = ["一", "二", "三", "四", "五", "六", "日"][now.weekday()]
-                    inv_msg = f"報告，{target_sq}準則清點總表\n時間：{now.month}/{now.day}（{tw_wd}）\n\n"
+                    inv_msg = f"{target_sq}準則清點總表\n時間：{now.month}/{now.day}（{tw_wd}）\n\n"
                     
-                    if inv_df.empty: inv_msg += "目前無外散之準則。\n"
+                    if inv_df.empty: inv_msg += "目前無借閱任何準則。\n"
                     else:
                         inv_df = apply_shadow_sort(inv_df, has_unit=True)
                         for unit in inv_df['unit'].unique():
@@ -1428,7 +1437,7 @@ try:
 
     # ======== 🟢 跨階級共用功能 (加入車輛查詢) ========
     elif menu in ["綜合查詢", "🔍 綜合查詢"]:
-        st.header("🔍 綜合查詢", help="可透過「查書名」、「查序號」或「查車輛」精準追蹤資料。")
+        st.header("🔍 綜合查詢", help="「查書名」、「查序號」、「查車輛」都可輸入關鍵字搜尋。")
         search_type = st.radio("查詢模式", ["查書名", "查序號", "查車輛"], horizontal=True)
 
         keyword = st.text_input("請輸入關鍵字")
@@ -1515,8 +1524,8 @@ try:
                                 st.markdown("<div style='margin-bottom: 15px;'></div>", unsafe_allow_html=True)
 
     elif menu in ["操作紀錄", "🗂️ 操作紀錄"]:
-        st.header("🗂️ 系統操作紀錄", help="追蹤全系統的借還、審核、設定異動與異常處理等歷史軌跡。支援關鍵字模糊搜尋 (如輸入：姓名、班隊名稱、或特定動作)。")
-        search_keyword = st.text_input("🔍 搜尋紀錄 (可輸入班隊、動作、準則名稱等)", placeholder="例如：借閱、M2A2、第一中隊...")
+        st.header("🗂️ 系統操作紀錄", help="追蹤借還、審核、設定異動與異常處理等歷史紀錄。支援關鍵字搜尋 (如輸入：姓名、班隊名稱、或特定動作)。")
+        search_keyword = st.text_input("🔍 搜尋紀錄 (可輸入班隊、動作、準則名稱等)", placeholder="例如：借閱、歸還、異常...")
         
         log_query = """
             SELECT a.timestamp as 時間, 
