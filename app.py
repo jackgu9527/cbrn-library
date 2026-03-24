@@ -1353,7 +1353,7 @@ try:
                         with st.container(border=True):
                             col1, col2 = st.columns([7, 3])
                             with col1:
-                                st.markdown(f"🎓 **班隊：** `{row['班隊']}`  \n📘 **書名：** `{row['書名']}`  \n🔖 **序號：** `{row['序號']}`")
+                                st.markdown(f"{row['班隊']}`  \n📘 **書名：** `{row['書名']}`  \n🔖 **序號：** `{row['序號']}`")
                             with col2:
                                 st.write("")
                                 if st.button("✅ 尋獲", key=f"lost_res_{l_id}", type="primary", use_container_width=True):
