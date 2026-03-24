@@ -1301,7 +1301,7 @@ try:
                     
                     st.markdown(f"### 【{sel_ret_unit}】待歸還: {len(unit_df)} 本")
                     
-                    unit_action = st.radio("隱藏的標題", ["🔽 展開", "✅ 全審核", "❌ 全踢退"], horizontal=True, key=f"u_ret_rad_{sel_ret_unit}", label_visibility="collapsed")
+                    unit_action = st.radio("隱藏的標題", ["🔽 展開個別處理", "✅ 班隊全數點收", "❌ 班隊全數踢退"], horizontal=True, key=f"u_ret_rad_{sel_ret_unit}", label_visibility="collapsed")
                     
                     book_actions, item_actions = {}, {}
                     
@@ -1312,23 +1312,23 @@ try:
                             u_b_key = f"{sel_ret_unit}_{b_name}"
                             
                             with st.expander(f"📘 {b_name} (共 {len(b_df)} 本)"):
-                                book_actions[u_b_key] = st.radio(f"{b_name} 處理", ["🔽 展開", "✅ 全審核", "❌ 全踢退"], horizontal=True, key=f"b_rad_{u_b_key}")
+                                book_actions[u_b_key] = st.radio(f"{b_name} 處理", ["🔽 展開", "✅ 此書全點收", "❌ 此書全踢退"], horizontal=True, key=f"b_rad_{u_b_key}")
                                 
                                 if book_actions[u_b_key] == "🔽 展開":
                                     st.markdown("---")
                                     for _, row in b_df.iterrows():
                                         c1, c2 = st.columns([5, 5])
                                         c1.markdown(f"🔖 序號: `{row['序號']}`")
-                                        item_actions[row['id']] = c2.radio("操作", ["✅ 審核", "❌ 踢退"], horizontal=True, key=f"ret_item_{row['id']}", label_visibility="collapsed")
+                                        item_actions[row['id']] = c2.radio("操作", ["✅ 點收", "❌ 踢退"], horizontal=True, key=f"ret_item_{row['id']}", label_visibility="collapsed")
                                     st.write("")
                     
                     st.markdown("---")
                     if st.button(f"💾 送出【{sel_ret_unit}】點收結果", type="primary", use_container_width=True):
                         to_stock_ids, to_borrowed_ids, to_lost_ids = [], [], []
                         
-                        if unit_action == "✅ 全審核":
+                        if unit_action == "✅ 班隊全數點收":
                             to_stock_ids.extend(unit_df['id'].tolist())
-                        elif unit_action == "❌ 全踢退":
+                        elif unit_action == "❌ 班隊全數踢退":
                             if u_status == '結訓凍結': to_lost_ids.extend(unit_df['id'].tolist())
                             else: to_borrowed_ids.extend(unit_df['id'].tolist())
                         else:
@@ -1336,15 +1336,15 @@ try:
                                 b_df = unit_df[unit_df['書名'] == b_name]
                                 u_b_key = f"{sel_ret_unit}_{b_name}"
                                 
-                                if book_actions[u_b_key] == "✅ 全審核":
+                                if book_actions[u_b_key] == "✅ 此書全點收":
                                     to_stock_ids.extend(b_df['id'].tolist())
-                                elif book_actions[u_b_key] == "❌ 全踢退":
+                                elif book_actions[u_b_key] == "❌ 此書全踢退":
                                     if u_status == '結訓凍結': to_lost_ids.extend(b_df['id'].tolist())
                                     else: to_borrowed_ids.extend(b_df['id'].tolist())
                                 else:
                                     for _, row in b_df.iterrows():
                                         i_act = item_actions[row['id']]
-                                        if i_act == "✅ 審核": to_stock_ids.append(row['id'])
+                                        if i_act == "✅ 點收": to_stock_ids.append(row['id'])
                                         else:
                                             if u_status == '結訓凍結': to_lost_ids.append(row['id'])
                                             else: to_borrowed_ids.append(row['id'])
@@ -1353,38 +1353,6 @@ try:
                         admin_return_approve_dialog(sel_ret_unit, to_stock_ids, to_borrowed_ids, to_lost_ids)
                 else:
                     st.success("目前各班隊皆無待準則歸還之準則！")
-                                        
-                        st.markdown("---")
-                        if st.button(f"💾 送出【{sel_ret_unit}】審核結果", type="primary", use_container_width=True):
-                            to_stock_ids, to_borrowed_ids, to_lost_ids = [], [], []
-                            
-                            if unit_action == "✅ 全審核":
-                                to_stock_ids.extend(unit_df['id'].tolist())
-                            elif unit_action == "❌ 全踢退":
-                                if u_status == '結訓凍結': to_lost_ids.extend(unit_df['id'].tolist())
-                                else: to_borrowed_ids.extend(unit_df['id'].tolist())
-                            else:
-                                for b_name in unit_df['書名'].unique():
-                                    b_df = unit_df[unit_df['書名'] == b_name]
-                                    u_b_key = f"{sel_ret_unit}_{b_name}"
-                                    
-                                    if book_actions[u_b_key] == "✅ 全審核":
-                                        to_stock_ids.extend(b_df['id'].tolist())
-                                    elif book_actions[u_b_key] == "❌ 全踢退":
-                                        if u_status == '結訓凍結': to_lost_ids.extend(b_df['id'].tolist())
-                                        else: to_borrowed_ids.extend(b_df['id'].tolist())
-                                    else:
-                                        for _, row in b_df.iterrows():
-                                            i_act = item_actions[row['id']]
-                                            if i_act == "✅ 審核": to_stock_ids.append(row['id'])
-                                            else:
-                                                if u_status == '結訓凍結': to_lost_ids.append(row['id'])
-                                                else: to_borrowed_ids.append(row['id'])
-                                                
-                            # 🚀 這裡就是靈魂所在：把分好的清單，丟給對話框去彈出二次確認！
-                            admin_return_approve_dialog(sel_ret_unit, to_stock_ids, to_borrowed_ids, to_lost_ids)
-                    else:
-                        st.success("目前各班隊皆無待準則歸還之準則！")
 
                 with ret_tabs[1]:
                     st.subheader("🚨 遺失準則", help="尋獲時，點擊右側按鈕即可結案！")
