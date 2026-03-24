@@ -1284,8 +1284,8 @@ try:
                     st.success("目前無異常少領通報。")
 
             elif menu == "📥 準則歸還審核":
-            st.subheader("📥 準則歸還與遺失")
-            ret_tabs = st.tabs(["📥 準則歸還清單", "🚨 遺失準則"])
+                st.subheader("📥 準則歸還與遺失")
+                ret_tabs = st.tabs(["📥 準則歸還清單", "🚨 遺失準則"])
             
             with ret_tabs[0]:
                 return_df = pd.read_sql_query(f"SELECT b.id, u.title as 班隊, b.book_name as 書名, b.serial_number as 序號, b.owner_id, u.status as 帳號狀態 FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.status='歸還中' AND u.squadron IN ({sq_in_clause}) ORDER BY u.title, b.book_name", conn)
