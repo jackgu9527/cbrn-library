@@ -3,13 +3,19 @@ import psycopg2
 import pandas as pd
 from datetime import datetime, timezone, timedelta
 import requests
+import json
 
 # 取得環境變數 (GitHub Secrets 會提供)
 DATABASE_URL = os.environ.get('DATABASE_URL')
 LINE_TOKEN = os.environ.get('LINE_CHANNEL_ACCESS_TOKEN')
 LINE_TARGET_ID = os.environ.get('LINE_TARGET_ID')
 
+# 🚀 升級版：加上除錯雷達的發送函數
 def send_line_message(message):
+    if not LINE_TOKEN or not LINE_TARGET_ID:
+        print("❌ 錯誤：缺少 LINE Token 或 Target ID。")
+        return
+
     headers = {
         "Authorization": f"Bearer {LINE_TOKEN}",
         "Content-Type": "application/json"
@@ -18,18 +24,40 @@ def send_line_message(message):
         "to": LINE_TARGET_ID,
         "messages": [{"type": "text", "text": message}]
     }
-    requests.post("https://api.line.me/v2/bot/message/push", headers=headers, json=data)
+    
+    print(f"📡 準備發射飛彈至 ID: {LINE_TARGET_ID[:5]}... (前5碼)")
+    
+    try:
+        response = requests.post(
+            "https://api.line.me/v2/bot/message/push", 
+            headers=headers, 
+            data=json.dumps(data)
+        )
+        # 🚨 這行是關鍵：印出 LINE 伺服器的回應狀態
+        print(f"🎯 LINE 伺服器回應狀態碼: {response.status_code}")
+        if response.status_code != 200:
+            print(f"❌ 發送失敗！錯誤訊息: {response.text}")
+        else:
+            print("✅ 戰情報表已成功發送 (LINE 已確認接收)！")
+    except Exception as e:
+        print(f"💥 發送過程發生未預期爆炸: {e}")
 
 def main():
-    if not DATABASE_URL or not LINE_TOKEN or not LINE_TARGET_ID:
-        print("缺少必要的環境變數 (Secrets)，停止執行。")
+    print(f"⏳ 開始執行定時戰情掃描... (台灣時間: {datetime.now(timezone(timedelta(hours=8))).strftime('%H:%M:%S')})")
+    
+    if not DATABASE_URL:
+        print("❌ 錯誤：缺少 DATABASE_URL Secrets。")
         return
 
     # 連線資料庫
-    conn = psycopg2.connect(DATABASE_URL)
+    try:
+        conn = psycopg2.connect(DATABASE_URL)
+    except Exception as e:
+        print(f"❌ 資料庫連線失敗: {e}")
+        return
     
     # 這裡設定長官要監控的中隊清單
-    target_squadrons = ['學員一中隊', '學員二中隊', '學生一中隊', '學生二中隊', '聯合中隊①', '聯合中隊②']
+    target_squadrons = ['學員一中隊', '學員二中隊', '學生一中隊', '學生二中隊', '聯合中隊①', '聯合中隊②', '大隊部']
     
     now = datetime.now(timezone(timedelta(hours=8)))
     msg = f"準則管理系統通報\n時間：{now.strftime('%m/%d %H:%M')}\n\n"
@@ -60,10 +88,8 @@ def main():
         sq_total = c_reg + c_bor + c_ret + c_res + c_abn
         total_actions_needed += sq_total
         
-        msg += f"{sq}\n"
-        if sq_total == 0:
-            msg += "無\n\n"
-        else:
+        if sq_total > 0:
+            msg += f"{sq}\n"
             msg += f"新增註冊開通：{f'{c_reg}件' if c_reg > 0 else '無'}\n"
             msg += f"待審核借閱：{f'{c_bor}件' if c_bor > 0 else '無'}\n"
             msg += f"待點收歸還：{f'{c_ret}件' if c_ret > 0 else '無'}\n"
@@ -74,12 +100,11 @@ def main():
 
     # 🚀 終極火力保險：如果所有中隊加起來都是 0 件，直接結束，絕對不發訊息！
     if total_actions_needed == 0:
-        print("目前無任何待辦事項，保持靜默。")
+        print("💡 偵察結果：目前指定的各中隊皆無待辦事項，程式自動靜默。")
         return
         
     # 如果有資料，發射！
     send_line_message(msg.strip())
-    print("戰情報表已成功發送！")
 
 if __name__ == "__main__":
     main()
