@@ -1290,20 +1290,20 @@ try:
                         u_status = unit_df.iloc[0]['帳號狀態']
                         status_emoji = "❄️(已凍結)" if u_status == '結訓凍結' else "🟢(啟用中)"
                         
-                        st.markdown(f"### 【{sel_ret_unit}】待歸還: {len(unit_df)} 本 ｜ 狀態: {status_emoji}")
+                        st.markdown(f"### 【{sel_ret_unit}】待歸還: {len(unit_df)} 本")
                         
-                        unit_action = st.radio("隱藏標題", ["🔽 展開個別處理", "✅ 班隊全數點收", "❌ 班隊全數踢退"], horizontal=True, key=f"u_ret_rad_{sel_ret_unit}", label_visibility="collapsed")
+                        unit_action = st.radio("隱藏標題", ["🔽 展開", "✅ 全點收", "❌ 全踢退"], horizontal=True, key=f"u_ret_rad_{sel_ret_unit}", label_visibility="collapsed")
                         
                         book_actions, item_actions = {}, {}
                         
-                        if unit_action == "🔽 展開個別處理":
+                        if unit_action == "🔽 展開":
                             st.divider()
                             for b_name in unit_df['書名'].unique():
                                 b_df = unit_df[unit_df['書名'] == b_name]
                                 u_b_key = f"{sel_ret_unit}_{b_name}"
                                 
                                 with st.expander(f"📘 {b_name} (共 {len(b_df)} 本)"):
-                                    book_actions[u_b_key] = st.radio(f"{b_name} 處理", ["🔽 展開", "✅ 此書全點收", "❌ 此書全踢退"], horizontal=True, key=f"b_rad_{u_b_key}")
+                                    book_actions[u_b_key] = st.radio(f"{b_name} 處理", ["🔽 展開", "✅ 全點收", "❌ 全踢退"], horizontal=True, key=f"b_rad_{u_b_key}")
                                     
                                     if book_actions[u_b_key] == "🔽 展開":
                                         st.markdown("---")
@@ -1317,9 +1317,9 @@ try:
                         if st.button(f"💾 送出【{sel_ret_unit}】點收結果", type="primary", use_container_width=True):
                             to_stock_ids, to_borrowed_ids, to_lost_ids = [], [], []
                             
-                            if unit_action == "✅ 班隊全數點收":
+                            if unit_action == "✅ 全點收":
                                 to_stock_ids.extend(unit_df['id'].tolist())
-                            elif unit_action == "❌ 班隊全數踢退":
+                            elif unit_action == "❌ 全踢退":
                                 if u_status == '結訓凍結': to_lost_ids.extend(unit_df['id'].tolist())
                                 else: to_borrowed_ids.extend(unit_df['id'].tolist())
                             else:
@@ -1327,9 +1327,9 @@ try:
                                     b_df = unit_df[unit_df['書名'] == b_name]
                                     u_b_key = f"{sel_ret_unit}_{b_name}"
                                     
-                                    if book_actions[u_b_key] == "✅ 此書全點收":
+                                    if book_actions[u_b_key] == "✅ 全點收":
                                         to_stock_ids.extend(b_df['id'].tolist())
-                                    elif book_actions[u_b_key] == "❌ 此書全踢退":
+                                    elif book_actions[u_b_key] == "❌ 全踢退":
                                         if u_status == '結訓凍結': to_lost_ids.extend(b_df['id'].tolist())
                                         else: to_borrowed_ids.extend(b_df['id'].tolist())
                                     else:
