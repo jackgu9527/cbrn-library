@@ -447,8 +447,7 @@ try:
         with st.expander("⚙️ 個人帳號與資料設置", expanded=False):
             if st.session_state.role == 'L1':
                 st.markdown("#### ⚙️ 個人設定", help="幹部可隨時修改您的顯示職稱、登入帳號與密碼。")
-                col_t, col_i, col_p = st.columns(3)
-                with col_t: new_title = st.text_input("職務", value=st.session_state.title, key="daily_title")
+                col_i, col_p = st.columns(2)
                 with col_i: new_id = st.text_input("登入帳號", value=st.session_state.login_id, key="daily_id")
                 with col_p: new_pwd = st.text_input("登入密碼", type="password", placeholder="若不修改請留空", key="daily_pw")
             else:
