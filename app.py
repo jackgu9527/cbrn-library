@@ -218,7 +218,15 @@ def run_ghost_cleanup():
         today_str = datetime.now(tz_tw).strftime('%Y-%m-%d')
         now_time = datetime.now(tz_tw).strftime("%Y-%m-%d %H:%M:%S")
         
-        # (大約在 180 行附近)
+        # 🛑 步驟一：先抓出「已逾期但尚未凍結」的帳號，強制轉為歸還中並凍結 (你剛剛不小心刪掉的這段)
+        c.execute(f"SELECT id, login_id, title FROM users WHERE role='L2' AND discharge_date < '{today_str}' AND status='啟用'")
+        overdue_users = c.fetchall()
+        for u_id, u_login, u_title in overdue_users:
+            c.execute(f"UPDATE books SET status='歸還中' WHERE owner_id='{u_login}' AND status IN ('借閱中', '保留待領取', '少領異常')")
+            c.execute(f"UPDATE users SET status='結訓凍結' WHERE id={u_id}")
+            c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", (now_time, "SYSTEM", "結訓凍結", f"班隊 {u_title} 已結訓，自動代為歸還並凍結帳號。"))
+                
+        # 🛑 步驟二：抓出所有「結訓凍結」的帳號，準備進行淨化與超渡
         c.execute("SELECT id, login_id, title FROM users WHERE role='L2' AND status='結訓凍結'")
         frozen_users = c.fetchall()
         for f_id, f_login, f_title in frozen_users:
@@ -233,19 +241,11 @@ def run_ghost_cleanup():
                 c.execute(f"DELETE FROM vehicles WHERE account_id='{f_login}'")
                 c.execute(f"DELETE FROM users WHERE id={f_id}")
                 c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", (now_time, "SYSTEM", "帳號註銷", f"班隊 {f_title} 準則已結清，自動刪除凍結帳號與所屬車輛資料。"))
-                
-        c.execute("SELECT id, login_id, title FROM users WHERE role='L2' AND status='結訓凍結'")
-        frozen_users = c.fetchall()
-        for f_id, f_login, f_title in frozen_users:
-            c.execute(f"SELECT COUNT(*) FROM books WHERE owner_id='{f_login}'")
-            if c.fetchone()[0] == 0:
-                # 🚀 幽靈連帶刪除：砍掉該帳號名下綁定的車輛
-                c.execute(f"DELETE FROM vehicles WHERE account_id='{f_login}'")
-                c.execute(f"DELETE FROM users WHERE id={f_id}")
-                c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", (now_time, "SYSTEM", "帳號註銷", f"班隊 {f_title} 準則已結清，自動刪除凍結帳號與所屬車輛資料。"))
                     
+        # 🛑 步驟三：清理七天前的歷史操作紀錄
         seven_days_ago = (datetime.now(tz_tw) - timedelta(days=7)).strftime('%Y-%m-%d %H:%M:%S')
         c.execute(f"DELETE FROM action_logs WHERE timestamp < '{seven_days_ago}' AND user_id NOT IN (SELECT login_id FROM users) AND user_id != 'SYSTEM'")
+        
         conn.commit()
     except Exception:
         pass
