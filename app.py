@@ -1201,7 +1201,7 @@ try:
                         owned_counts.append(c.fetchone()[0])
                     unit_df['已持有數'] = owned_counts
                     
-                    unit_action = st.radio(f"【{selected_unit}】批次處理", ["🔽 展開個別處理","✅ 全審核","❌ 全踢退"], horizontal=True, key=f"u_req_{selected_unit}")
+                    unit_action = st.radio(f"【{selected_unit}】批次處理", ["🔽 展開","✅ 全審核","❌ 全踢退"], horizontal=True, key=f"u_req_{selected_unit}")
                     
                     final_decisions = {}
                     book_actions = {}
@@ -1216,10 +1216,10 @@ try:
                             req_id, b_name, req_qty, owned = row['單號'], row['書名'], row['申請數量'], row['已持有數']
                             draw_status_card(b_name, req_qty, '申請中', f"已持有: {owned} 本")
                             
-                            book_actions[req_id] = st.radio(f"處理 {req_id}", ["📋 調整數量","✅ 審核此項","❌ 踢退此項"], horizontal=True, key=f"b_req_rad_{req_id}", label_visibility="collapsed")
+                            book_actions[req_id] = st.radio(f"處理 {req_id}", ["📋 調整數量","✅審核","❌踢退"], horizontal=True, key=f"b_req_rad_{req_id}", label_visibility="collapsed")
                             
-                            if book_actions[req_id] == "✅ 審核此項": final_decisions[req_id] = req_qty
-                            elif book_actions[req_id] == "❌ 踢退此項": final_decisions[req_id] = 0
+                            if book_actions[req_id] == "✅審核": final_decisions[req_id] = req_qty
+                            elif book_actions[req_id] == "❌踢退": final_decisions[req_id] = 0
                             else:
                                 final_decisions[req_id] = st.number_input(f"修改【{b_name}】核准數量", min_value=0, max_value=int(req_qty), value=int(req_qty), key=f"num_{req_id}")
                     
@@ -1301,11 +1301,11 @@ try:
                         
                         st.markdown(f"### 【{sel_ret_unit}】｜待歸還: {len(unit_df)} 本 ｜ 狀態: {status_emoji}")
                         
-                        unit_action = st.radio(f"【{sel_ret_unit}】批次處理", ["🔽 展開個別處理","✅ 班隊全數點收","❌ 班隊全數踢退"], horizontal=True, key=f"u_rad_{sel_ret_unit}")
+                        unit_action = st.radio(f"【{sel_ret_unit}】批次處理", ["🔽 展開","✅ 班隊全數點收","❌ 班隊全數踢退"], horizontal=True, key=f"u_rad_{sel_ret_unit}")
                         
                         book_actions, item_actions = {}, {}
                         
-                        if unit_action == "🔽 展開個別處理":
+                        if unit_action == "🔽 展開":
                             st.divider()
                             for b_name in unit_df['書名'].unique():
                                 b_df = unit_df[unit_df['書名'] == b_name]
