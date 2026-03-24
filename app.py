@@ -7,8 +7,9 @@ import psycopg2
 from psycopg2 import pool
 from psycopg2 import IntegrityError
 import warnings
-import extra_streamlit_components as stx  # 🚀 新增餅乾套件
-import requests  # 🚀 新增 LINE 通訊模組
+import extra_streamlit_components as stx  
+import requests  
+import re  # 🚀 新增正則表達式，用於終極防呆清理
 
 # 關閉 Pandas 對於未嚴格使用 SQLAlchemy 的警告
 warnings.filterwarnings('ignore', category=UserWarning, module='pandas')
@@ -37,7 +38,6 @@ if st.session_state.get('logout_triggered'):
 # ==========================================
 st.markdown("""
     <style>
-    /* 1. 強制讓所有卡片標題與單位名稱不換行 */
     .single-line-text {
         white-space: nowrap !important;
         overflow: hidden !important;
@@ -45,23 +45,17 @@ st.markdown("""
         display: block !important;
         max-width: 100% !important;
     }
-
-    /* 2. 針對手機端優化：讓摺疊面板 (Expander) 的標題文字絕對單行 */
     [data-testid="stExpander"] details summary p {
         white-space: nowrap !important;
         overflow: hidden !important;
         text-overflow: ellipsis !important;
         max-width: 100%;
     }
-
-    /* 3. 針對側邊欄 L2 班隊名稱進行鎖定 */
     [data-testid="stSidebar"] div.stMarkdown p {
         white-space: nowrap !important;
         overflow: hidden !important;
         text-overflow: ellipsis !important;
     }
-    
-    /* 4. 極簡分隔線，消除上下多餘空白 */
     hr.custom-divider {
         margin: 0.5em 0 !important;
         border: none;
@@ -70,7 +64,6 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# === 🚀 全域快閃通知 (Toast) 接收器 ===
 if 'sys_toast' in st.session_state:
     st.toast(st.session_state['sys_toast'])
     del st.session_state['sys_toast']
@@ -159,6 +152,13 @@ def init_db():
                         id SERIAL PRIMARY KEY,
                         timestamp TEXT, user_id TEXT, action TEXT, details TEXT
                     )''')
+        # 🚗 新增車輛資料表
+        c.execute('''CREATE TABLE IF NOT EXISTS vehicles (
+                        id SERIAL PRIMARY KEY,
+                        account_id TEXT,
+                        owner_name TEXT,
+                        plate_number TEXT UNIQUE
+                    )''')
         
         c.execute("SELECT COUNT(*) FROM users")
         if c.fetchone()[0] == 0:
@@ -230,8 +230,10 @@ def run_ghost_cleanup():
         for f_id, f_login, f_title in frozen_users:
             c.execute(f"SELECT COUNT(*) FROM books WHERE owner_id='{f_login}'")
             if c.fetchone()[0] == 0:
+                # 🚀 幽靈連帶刪除：砍掉該帳號名下綁定的車輛
+                c.execute(f"DELETE FROM vehicles WHERE account_id='{f_login}'")
                 c.execute(f"DELETE FROM users WHERE id={f_id}")
-                c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", (now_time, "SYSTEM", "帳號註銷", f"班隊 {f_title} 準則已結清，自動刪除凍結帳號。"))
+                c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", (now_time, "SYSTEM", "帳號註銷", f"班隊 {f_title} 準則已結清，自動刪除凍結帳號與所屬車輛資料。"))
                     
         seven_days_ago = (datetime.now(tz_tw) - timedelta(days=7)).strftime('%Y-%m-%d %H:%M:%S')
         c.execute(f"DELETE FROM action_logs WHERE timestamp < '{seven_days_ago}' AND user_id NOT IN (SELECT login_id FROM users) AND user_id != 'SYSTEM'")
@@ -349,7 +351,8 @@ with st.sidebar:
         if user_sq == '大隊部': 
             menu_options.insert(2, "⚙️ 系統管理")
     else:
-        menu_options = ["🏠 首頁", "📤 準則借閱", "🏷️ 序號登載", "📥 準則歸還", "💬 回報專區", "🔍 綜合查詢"]
+        # 🚗 L2 加入車輛登載選單
+        menu_options = ["🏠 首頁", "📤 準則借閱", "🏷️ 序號登載", "📥 準則歸還", "💬 回報專區", "🔍 綜合查詢", "🚗 車輛登載"]
         
     menu = st.radio("功能導覽", menu_options)
     
@@ -477,12 +480,76 @@ try:
                         c.execute("UPDATE books SET owner_id=%s WHERE owner_id=%s", (final_id, old_id))
                         c.execute("UPDATE borrow_requests SET login_id=%s WHERE login_id=%s", (final_id, old_id))
                         c.execute("UPDATE action_logs SET user_id=%s WHERE user_id=%s", (final_id, old_id))
+                        # 🚀 車輛同步更新帳號綁定
+                        c.execute("UPDATE vehicles SET account_id=%s WHERE account_id=%s", (final_id, old_id))
                         
                     conn.commit()
                     st.success("✅ 設定已儲存！系統將重新載入...")
                     import time; time.sleep(1); st.session_state.clear(); st.rerun()
 
-    # ======== 🟢 L2 專屬業務區 ========
+    # ======== 🟢 L2 專屬業務區 (加入車輛登載) ========
+    elif menu in ["車輛登載", "🚗 車輛登載"] and st.session_state.role == 'L2':
+        st.header("🚗 車輛登載與管理", help="輸入姓名與車號即可登錄。系統將自動過濾符號，僅保留大寫英文與數字。若需修改已登錄資料，可直接在下方表格內雙擊修改並點選儲存。")
+        
+        # 1. 新增區塊
+        with st.form("add_vehicle_form", clear_on_submit=True):
+            col1, col2 = st.columns(2)
+            with col1:
+                v_name = st.text_input("姓名 (Owner Name)", placeholder="請輸入駕駛人姓名")
+            with col2:
+                v_plate = st.text_input("車號 (Plate Number)", placeholder="例如：ABC-1234 (系統會自動清整)")
+            
+            submit_v = st.form_submit_button("➕ 新增車輛", type="primary", use_container_width=True)
+            if submit_v:
+                if not v_name.strip() or not v_plate.strip():
+                    st.warning("⚠️ 姓名與車號不可為空白！")
+                else:
+                    # 🚀 終極防呆：只保留英數並轉大寫
+                    clean_plate = re.sub(r'[^A-Za-z0-9]', '', v_plate).upper()
+                    clean_name = v_name.strip()
+                    c = conn.cursor()
+                    try:
+                        c.execute("INSERT INTO vehicles (account_id, owner_name, plate_number) VALUES (%s, %s, %s)",
+                                  (st.session_state.login_id, clean_name, clean_plate))
+                        conn.commit()
+                        st.session_state['sys_toast'] = f"✅ 車輛 {clean_plate} 新增成功！"
+                        st.rerun()
+                    except IntegrityError:
+                        conn.rollback()
+                        st.error(f"❌ 車號已存在：{clean_plate}")
+        
+        st.markdown("---")
+        # 2. 修改與管理區塊
+        st.subheader("📋 已登載車輛管理", help="直接在表格文字上點擊兩下即可修改，修改完畢後請務必點擊下方「儲存表格變更」按鈕。")
+        v_df = pd.read_sql_query("SELECT id, owner_name as 姓名, plate_number as 車號 FROM vehicles WHERE account_id=%s ORDER BY id DESC", conn, params=(st.session_state.login_id,))
+        
+        if v_df.empty:
+            st.info("💡 目前尚無登載任何車輛。")
+        else:
+            edited_v_df = st.data_editor(v_df, hide_index=True, use_container_width=True, column_config={"id": None}, key="v_editor")
+            
+            if st.button("💾 儲存表格變更", type="primary"):
+                c = conn.cursor()
+                has_changes = False
+                for idx, row in edited_v_df.iterrows():
+                    orig_row = v_df.iloc[idx]
+                    if row['姓名'] != orig_row['姓名'] or row['車號'] != orig_row['車號']:
+                        new_name = str(row['姓名']).strip()
+                        new_plate = re.sub(r'[^A-Za-z0-9]', '', str(row['車號'])).upper()
+                        v_id = int(row['id'])
+                        try:
+                            c.execute("UPDATE vehicles SET owner_name=%s, plate_number=%s WHERE id=%s", (new_name, new_plate, v_id))
+                            has_changes = True
+                        except IntegrityError:
+                            conn.rollback()
+                            st.error(f"❌ 更新失敗：車號 {new_plate} 已存在於系統中！")
+                            has_changes = False
+                            break
+                if has_changes:
+                    conn.commit()
+                    st.session_state['sys_toast'] = "✅ 車輛資料更新成功！"
+                    st.rerun()
+
     elif menu in ["序號登載", "🏷️ 序號登載"] and st.session_state.role == 'L2':
         st.header("🏷️ 序號登載", help="請將領取到的實體準則序號登載入系統。若有多本請用「半形逗號 ( , )」隔開；若發生實體數量短少，可勾選『借閱異常』進行通報。")
         bk_df = pd.read_sql_query(f"SELECT id, book_name, serial_number, status FROM books WHERE owner_id='{st.session_state.login_id}' AND status IN ('保留待領取', '借閱中')", conn)
@@ -761,8 +828,8 @@ try:
                                 width='stretch', 
                                 key=editor_key
                             )
-                st.markdown("---") 
-                
+            st.markdown("---") 
+            
             if st.button("📤 送出目前的勾選項目", type="primary", use_container_width=True):
                 selected_ids = []
                 for b_name in books_df['書名'].unique():
@@ -1355,21 +1422,35 @@ try:
                     
                     st.code(inv_msg.strip(), language="text")
 
-    # ======== 🟢 跨階級共用功能 ========
+    # ======== 🟢 跨階級共用功能 (加入車輛查詢) ========
     elif menu in ["綜合查詢", "🔍 綜合查詢"]:
-        st.header("🔍 綜合查詢", help="可透過「查書名」觀看各班隊持有該準則的數量；或透過「查序號」精準追蹤單本準則的目前流向與狀態。")
-        search_type = st.radio("查詢模式", ["查書名", "查序號"], horizontal=True)
+        st.header("🔍 綜合查詢", help="可透過「查書名」、「查序號」或「查車輛」精準追蹤資料。")
+        search_type = st.radio("查詢模式", ["查書名", "查序號", "查車輛"], horizontal=True)
 
         keyword = st.text_input("請輸入關鍵字")
         if st.button("搜尋") and keyword:
             if "書名" in search_type:
                 query = "SELECT u.squadron as 中隊, u.title as 班隊, COUNT(b.id) as 數量 FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.book_name LIKE %s GROUP BY u.squadron, u.title"
                 res = pd.read_sql_query(query, conn, params=(f"%{keyword}%",))
-                st.dataframe(res, use_container_width=True)
-            else:
+                st.dataframe(res, hide_index=True, use_container_width=True)
+            elif "序號" in search_type:
                 query = "SELECT u.squadron as 中隊, u.title as 班隊, b.book_name as 書名, b.status as 狀態 FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.serial_number = %s"
                 res = pd.read_sql_query(query, conn, params=(keyword,))
-                st.dataframe(res, use_container_width=True)
+                st.dataframe(res, hide_index=True, use_container_width=True)
+            else:
+                # 🚗 查車輛：透過正則過濾只保留英數及中文字，進行跨欄位模糊搜尋
+                clean_kw = re.sub(r'[^A-Za-z0-9\u4e00-\u9fa5]', '', keyword).upper()
+                query = """
+                SELECT u.squadron as 中隊, u.title as 班隊, v.owner_name as 姓名, v.plate_number as 車號 
+                FROM vehicles v 
+                JOIN users u ON v.account_id = u.login_id 
+                WHERE v.owner_name ILIKE %s OR v.plate_number ILIKE %s
+                """
+                res = pd.read_sql_query(query, conn, params=(f"%{clean_kw}%", f"%{clean_kw}%"))
+                if res.empty:
+                    st.warning("查無符合條件的車輛，請確認關鍵字是否正確。")
+                else:
+                    st.dataframe(res, hide_index=True, use_container_width=True)
 
     elif menu == "📊 準則現況":
         current_view_sq = st.session_state.get('current_sq', st.session_state.squadron)
