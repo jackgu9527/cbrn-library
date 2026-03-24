@@ -1201,7 +1201,7 @@ try:
                         owned_counts.append(c.fetchone()[0])
                     unit_df['已持有數'] = owned_counts
                     
-                    unit_action = st.radio(f", ["🔽 展開","✅ 全審核","❌ 全踢退"], horizontal=True, key=f"u_req_{selected_unit}")
+                    unit_action = st.radio("隱藏的標題", ["🔽 展開", "✅ 全審核", "❌ 全踢退"], horizontal=True, key=f"u_req_{selected_unit}", label_visibility="collapsed")
                     
                     final_decisions = {}
                     book_actions = {}
@@ -1301,7 +1301,7 @@ try:
                         
                         st.markdown(f"### 【{sel_ret_unit}】待歸還: {len(unit_df)} 本")
                         
-                        unit_action = st.radio(f"【", ["🔽 展開","✅ 全審核","❌ 全踢退"], horizontal=True, key=f"u_rad_{sel_ret_unit}")
+                        unit_action = st.radio("隱藏的標題", ["🔽 展開", "✅ 全審核", "❌ 全踢退"], horizontal=True, key=f"u_req_{selected_unit}", label_visibility="collapsed")
                         
                         book_actions, item_actions = {}, {}
                         
