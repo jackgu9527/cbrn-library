@@ -500,7 +500,14 @@ try:
                     if st_val == '保留待領取':
                         b_ids = b_rows['id'].tolist()
                         with st.container(border=True):
-                            st.markdown(f"<div style='font-size: 15px; font-weight: bold; color: #ffb84d; margin-bottom: 8px;'>🟡 {b_name}</div><div style='font-size: 14px; color: black; padding-left: 28px; margin-bottom: 8px;'>(共 {qty} 本) 📝 請登載序號 (請用 , 隔開)</div>", unsafe_allow_html=True)
+                            st.markdown(f"""
+                            <div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 15px; font-weight: bold; width: 100%; color: #ffb84d; margin-bottom: 4px;">
+                                🟡 {b_name}
+                            </div>
+                            <div style="font-size: 14px; color: #ffb84d; padding-left: 24px; margin-bottom: 8px;">
+                                (共 {qty} 本) 📝 請登載序號 (請用 , 隔開)
+                            </div>
+                            """, unsafe_allow_html=True)
                             user_input = st.text_input(f"隱藏標題_{b_name}_p", label_visibility="collapsed", key=f"p_{b_name}")
                             abnormal = st.checkbox(f"☑️ 借閱異常：剩餘準則未借閱到勾選。", key=f"abn_{b_name}")
                             form_data[f"p_{b_name}"] = {'type': 'pending', 'ids': b_ids, 'input': user_input, 'abnormal': abnormal, 'b_name': b_name}
@@ -508,7 +515,14 @@ try:
                     elif st_val == '借閱中':
                         current_s = [str(r['serial_number']).strip() for _, r in b_rows.iterrows() if pd.notna(r['serial_number'])]
                         with st.container(border=True):
-                            st.markdown(f"<div style='font-size: 15px; font-weight: bold; color: #4CAF50; margin-bottom: 8px;'>🟢 {b_name}</div><div style='font-size: 14px; color: black; padding-left: 28px; margin-bottom: 8px;'>(共 {qty} 本) 📝 校正序號 (請用 , 隔開)</div>", unsafe_allow_html=True)
+                            st.markdown(f"""
+                            <div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 15px; font-weight: bold; width: 100%; color: #4CAF50; margin-bottom: 4px;">
+                                🟢 {b_name}
+                            </div>
+                            <div style="font-size: 14px; color: #4CAF50; padding-left: 24px; margin-bottom: 8px;">
+                                (共 {qty} 本) 📝 校正序號 (請用 , 隔開)
+                            </div>
+                            """, unsafe_allow_html=True)
                             user_input = st.text_input(f"隱藏標題_{b_name}_c", value=", ".join(current_s), label_visibility="collapsed", key=f"c_{b_name}")
                             form_data[f"c_{b_name}"] = {'type': 'correct', 'rows': b_rows.to_dict('records'), 'input': user_input, 'b_name': b_name}
 
@@ -717,7 +731,11 @@ try:
                 b_df = books_df[books_df['書名'] == b_name].reset_index(drop=True)
                 qty = len(b_df)
                 
-                st.markdown(f"### 📘 {b_name}")
+                st.markdown(f"""
+                <div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 18px; font-weight: bold; width: 100%; color: #4CAF50; margin-bottom: 10px;">
+                    🟢 {b_name}
+                </div>
+                """, unsafe_allow_html=True)
                 col_chk, col_exp = st.columns([2.5, 7.5])
                 
                 with col_chk:
@@ -1029,7 +1047,17 @@ try:
                             st.divider()
                             for _, row in unit_df.iterrows():
                                 req_id, b_name, req_qty, owned = row['單號'], row['書名'], row['申請數量'], row['已持有數']
-                                st.markdown(f"**📘 {b_name}** (申請: **{req_qty}** 本 | 已持有: {owned} 本)")
+                                html_str = f"""
+                                <div style="border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; padding: 10px; margin-bottom: 10px; background-color: rgba(0,0,0,0.1);">
+                                    <div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 15px; font-weight: bold; width: 100%; color: #4da6ff; margin-bottom: 4px;">
+                                        🔵 {b_name}
+                                    </div>
+                                    <div style="display: flex; justify-content: space-between; font-size: 14px; color: #4da6ff; padding-left: 24px;">
+                                        <span>申請：<b>{req_qty}</b> 本</span><span style="text-align: right;">已持有：{owned} 本</span>
+                                    </div>
+                                </div>
+                                """
+                                st.markdown(html_str, unsafe_allow_html=True)
                                 book_actions[req_id] = st.radio(f"處理 {req_id}", ["📋 自訂數量", "✅ 全數審核", "❌ 全數踢退"], horizontal=True, key=f"b_req_rad_{req_id}", label_visibility="collapsed")
                                 
                                 if book_actions[req_id] == "✅ 全數審核": final_decisions[req_id] = req_qty
