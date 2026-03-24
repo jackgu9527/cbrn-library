@@ -1022,7 +1022,7 @@ try:
             acc_tabs = st.tabs(["📝 班隊開通", "👤 帳號管理"])
             
             with acc_tabs[0]:
-                st.subheader("📝 待開通帳號", help="點擊按鈕，即可完成開通或刪除。")
+                st.subheader("📝 班隊開通", help="點擊按鈕，即可完成開通或刪除。")
                 reg_df = pd.read_sql_query(f"SELECT id, squadron as 中隊, title as 班隊, login_id as 帳號, discharge_date as 結訓日 FROM users WHERE status='待審核' AND squadron IN ({sq_in_clause})", conn)
                 
                 if not reg_df.empty:
@@ -1050,7 +1050,7 @@ try:
                     st.success("✨ 目前無待審核的註冊申請。")
 
             with acc_tabs[1]:
-                st.subheader("👤 帳號管理", help="點開班隊可修改結訓日或重置密碼。修改結訓日後，帳號為凍結狀態，系統將自動為其解鎖。")
+                st.subheader("👤 帳號管理", help="點開班隊可修改結訓日或重置密碼。\n\n帳號為凍結狀態，修改結訓日後系統將自動為其解鎖。")
                 
                 l2_users = pd.read_sql_query(f"SELECT id, squadron as 中隊, title as 班隊, login_id as 訓員帳號, status as 狀態, discharge_date as 結訓日 FROM users WHERE role='L2' AND status IN ('啟用', '結訓凍結') AND squadron IN ({sq_in_clause}) ORDER BY title", conn)
                 
@@ -1058,7 +1058,7 @@ try:
                     for unit_name in l2_users['班隊'].unique():
                         u_df = l2_users[l2_users['班隊'] == unit_name]
                         
-                        with st.expander(f"🔽 {unit_name} (共 {len(u_df)} 個帳號)"):
+                        with st.expander(f"🔽 {unit_name}"):
                             for _, row in u_df.iterrows():
                                 uid = row['id']
                                 with st.container(border=True):
@@ -1070,7 +1070,7 @@ try:
                                     
                                     col_s, col_r = st.columns(2)
                                     with col_s:
-                                        if st.button("💾 儲存結訓日變更", key=f"s_{uid}", type="primary", use_container_width=True):
+                                        if st.button("💾 儲存", key=f"s_{uid}", type="primary", use_container_width=True):
                                             c = conn.cursor()
                                             new_status = '啟用' if row['狀態'] == '結訓凍結' else row['狀態']
                                             c.execute("UPDATE users SET discharge_date=%s, status=%s WHERE id=%s", (new_date, new_status, uid))
@@ -1088,7 +1088,7 @@ try:
                     st.success("✨ 目前無可管理的訓員資料。")
 
         elif menu == "📤 準則借閱審核":
-            st.subheader("📚 借閱準則審核", help="可批次或單獨審核各班隊的借閱申請。審核通過後，庫房準則將鎖定並轉為「保留待領取」狀態。")
+            st.subheader("📚 借閱準則審核", help="可將各班隊的借閱申請✅ 全審核(❌ 全踢退)、單獨審核、修改準則數量。審核通過後，準則狀態變更為已審核。")
             req_df = pd.read_sql_query(f"SELECT br.id as 單號, br.login_id as 帳號, u.title as 班隊, br.book_name as 書名, br.quantity as 申請數量, u.status as 帳號狀態 FROM borrow_requests br JOIN users u ON br.login_id = u.login_id WHERE br.status='待審核' AND u.squadron IN ({sq_in_clause}) ORDER BY u.title, br.book_name, br.id", conn)
             
             if not req_df.empty:
@@ -1108,11 +1108,11 @@ try:
                     status_emoji = "❄️(已凍結)" if u_status == '結訓凍結' else "🟢(啟用中)"
                     
                     with st.expander(f"🎓 班隊：【{unit_name}】 ｜ 狀態: {status_emoji} ｜ 待審核: {len(unit_df)} 筆"):
-                        unit_actions[unit_name] = st.radio(f"【{unit_name}】批次處理", ["🔽 展開個別處理", "✅ 班隊全數審核", "❌ 班隊全數踢退"], horizontal=True, key=f"u_req_{unit_name}", label_visibility="collapsed")
+                        unit_actions[unit_name] = st.radio(f"【{unit_name}】批次處理", ["🔽","✅ 全審核","❌ 全踢退"], horizontal=True, key=f"u_req_{unit_name}", label_visibility="collapsed")
                         
-                        if unit_actions[unit_name] == "✅ 班隊全數審核":
+                        if unit_actions[unit_name] == "✅ 全審核":
                             for _, row in unit_df.iterrows(): final_decisions[row['單號']] = row['申請數量']
-                        elif unit_actions[unit_name] == "❌ 班隊全數踢退":
+                        elif unit_actions[unit_name] == "❌ 全踢退":
                             for _, row in unit_df.iterrows(): final_decisions[row['單號']] = 0
                         else:
                             st.divider()
@@ -1129,12 +1129,12 @@ try:
                                 </div>
                                 """
                                 st.markdown(html_str, unsafe_allow_html=True)
-                                book_actions[req_id] = st.radio(f"處理 {req_id}", ["📋 自訂數量", "✅ 全數審核", "❌ 全數踢退"], horizontal=True, key=f"b_req_rad_{req_id}", label_visibility="collapsed")
+                                book_actions[req_id] = st.radio(f"處理 {req_id}", ["📋","✅ 全審核","❌ 全踢退"], horizontal=True, key=f"b_req_rad_{req_id}", label_visibility="collapsed")
                                 
-                                if book_actions[req_id] == "✅ 全數審核": final_decisions[req_id] = req_qty
-                                elif book_actions[req_id] == "❌ 全數踢退": final_decisions[req_id] = 0
+                                if book_actions[req_id] == "✅ 全審核": final_decisions[req_id] = req_qty
+                                elif book_actions[req_id] == "❌ 全踢退": final_decisions[req_id] = 0
                                 else:
-                                    approve_qty = st.number_input(f"設定審核數量", min_value=0, max_value=int(req_qty), value=int(req_qty), key=f"num_{req_id}")
+                                    approve_qty = st.number_input(f"修改準則數量", min_value=0, max_value=int(req_qty), value=int(req_qty), key=f"num_{req_id}")
                                     final_decisions[req_id] = approve_qty
                 
                 st.markdown("---")
@@ -1159,13 +1159,13 @@ try:
                             c.execute(f"UPDATE borrow_requests SET status='已踢退(砍單退件)' WHERE id={req_id}")
                             c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", (now_time, st.session_state.login_id, "踢退借閱", f"全數踢退 {req_unit} 的 {req_book} 申請"))
                     conn.commit()
-                    st.session_state['sys_toast'] ="✅ 批次審核完成！"
+                    st.session_state['sys_toast'] ="✅ 審核完成！"
                     st.rerun()
             else:
                 st.info("目前無待審核的準則。")
 
             st.markdown("---")
-            st.subheader("🔴 借閱異常警示 (少領退庫)")
+            st.subheader("🔴 借閱異常警示", help="班隊準則未借閱到申請數量，會顯示於下方列表，請確認該班隊實際借閱準則數量後，在釋放異常庫存")
             abnormal_df = pd.read_sql_query(f"SELECT b.id, u.title as 班隊, b.book_name as 書名, b.serial_number as 序號 FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.status='少領異常' AND u.squadron IN ({sq_in_clause}) ORDER BY u.title, b.book_name", conn)
             if not abnormal_df.empty:
                 edited_abn_dfs, abn_checks = {}, {}
@@ -1184,7 +1184,7 @@ try:
                                     b_df.insert(0, "✅ 結案", False)
                                     edited_abn_dfs[u_key] = st.data_editor(b_df, hide_index=True, disabled=["id", "班隊", "書名", "序號"], width='stretch', column_config={"✅ 結案": st.column_config.CheckboxColumn("✅ 結案(退庫)"), "id": None, "班隊": None, "書名": None}, key=f"abn_chk_{u_key}")
                 st.markdown("---")
-                if st.button("🔄 批次釋放勾選的異常庫存", type="primary"):
+                if st.button("🔄 釋放異常庫存", type="primary"):
                     resolved_ids = []
                     resolved_books_summary = []
                     for unit_name in abnormal_df['班隊'].unique():
@@ -1212,14 +1212,14 @@ try:
                 st.success("目前無異常少領通報。")
 
         elif menu == "📥 準則歸還審核":
-            st.subheader("📥 歸還點收與遺失追查")
+            st.subheader("📥 準則歸還與遺失")
             ret_tabs = st.tabs(["📥 待點收清單", "🚨 遺失準則"])
             
             with ret_tabs[0]:
                 return_df = pd.read_sql_query(f"SELECT b.id, u.title as 班隊, b.book_name as 書名, b.serial_number as 序號, b.owner_id, u.status as 帳號狀態 FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.status='歸還中' AND u.squadron IN ({sq_in_clause}) ORDER BY u.title, b.book_name", conn)
                 
                 if not return_df.empty:
-                    st.subheader("📥 待點收清單", help="**雙層折疊點收**：點開【班隊】👉 點開【準則名稱】👉 處理【個別序號】。\n\n**智慧踢退邏輯**：一般帳號踢退將退回「借閱中」，凍結帳號踢退將自動轉入「遺失待賠」。")
+                    st.subheader("📥 待點收清單", help="點開【班隊】👉 點開【準則名稱】👉 處理【個別序號】。\n\n**智慧踢退邏輯**：一般帳號踢退將退回「借閱中」，凍結帳號踢退將自動轉入「遺失待賠」。")
                     
                     unit_actions, book_actions, item_actions = {}, {}, {}
                     
@@ -1229,9 +1229,9 @@ try:
                         status_emoji = "❄️(已凍結)" if u_status == '結訓凍結' else "🟢(啟用中)"
                         
                         with st.expander(f"🎓 班隊：【{unit_name}】 ｜ 狀態: {status_emoji} ｜ 待點收: {len(unit_df)} 本"):
-                            unit_actions[unit_name] = st.radio(f"【{unit_name}】批次處理", ["🔽 展開個別處理", "✅ 班隊全數點收", "❌ 班隊全數踢退"], horizontal=True, key=f"u_rad_{unit_name}")
+                            unit_actions[unit_name] = st.radio(f"【{unit_name}】批次處理", ["🔽", "✅ 班隊全數點收", "❌ 全踢退"], horizontal=True, key=f"u_rad_{unit_name}")
                             
-                            if unit_actions[unit_name] == "🔽 展開個別處理":
+                            if unit_actions[unit_name] == "🔽":
                                 st.divider()
                                 for b_name in unit_df['書名'].unique():
                                     b_df = unit_df[unit_df['書名'] == b_name]
@@ -1258,7 +1258,7 @@ try:
                             
                             if unit_actions[unit_name] == "✅ 班隊全數點收":
                                 to_stock_ids.extend(unit_df['id'].tolist())
-                            elif unit_actions[unit_name] == "❌ 班隊全數踢退":
+                            elif unit_actions[unit_name] == "❌ 全踢退":
                                 if u_status == '結訓凍結': to_lost_ids.extend(unit_df['id'].tolist())
                                 else: to_borrowed_ids.extend(unit_df['id'].tolist())
                             else:
@@ -1289,7 +1289,7 @@ try:
                             recv_details = c.fetchall()
                             c.execute(f"UPDATE books SET status='在庫', owner_id='在庫' WHERE id IN ({id_list_str})")
                             for u_name, b_name, qty in recv_details:
-                                c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", (now_time, st.session_state.login_id, "歸還點收", f"收訖 {u_name} 歸還 {b_name} {qty} 本"))
+                                c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", (now_time, st.session_state.login_id, "準則歸還", f"收訖 {u_name} 歸還 {b_name} {qty} 本"))
                             has_action = True
                             
                         if to_borrowed_ids:
@@ -1307,7 +1307,7 @@ try:
                             lost_details = c.fetchall()
                             c.execute(f"UPDATE books SET status='遺失待賠' WHERE id IN ({id_list_str})")
                             for u_name, b_name, qty in lost_details:
-                                c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", (now_time, st.session_state.login_id, "歸還轉遺失", f"未收訖(凍結帳號) {u_name} 的 {b_name} {qty} 本，轉列遺失追查"))
+                                c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", (now_time, st.session_state.login_id, "歸還轉遺失", f"未收訖(凍結帳號) {u_name} 的 {b_name} {qty} 本，轉列遺失"))
                             has_action = True
                             
                         if has_action:
@@ -1315,7 +1315,7 @@ try:
                             st.session_state['sys_toast'] ="✅ 審核點收完成！"
                             st.rerun()
                 else:
-                    st.success("目前各班隊皆無待歸還點收之準則！")
+                    st.success("目前各班隊皆無待準則歸還之準則！")
 
             with ret_tabs[1]:
                 st.subheader("🚨 遺失準則 (待賠償/待尋獲)", help="每本遺失準則皆為獨立卡片，尋獲或完成賠償時，點擊右側按鈕即可單獨結案退庫！")
