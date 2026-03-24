@@ -1276,7 +1276,7 @@ try:
                     st.success("目前無異常少領通報。")
 
             elif menu == "📥 準則歸還審核":
-                st.subheader("📥 準則歸還與遺失")
+            st.subheader("📥 準則歸還與遺失")
                 ret_tabs = st.tabs(["📥 準則歸還清單", "🚨 遺失準則"])
                 
                 with ret_tabs[0]:
