@@ -4,7 +4,9 @@ import pandas as pd
 from datetime import datetime, timezone, timedelta
 import requests
 import json
-
+import warnings # 👈 新增這個
+# 👈 新增這行，消滅熊貓套件的黃色警告
+warnings.filterwarnings('ignore', category=UserWarning, module='pandas')
 # 取得環境變數 (GitHub Secrets 會提供)
 DATABASE_URL = os.environ.get('DATABASE_URL')
 LINE_TOKEN = os.environ.get('LINE_CHANNEL_ACCESS_TOKEN')
