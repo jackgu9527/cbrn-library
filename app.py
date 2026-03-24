@@ -1011,6 +1011,33 @@ try:
                     st.error(f"❌ 同步失敗，請檢查 CSV 格式。詳細原因：{e}")
             else:
                 st.error("❌ 系統找不到 CSV 檔案！請確認 GitHub 上的檔案名稱。")
+    # ======== 🚨 幽靈資料救援暗門 ========
+        st.markdown("---")
+        st.subheader("🛠️ 系統底層資料除錯", help="強制將指定帳號名下的所有準則退回庫房。")
+        with st.expander("展開除錯工具"):
+            ghost_id = st.text_input("請輸入卡住的登入帳號 (例如您剛才的 q)", key="ghost_id_input")
+            if st.button("🚨 強制將此帳號名下的所有準則退庫", type="primary"):
+                if ghost_id.strip():
+                    try:
+                        c = conn.cursor()
+                        # 無視任何狀態，強制把屬於他的書全部搶回來變成「在庫」
+                        c.execute("UPDATE books SET status='在庫', owner_id='在庫' WHERE owner_id=%s", (ghost_id.strip(),))
+                        reclaimed = c.rowcount
+                        
+                        if reclaimed > 0:
+                            now_time = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S")
+                            c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", 
+                                      (now_time, st.session_state.login_id, "上帝模式強制退庫", f"強制將帳號 {ghost_id} 卡在底層的 {reclaimed} 本幽靈準則退回庫房。"))
+                            conn.commit()
+                            st.success(f"✅ 已強制收回 {reclaimed} 本幽靈準則！")
+                            st.info("💡 請直接按下鍵盤 F5 重新整理網頁，幽靈引擎就會把這個帳號刪除了。")
+                        else:
+                            st.warning("⚠️ 系統沒有在底層找到屬於這個帳號的準則。")
+                    except Exception as e:
+                        st.error(f"執行失敗：{e}")
+                        conn.rollback()
+                else:
+                    st.warning("請先輸入帳號！")
 
     # ======== 🟢 幹部 (L1) 共用業務與審核區 ========
     elif st.session_state.role == 'L1' and menu in ["👥 帳號管理", "📤 準則借閱審核", "📥 準則歸還審核", "💬 回報專區"]:
