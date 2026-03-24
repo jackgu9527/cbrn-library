@@ -1106,7 +1106,7 @@ try:
                     u_status = unit_df.iloc[0]['帳號狀態']
                     status_emoji = "❄️(已凍結)" if u_status == '結訓凍結' else "🟢(啟用中)"
                     
-                    with st.expander(f"【{unit_name}】 ｜ 待審核: {len(unit_df)} 筆"):
+                    with st.expander(f"【{unit_name}】｜待審核: {len(unit_df)} 筆"):
                         unit_actions[unit_name] = st.radio(f"【{unit_name}】批次處理", ["🔽","✅ 全審核","❌ 全踢退"], horizontal=True, key=f"u_req_{unit_name}", label_visibility="collapsed")
                         
                         if unit_actions[unit_name] == "✅ 全審核":
