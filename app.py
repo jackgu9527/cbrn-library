@@ -206,7 +206,7 @@ except Exception as e:
     st.stop()
 
 # ==========================================
-# ⚡ 幽靈背景引擎：結訓日 24:00 全自動清查
+# ⚡ 幽靈背景引擎：結訓日 24:00 全自動清查 (偵錯強化版)
 # ==========================================
 def run_ghost_cleanup():
     if 'ghost_engine_ran' in st.session_state:
@@ -218,7 +218,7 @@ def run_ghost_cleanup():
         today_str = datetime.now(tz_tw).strftime('%Y-%m-%d')
         now_time = datetime.now(tz_tw).strftime("%Y-%m-%d %H:%M:%S")
         
-        # 🛑 步驟一：先抓出「已逾期但尚未凍結」的帳號，強制轉為歸還中並凍結 (你剛剛不小心刪掉的這段)
+        # 🛑 步驟一：先抓出「已逾期但尚未凍結」的帳號，強制轉為歸還中並凍結
         c.execute(f"SELECT id, login_id, title FROM users WHERE role='L2' AND discharge_date < '{today_str}' AND status='啟用'")
         overdue_users = c.fetchall()
         for u_id, u_login, u_title in overdue_users:
@@ -231,43 +231,34 @@ def run_ghost_cleanup():
         frozen_users = c.fetchall()
         for f_id, f_login, f_title in frozen_users:
             
-            # 🚀 終極淨化防呆：如果系統裡有「狀態已在庫，但所有人還是他」的隱形 Bug 紀錄，強制將其斷開綁定！
+            # 🚀 終極淨化防呆：如果狀態已在庫，強制解除帳號綁定
             c.execute(f"UPDATE books SET owner_id='在庫' WHERE owner_id='{f_login}' AND status='在庫'")
             
             # 淨化完畢後，再來計算他身上是不是真的沒書了
             c.execute(f"SELECT COUNT(*) FROM books WHERE owner_id='{f_login}'")
-            if c.fetchone()[0] == 0:
-                # 🚀 幽靈連帶刪除：砍掉該帳號名下綁定的車輛
+            leftover_qty = c.fetchone()[0]
+            
+            if leftover_qty == 0:
+                # 🚀 幽靈連帶刪除：砍掉該帳號名下綁定的車輛與帳號
                 c.execute(f"DELETE FROM vehicles WHERE account_id='{f_login}'")
                 c.execute(f"DELETE FROM users WHERE id={f_id}")
-                c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", (now_time, "SYSTEM", "帳號註銷", f"班隊 {f_title} 準則已結清，自動刪除凍結帳號與所屬車輛資料。"))
+                c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", (now_time, "SYSTEM", "帳號註銷", f"班隊 {f_title} 準則已結清，自動徹底刪除帳號與所屬車輛資料。"))
+            else:
+                # 🚨 偵錯日誌：如果沒有刪除，把原因寫進操作紀錄！
+                c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", (now_time, "SYSTEM", "刪除阻擋", f"系統嘗試刪除 {f_title} 失敗，資料庫底層偵測到仍有 {leftover_qty} 本幽靈準則綁定在此帳號！"))
                     
         # 🛑 步驟三：清理七天前的歷史操作紀錄
         seven_days_ago = (datetime.now(tz_tw) - timedelta(days=7)).strftime('%Y-%m-%d %H:%M:%S')
         c.execute(f"DELETE FROM action_logs WHERE timestamp < '{seven_days_ago}' AND user_id NOT IN (SELECT login_id FROM users) AND user_id != 'SYSTEM'")
         
         conn.commit()
-    except Exception:
-        pass
+    except Exception as e:
+        # 🔥 致命錯誤現形：如果 SQL 崩潰，直接在畫面上亮紅燈！
+        st.error(f"🚨 幽靈引擎發生異常崩潰：{e}")
+        conn.rollback()
     finally:
         release_connection(conn)
-        st.session_state['ghost_engine_ran'] = True 
-
-# ==========================================
-# 2. 登入與註冊模組
-# ==========================================
-if 'logged_in' not in st.session_state and not st.session_state.get('force_logout'):
-    stored_user = cookie_manager.get('sys_user_token')
-    if stored_user:
-        conn = get_db_connection()
-        try:
-            safe_user_id = str(stored_user)
-            user = pd.read_sql_query("SELECT * FROM users WHERE login_id=%s", conn, params=(safe_user_id,))
-            if not user.empty and user.iloc[0]['status'] not in ['待審核', '停權', '結訓凍結']:
-                for col in user.columns: st.session_state[col] = user.iloc[0][col]
-                st.session_state['logged_in'] = True
-        finally:
-            release_connection(conn)
+        st.session_state['ghost_engine_ran'] = True
 
 if 'logged_in' not in st.session_state:
     st.markdown("##  大隊部準則管理系統")
