@@ -574,8 +574,14 @@ try:
                     if c.fetchone()[0] > 0: 
                         st.error("❌ 此帳號已被使用！")
                     else:
-                        pw_update = ", password=%s" if new_pwd else ""
-                        params = [final_id, new_pwd, final_title, uid] if new_pwd else [final_id, final_title, uid]
+                        # 🔒 資安升級：如果使用者有輸入新密碼，進行加密再存入
+                        if new_pwd:
+                            hashed_pwd = generate_password_hash(new_pwd)
+                            pw_update = ", password=%s"
+                            params = [final_id, hashed_pwd, final_title, uid]
+                        else:
+                            pw_update = ""
+                            params = [final_id, final_title, uid]
                         
                         old_id = st.session_state.login_id
                         c.execute(f"UPDATE users SET login_id=%s{pw_update}, title=%s WHERE id=%s", tuple(params))
@@ -584,14 +590,13 @@ try:
                             c.execute("UPDATE books SET owner_id=%s WHERE owner_id=%s", (final_id, old_id))
                             c.execute("UPDATE borrow_requests SET login_id=%s WHERE login_id=%s", (final_id, old_id))
                             c.execute("UPDATE action_logs SET user_id=%s WHERE user_id=%s", (final_id, old_id))
-                            # 🚀 車輛同步更新帳號綁定
                             c.execute("UPDATE vehicles SET account_id=%s WHERE account_id=%s", (final_id, old_id))
                             
                         conn.commit()
                         st.success("✅ 設定已儲存！系統將重新載入...")
                         import time; time.sleep(1); st.session_state.clear(); st.rerun()
                 except Exception as e:
-                    conn.rollback() # 🚀 防護網：錯誤時回滾
+                    conn.rollback()
                     st.error(f"❌ 儲存失敗：{e}")
 
     # ======== 🟢 L2 專屬業務區 (加入車輛登載) ========
@@ -1023,13 +1028,16 @@ try:
                             st.error("❌ 此帳號已被使用！請更換帳號。")
                         else:
                             r_val = "L1" if "L1" in add_role else "L2"
+                            # 🔒 資安升級：管理員新增的人員密碼也要加密
+                            hashed_pw = generate_password_hash(add_pw)
+                            
                             c.execute("INSERT INTO users (login_id, password, role, squadron, title, status) VALUES (%s,%s,%s,%s,%s,%s)",
-                                      (add_id, add_pw, r_val, add_sq, add_title, add_status))
+                                      (add_id, hashed_pw, r_val, add_sq, add_title, add_status))
                             conn.commit()
                             st.session_state['sys_toast'] = f"✅ 成功建立 {r_val} 帳號：{add_title}！"
                             st.rerun()
                     except Exception as e:
-                        conn.rollback() # 🚀 防護網：錯誤時回滾
+                        conn.rollback()
                         st.error(f"❌ 建立失敗：{e}")
                 else:
                     st.warning("⚠️ 請填寫完整資料 (職務/帳號/密碼不可為空)！")
@@ -1059,7 +1067,8 @@ try:
                                         col_edit1, col_edit2 = st.columns(2)
                                         with col_edit1:
                                             new_login = st.text_input("帳號", value=row['login_id'], key=f"l1_id_{uid}")
-                                            new_pwd = st.text_input("密碼", value=row['password'], key=f"l1_pw_{uid}")
+                                            # 🔒 優化 UI：不顯示長長的 Hash，改為提示若不修改請留空
+                                            new_pwd = st.text_input("密碼 (若不修改請留空)", type="password", placeholder="輸入新密碼", key=f"l1_pw_{uid}")
                                             
                                             role_opts = ["L1", "L2"]
                                             r_idx = role_opts.index(row['role']) if row['role'] in role_opts else 0
@@ -1078,13 +1087,19 @@ try:
                                             if st.button("💾 儲存", key=f"l1_s_{uid}", type="primary", use_container_width=True):
                                                 try:
                                                     c = conn.cursor()
-                                                    c.execute("""UPDATE users SET login_id=%s, password=%s, role=%s, squadron=%s, title=%s, status=%s WHERE id=%s""", 
-                                                                (new_login, new_pwd, new_role, new_sq, new_ti, new_st, uid))
+                                                    # 🔒 資安升級：動態判斷是否需要更新密碼
+                                                    if new_pwd:
+                                                        hashed_pw = generate_password_hash(new_pwd)
+                                                        c.execute("""UPDATE users SET login_id=%s, password=%s, role=%s, squadron=%s, title=%s, status=%s WHERE id=%s""", 
+                                                                    (new_login, hashed_pw, new_role, new_sq, new_ti, new_st, uid))
+                                                    else:
+                                                        c.execute("""UPDATE users SET login_id=%s, role=%s, squadron=%s, title=%s, status=%s WHERE id=%s""", 
+                                                                    (new_login, new_role, new_sq, new_ti, new_st, uid))
                                                     conn.commit()
                                                     st.session_state['sys_toast'] = "✅ 更新成功！"
                                                     st.rerun()
                                                 except Exception as e:
-                                                    conn.rollback() # 🚀 防護網：錯誤時回滾
+                                                    conn.rollback()
                                                     st.error(f"❌ 儲存失敗：{e}")
                                         
                                         with col_del:
@@ -1253,12 +1268,14 @@ try:
                                         if st.button("🔑 重置密碼為 abc123", key=f"r_{uid}", use_container_width=True):
                                             try:
                                                 c = conn.cursor()
-                                                c.execute("UPDATE users SET password='abc123' WHERE id=%s", (uid,))
+                                                # 🔒 資安升級：將重置的預設密碼加密
+                                                hashed_default_pw = generate_password_hash('abc123')
+                                                c.execute("UPDATE users SET password=%s WHERE id=%s", (hashed_default_pw, uid))
                                                 conn.commit()
                                                 st.session_state['sys_toast'] = "✅ 密碼已重置為預設！"
                                                 st.rerun()
                                             except Exception as e:
-                                                conn.rollback() # 🚀 防護網：錯誤時回滾
+                                                conn.rollback()
                                                 st.error(f"❌ 重置失敗：{e}")
                 else:
                     st.success("✨ 目前無可管理的訓員資料。")
