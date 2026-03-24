@@ -456,7 +456,7 @@ try:
                 c_m4.metric("🔴 借閱異常警示", f"{pending_abn} 件")
                 
                 st.markdown("---")
-                st.subheader("📈 準則庫存戰情儀表板")
+                st.subheader("📈 準則庫存儀表板")
                 # 🚀 首頁優化：Altair 戰情室視覺圖表
                 c_dash = conn.cursor()
                 c_dash.execute("SELECT status, COUNT(id) FROM books GROUP BY status")
@@ -467,7 +467,7 @@ try:
                 
                 col_chart, col_prog = st.columns([1, 1])
                 with col_chart:
-                    source = pd.DataFrame({"狀態": ["在庫 (安全)", "外散 (借閱/異常)"], "數量": [in_stock, out_stock]})
+                    source = pd.DataFrame({"狀態": ["在庫", "借閱"], "數量": [in_stock, out_stock]})
                     if total_books > 0:
                         chart = alt.Chart(source).mark_arc(innerRadius=60).encode(
                             theta=alt.Theta(field="數量", type="quantitative"),
@@ -482,9 +482,9 @@ try:
                     st.write("")
                     st.markdown(f"### 總庫存：{total_books} 本")
                     if total_books > 0:
-                        st.write(f"🟢 在庫妥善率 ({in_stock}/{total_books})")
+                        st.write(f"🟢 圖書館庫存 ({in_stock}/{total_books})")
                         st.progress(in_stock / total_books)
-                        st.write(f"🔴 外散率 ({out_stock}/{total_books})")
+                        st.write(f"🔴 大隊部借閱 ({out_stock}/{total_books})")
                         st.progress(out_stock / total_books)
 
             elif st.session_state.role == 'L2':
