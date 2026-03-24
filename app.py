@@ -806,10 +806,10 @@ try:
                 col_chk, col_exp = st.columns([2.5, 7.5])
                 
                 with col_chk:
-                    category_checks[b_name] = st.checkbox(f"☑️ 全數歸還此項 ({qty}本)", key=f"all_ret_{b_name}")
+                    category_checks[b_name] = st.checkbox(f"☑️ 全數歸還 ({qty}本)", key=f"all_ret_{b_name}")
                     
                 with col_exp:
-                    with st.expander(f"🔽 展開個別序號 (點擊查看)"):
+                    with st.expander(f"🔽 展開個別序號"):
                         if category_checks[b_name]:
                             st.success(f"✨ 已選擇全數歸還！送出後將一併歸還這 {qty} 本準則。")
                             edited_return_dfs[b_name] = None 
@@ -819,7 +819,7 @@ try:
                                 b_id = row['id']
                                 initial_checks.append(st.session_state['l2_partial_return_memory'].get(b_id, False))
                                 
-                            b_df.insert(0, "勾選歸還", initial_checks)
+                            b_df.insert(0, "勾選歸還序號", initial_checks)
                             editor_key = f"return_editor_{b_name}"
                             edited_return_dfs[b_name] = st.data_editor(
                                 b_df, 
@@ -873,10 +873,10 @@ try:
 
     # ======== 🟢 系統管理員專屬暗門 ========
     elif menu == "⚙️ 系統管理" and st.session_state.role == 'L1' and str(st.session_state.squadron).strip() == '大隊部':
-        st.header("👑 系統管理員模式", help="全域人事卡片化管理：點開【中隊】，再點擊【職務/班隊標籤】，即可查看與修改所有人員的專屬卡片。")
+        st.header("👑 系統管理員模式", help="系統最高權限可查看與修改所有人員權限。")
         
-        with st.expander("➕ 新增人員 / 班隊帳號 (管理員直配)", expanded=False):
-            st.markdown("#### 📝 直接配發新帳號")
+        with st.expander("➕ 新增人員", expanded=False):
+            st.markdown("#### 📝 配發帳號")
             col1, col2, col3 = st.columns(3)
             with col1:
                 add_role = st.selectbox("身分", ["L1 (幹部)", "L2 (訓員)"], key="add_role")
@@ -893,7 +893,7 @@ try:
                     c = conn.cursor()
                     c.execute("SELECT COUNT(*) FROM users WHERE login_id=%s", (add_id,))
                     if c.fetchone()[0] > 0:
-                        st.error("❌ 此帳號已被使用！請更換帳號名稱。")
+                        st.error("❌ 此帳號已被使用！請更換帳號。")
                     else:
                         r_val = "L1" if "L1" in add_role else "L2"
                         c.execute("INSERT INTO users (login_id, password, role, squadron, title, status) VALUES (%s,%s,%s,%s,%s,%s)",
@@ -945,7 +945,7 @@ try:
                                         
                                         col_save, col_del = st.columns(2)
                                         with col_save:
-                                            if st.button("💾 強制儲存", key=f"l1_s_{uid}", type="primary", use_container_width=True):
+                                            if st.button("💾 儲存", key=f"l1_s_{uid}", type="primary", use_container_width=True):
                                                 try:
                                                     c = conn.cursor()
                                                     c.execute("""UPDATE users SET login_id=%s, password=%s, role=%s, squadron=%s, title=%s, status=%s WHERE id=%s""", 
@@ -962,7 +962,7 @@ try:
                                                     c = conn.cursor()
                                                     c.execute("DELETE FROM users WHERE id=%s", (uid,))
                                                     conn.commit()
-                                                    st.session_state['sys_toast'] = "🗑️ 帳號已徹底刪除！"
+                                                    st.session_state['sys_toast'] = "🗑️ 帳號已刪除！"
                                                     st.rerun()
                                                 except Exception as e:
                                                     st.error(f"❌ 刪除失敗：{e}")
@@ -1022,7 +1022,7 @@ try:
             acc_tabs = st.tabs(["📝 班隊開通", "👤 帳號管理"])
             
             with acc_tabs[0]:
-                st.subheader("📝 待審核名單", help="點擊卡片下方的按鈕，即可直接完成開通或刪除。")
+                st.subheader("📝 待開通帳號", help="點擊按鈕，即可完成開通或刪除。")
                 reg_df = pd.read_sql_query(f"SELECT id, squadron as 中隊, title as 班隊, login_id as 帳號, discharge_date as 結訓日 FROM users WHERE status='待審核' AND squadron IN ({sq_in_clause})", conn)
                 
                 if not reg_df.empty:
@@ -1050,7 +1050,7 @@ try:
                     st.success("✨ 目前無待審核的註冊申請。")
 
             with acc_tabs[1]:
-                st.subheader("👤 結訓日與權限救援中心", help="點開班隊卡片即可修改結訓日，或重置密碼。修改結訓日後，若帳號原為凍結狀態，系統將自動為其解除凍結。")
+                st.subheader("👤 帳號管理", help="點開班隊可修改結訓日或重置密碼。修改結訓日後，帳號為凍結狀態，系統將自動為其解鎖。")
                 
                 l2_users = pd.read_sql_query(f"SELECT id, squadron as 中隊, title as 班隊, login_id as 訓員帳號, status as 狀態, discharge_date as 結訓日 FROM users WHERE role='L2' AND status IN ('啟用', '結訓凍結') AND squadron IN ({sq_in_clause}) ORDER BY title", conn)
                 
