@@ -239,7 +239,7 @@ def admin_borrow_approve_dialog(selected_unit, final_decisions, df_records):
         finally:
             release_connection(conn)
 
-@st.dialog("📥 歸還點收確認")
+@st.dialog("📥 歸還審核確認")
 def admin_return_approve_dialog(selected_unit, to_stock_ids, to_borrowed_ids, to_lost_ids):
     st.info("⚠️ 請確認這些準則 **已確實歸還至實體圖書館** 後再按確認送出！")
     
@@ -279,7 +279,7 @@ def admin_return_approve_dialog(selected_unit, to_stock_ids, to_borrowed_ids, to
                 
             if has_action:
                 conn.commit()
-                st.session_state['sys_toast'] = "✅ 點收審核完成！"
+                st.session_state['sys_toast'] = "✅ 審核完成！"
                 st.rerun()
         except Exception as e:
             conn.rollback()
@@ -356,7 +356,7 @@ def run_ghost_cleanup():
                 pending_reg = pd.read_sql_query("SELECT COUNT(*) FROM users WHERE status='待審核'", conn).iloc[0,0]
                 pending_bor = pd.read_sql_query("SELECT COUNT(*) FROM borrow_requests WHERE status='待審核'", conn).iloc[0,0]
                 pending_ret = pd.read_sql_query("SELECT COUNT(*) FROM books WHERE status='歸還中'", conn).iloc[0,0]
-                report_msg = f"\n📅 {today_str} 每日待辦彙整\n━━━━━━━━━━━━━━\n📝 待開通帳號：{pending_reg} 件\n📥 待審核借閱：{pending_bor} 件\n📤 待點收歸還：{pending_ret} 件\n━━━━━━━━━━━━━━\n💡 請長官抽空進入系統處理。"
+                report_msg = f"\n📅 {today_str} 每日待辦彙整\n━━━━━━━━━━━━━━\n📝 待開通帳號：{pending_reg} 件\n📥 待審核借閱：{pending_bor} 件\n📤 待審核歸還：{pending_ret} 件\n━━━━━━━━━━━━━━\n💡 請長官抽空進入系統處理。"
                 send_line_notify(report_msg)
                 c.execute("UPDATE system_settings SET setting_value=%s, last_updated=CURRENT_TIMESTAMP WHERE setting_key='daily_report_date'", (today_str,))
         except psycopg2.errors.LockNotAvailable: conn.rollback()
@@ -1192,7 +1192,7 @@ try:
                     u_status = unit_df.iloc[0]['帳號狀態']
                     status_emoji = "❄️(已凍結)" if u_status == '結訓凍結' else "🟢(啟用中)"
                     
-                    st.markdown(f"### 【{selected_unit}】  待審核: {len(unit_df)} 筆")
+                    st.markdown(f"### 【{selected_unit}】待審核: {len(unit_df)} 筆")
                     
                     owned_counts = []
                     c = conn.cursor()
@@ -1201,7 +1201,7 @@ try:
                         owned_counts.append(c.fetchone()[0])
                     unit_df['已持有數'] = owned_counts
                     
-                    unit_action = st.radio(f"【{selected_unit}】批次處理", ["🔽 展開","✅ 全審核","❌ 全踢退"], horizontal=True, key=f"u_req_{selected_unit}")
+                    unit_action = st.radio(f", ["🔽 展開","✅ 全審核","❌ 全踢退"], horizontal=True, key=f"u_req_{selected_unit}")
                     
                     final_decisions = {}
                     book_actions = {}
@@ -1293,15 +1293,15 @@ try:
                     if not return_df.empty:
                         # 🚀 UI 優化：消滅 Expander Hell，改用 Selectbox
                         ret_unit_list = return_df['班隊'].unique()
-                        sel_ret_unit = st.selectbox("📌 選擇要點收的班隊", ret_unit_list)
+                        sel_ret_unit = st.selectbox("📌 選擇要審核的班隊", ret_unit_list)
                         
                         unit_df = return_df[return_df['班隊'] == sel_ret_unit]
                         u_status = unit_df.iloc[0]['帳號狀態']
                         status_emoji = "❄️(已凍結)" if u_status == '結訓凍結' else "🟢(啟用中)"
                         
-                        st.markdown(f"### 【{sel_ret_unit}】｜待歸還: {len(unit_df)} 本 ｜ 狀態: {status_emoji}")
+                        st.markdown(f"### 【{sel_ret_unit}】待歸還: {len(unit_df)} 本")
                         
-                        unit_action = st.radio(f"【{sel_ret_unit}】批次處理", ["🔽 展開","✅ 班隊全數點收","❌ 班隊全數踢退"], horizontal=True, key=f"u_rad_{sel_ret_unit}")
+                        unit_action = st.radio(f"【", ["🔽 展開","✅ 全審核","❌ 全踢退"], horizontal=True, key=f"u_rad_{sel_ret_unit}")
                         
                         book_actions, item_actions = {}, {}
                         
@@ -1312,23 +1312,23 @@ try:
                                 u_b_key = f"{sel_ret_unit}_{b_name}"
                                 
                                 with st.expander(f"📘 {b_name} (共 {len(b_df)} 本)"):
-                                    book_actions[u_b_key] = st.radio(f"{b_name} 處理", ["📋 逐本處理","✅ 此書全點收","❌ 此書全踢退"], horizontal=True, key=f"b_rad_{u_b_key}")
+                                    book_actions[u_b_key] = st.radio(f"{b_name} 處理", ["🔽 展開","✅ 全審核","❌ 全踢退"], horizontal=True, key=f"b_rad_{u_b_key}")
                                     
-                                    if book_actions[u_b_key] == "📋 逐本處理":
+                                    if book_actions[u_b_key] == "🔽 展開":
                                         st.markdown("---")
                                         for _, row in b_df.iterrows():
                                             c1, c2 = st.columns([5, 5])
                                             c1.markdown(f"🔖 序號: `{row['序號']}`")
-                                            item_actions[row['id']] = c2.radio("操作", ["✅ 點收", "❌ 踢退"], horizontal=True, key=f"ret_item_{row['id']}", label_visibility="collapsed")
+                                            item_actions[row['id']] = c2.radio("操作", ["✅ 審核", "❌ 踢退"], horizontal=True, key=f"ret_item_{row['id']}", label_visibility="collapsed")
                                         st.write("")
                                         
                         st.markdown("---")
-                        if st.button(f"💾 送出【{sel_ret_unit}】點收結果", type="primary", use_container_width=True):
+                        if st.button(f"💾 送出【{sel_ret_unit}】審核結果", type="primary", use_container_width=True):
                             to_stock_ids, to_borrowed_ids, to_lost_ids = [], [], []
                             
-                            if unit_action == "✅ 班隊全數點收":
+                            if unit_action == "✅ 全審核":
                                 to_stock_ids.extend(unit_df['id'].tolist())
-                            elif unit_action == "❌ 班隊全數踢退":
+                            elif unit_action == "❌ 全踢退":
                                 if u_status == '結訓凍結': to_lost_ids.extend(unit_df['id'].tolist())
                                 else: to_borrowed_ids.extend(unit_df['id'].tolist())
                             else:
@@ -1336,15 +1336,15 @@ try:
                                     b_df = unit_df[unit_df['書名'] == b_name]
                                     u_b_key = f"{sel_ret_unit}_{b_name}"
                                     
-                                    if book_actions[u_b_key] == "✅ 此書全點收":
+                                    if book_actions[u_b_key] == "✅ 全審核":
                                         to_stock_ids.extend(b_df['id'].tolist())
-                                    elif book_actions[u_b_key] == "❌ 此書全踢退":
+                                    elif book_actions[u_b_key] == "❌ 全踢退":
                                         if u_status == '結訓凍結': to_lost_ids.extend(b_df['id'].tolist())
                                         else: to_borrowed_ids.extend(b_df['id'].tolist())
                                     else:
                                         for _, row in b_df.iterrows():
                                             i_act = item_actions[row['id']]
-                                            if i_act == "✅ 點收": to_stock_ids.append(row['id'])
+                                            if i_act == "✅ 審核": to_stock_ids.append(row['id'])
                                             else:
                                                 if u_status == '結訓凍結': to_lost_ids.append(row['id'])
                                                 else: to_borrowed_ids.append(row['id'])
