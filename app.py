@@ -91,9 +91,19 @@ def get_db_connection():
 
 def release_connection(conn):
     try:
-        get_pool().putconn(conn)
-    except Exception:
-        pass
+        if conn:
+            # 嘗試將連線安全放回連線池
+            get_pool().putconn(conn)
+    except Exception as e:
+        # 發生錯誤時：發送 Line 告警
+        err_msg = f"🚨 【系統告警】連線池異常！無法將資料庫連線放回池中。原因：{e}"
+        send_line_notify(err_msg) 
+        
+        # 既然放不回去，代表連線可能已經壞了，強制將其關閉釋放記憶體
+        try:
+            conn.close()
+        except Exception:
+            pass
 
 def send_line_notify(message):
     try:
@@ -202,7 +212,9 @@ def init_db():
 try:
     init_db()
 except Exception as e:
-    st.error(f"資料庫連線失敗！請檢查 Secrets 或網路狀態。詳細錯誤：{e}")
+    err_msg = f"🚨 【系統癱瘓】資料庫連線失敗！請檢查伺服器或網路狀態。詳細錯誤：{e}"
+    send_line_notify(err_msg)  # 👈 新增 Line 告警
+    st.error(err_msg)
     st.stop()
 
 # ==========================================
@@ -253,8 +265,10 @@ def run_ghost_cleanup():
         
         conn.commit()
     except Exception as e:
-        # 🔥 致命錯誤現形：如果 SQL 崩潰，直接在畫面上亮紅燈！
-        st.error(f"🚨 幽靈引擎發生異常崩潰：{e}")
+        # 🔥 致命錯誤現形：如果 SQL 崩潰，亮紅燈並傳賴！
+        err_msg = f"🚨 【幽靈引擎崩潰】背景清查發生異常：{e}"
+        send_line_notify(err_msg)  # 👈 新增 Line 告警
+        st.error(err_msg)
         conn.rollback()
     finally:
         release_connection(conn)
