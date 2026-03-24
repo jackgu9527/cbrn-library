@@ -1015,7 +1015,7 @@ try:
         st.markdown("---")
         st.subheader("🛠️ 系統底層資料除錯", help="強制將指定帳號名下的所有準則退回庫房。")
         with st.expander("展開除錯工具"):
-            ghost_id = st.text_input("請輸入卡住的登入帳號 (例如您剛才的 q)", key="ghost_id_input")
+            ghost_id = st.text_input("請輸入需除錯帳號)", key="ghost_id_input")
             if st.button("🚨 強制將此帳號名下的所有準則退庫", type="primary"):
                 if ghost_id.strip():
                     try:
@@ -1030,7 +1030,7 @@ try:
                                       (now_time, st.session_state.login_id, "上帝模式強制退庫", f"強制將帳號 {ghost_id} 卡在底層的 {reclaimed} 本幽靈準則退回庫房。"))
                             conn.commit()
                             st.success(f"✅ 已強制收回 {reclaimed} 本幽靈準則！")
-                            st.info("💡 請直接按下鍵盤 F5 重新整理網頁，幽靈引擎就會把這個帳號刪除了。")
+                            st.info("💡 重新整理網頁，幽靈引擎就會把這個帳號刪除了。")
                         else:
                             st.warning("⚠️ 系統沒有在底層找到屬於這個帳號的準則。")
                     except Exception as e:
