@@ -1292,7 +1292,7 @@ try:
                         
                         st.markdown(f"### 【{sel_ret_unit}】待歸還: {len(unit_df)} 本")
                         
-                        unit_action = st.radio("隱藏標題", ["🔽 展開", "✅ 全點收", "❌ 全踢退"], horizontal=True, key=f"u_ret_rad_{sel_unit}", label_visibility="collapsed")
+                        unit_action = st.radio("隱藏標題", ["🔽 展開", "✅ 全點收", "❌ 全踢退"], horizontal=True, key=f"u_ret_rad_{sel_ret_unit}", label_visibility="collapsed")
                         
                         book_actions, item_actions = {}, {}
                         
