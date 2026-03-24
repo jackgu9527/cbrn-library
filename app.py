@@ -274,7 +274,7 @@ if 'logged_in' not in st.session_state:
                 if not user.empty:
                     if user.iloc[0]['status'] == '待審核': st.warning("⚠️ 您的帳號尚未開通，請等待幹部審核。")
                     elif user.iloc[0]['status'] == '停權': st.error("🚨 您的帳號因違規停權！請聯絡幹部處理。")
-                    elif user.iloc[0]['status'] == '結訓凍結': st.error("❄️ 您的班隊已結訓，帳號已凍結鎖定！若有準則問題請聯絡幹部。")
+                    elif user.iloc[0]['status'] == '結訓凍結': st.error("❄️ 您的班隊已結訓，帳號已凍結鎖定！請聯絡幹部處理。")
                     else:
                         for col in user.columns: st.session_state[col] = user.iloc[0][col]
                         st.session_state['logged_in'] = True
@@ -336,7 +336,7 @@ with st.sidebar:
     
     if st.session_state.role == 'L1':
         if len(sq_list) > 1:
-            st.session_state['current_sq'] = st.selectbox("🏢 當前指揮視角", sq_list, key="global_sq_selector")
+            st.session_state['current_sq'] = st.selectbox("選擇中隊", sq_list, key="global_sq_selector")
         else:
             st.session_state['current_sq'] = sq_list[0]
             st.markdown(f"📍 **管轄中隊：** `{st.session_state['current_sq']}`")
@@ -379,12 +379,12 @@ st.session_state.dynamic_sq_in_clause = "'" + "','".join(target_sq_list) + "'"
 conn = get_db_connection()
 try:
     if menu in ["首頁", "🏠 首頁"]:
-        st.header("📊 首頁", help="查看今日營區戰情概況、待辦事項總覽與個人準則狀態。")
+        st.header("📊 首頁", help="幹部查看目前中隊概況與待辦事項，訓員查看班隊借閱準則名稱、數量、狀態。")
         
         # ======== 🟢 L1：幹部 / 管理員視角 ========
         if st.session_state.role == 'L1':
             target_sq = st.session_state.get('current_sq', '')
-            st.markdown(f"**{st.session_state.title}** 長官好，以下為【{target_sq}】今日戰情概況：")
+            st.markdown(f"**{st.session_state.title}** 長官好，以下為【{target_sq}】今日概況：")
             
             dyn_in = st.session_state.dynamic_sq_in_clause
             sq_filter = f"IN ({dyn_in})"
@@ -408,11 +408,11 @@ try:
                 d_date = datetime.strptime(str(st.session_state.discharge_date), '%Y-%m-%d').date()
                 today = datetime.now().date()
                 days_left = (d_date - today).days
-                if days_left < 0: st.error(f"🚨 已逾結訓日！請盡速完成準則歸還。")
+                if days_left < 0: st.error(f"🚨 已逾結訓日！請盡速歸還準則。")
                 elif days_left <= 3: st.warning(f"⚠️ 結訓倒數：{days_left} 天！")
                 else: st.info(f"📅 距離結訓日還有：{days_left} 天")
 
-            st.markdown("#### 📦 準則狀態總覽")
+            st.markdown("#### 📦 準則借閱總覽")
             
             br_df = pd.read_sql_query(f"SELECT book_name, quantity FROM borrow_requests WHERE login_id='{st.session_state.login_id}' AND status='待審核'", conn)
             bk_df = pd.read_sql_query(f"SELECT book_name, status FROM books WHERE owner_id='{st.session_state.login_id}' AND status IN ('保留待領取', '借閱中', '歸還中')", conn)
@@ -447,20 +447,20 @@ try:
                         
         # ======== 🟢 全局共用：個人設定修改面板 ========
         st.markdown("---")
-        with st.expander("⚙️ 個人帳號與資料設置", expanded=False):
+        with st.expander("⚙️ 帳密設置", expanded=False):
             if st.session_state.role == 'L1':
-                st.markdown("#### ⚙️ 個人設定", help="幹部可隨時修改您的顯示職稱、登入帳號與密碼。")
+                st.markdown("#### ⚙️ 個人設定", help="修改登入帳號與密碼。")
                 col_i, col_p = st.columns(2)
                 with col_i: new_id = st.text_input("登入帳號", value=st.session_state.login_id, key="daily_id")
                 with col_p: new_pwd = st.text_input("登入密碼", type="password", placeholder="若不修改請留空", key="daily_pw")
             else:
-                st.markdown("#### ⚙️ 個人設定", help="訓員可隨時修改您的登入帳號與密碼。(班隊全銜由幹部統一管理)")
+                st.markdown("#### ⚙️ 個人設定", help="修改登入帳號與密碼。")
                 new_title = st.session_state.title 
                 col_i, col_p = st.columns(2)
                 with col_i: new_id = st.text_input("登入帳號", value=st.session_state.login_id, key="daily_id")
                 with col_p: new_pwd = st.text_input("登入密碼", type="password", placeholder="若不修改請留空", key="daily_pw")
             
-            if st.button("💾 儲存設定", key="save_daily_settings", type="primary"):
+            if st.button("💾 儲存", key="save_daily_settings", type="primary"):
                 c = conn.cursor()
                 uid = int(st.session_state.id)
                 final_id = new_id.strip() if new_id.strip() else st.session_state.login_id
@@ -489,7 +489,7 @@ try:
 
     # ======== 🟢 L2 專屬業務區 (加入車輛登載) ========
     elif menu in ["車輛登載", "🚗 車輛登載"] and st.session_state.role == 'L2':
-        st.header("🚗 車輛登載與管理", help="輸入姓名與車號即可登錄。系統將自動過濾符號，僅保留大寫英文與數字。若需修改已登錄資料，可直接在下方表格內雙擊修改並點選儲存。")
+        st.header("🚗 車輛登載與管理", help="輸入姓名與車號後點擊➕ 新增車輛即可登錄。")
         
         # 1. 新增區塊
         with st.form("add_vehicle_form", clear_on_submit=True):
@@ -497,7 +497,7 @@ try:
             with col1:
                 v_name = st.text_input("姓名 (Owner Name)", placeholder="請輸入駕駛人姓名")
             with col2:
-                v_plate = st.text_input("車號 (Plate Number)", placeholder="例如：ABC-1234 (系統會自動清整)")
+                v_plate = st.text_input("車號 (Plate Number)", placeholder="例如：ABC1234")
             
             submit_v = st.form_submit_button("➕ 新增車輛", type="primary", use_container_width=True)
             if submit_v:
@@ -520,7 +520,7 @@ try:
         
         st.markdown("---")
         # 2. 修改與管理區塊
-        st.subheader("📋 已登載車輛管理", help="直接在表格文字上點擊兩下即可修改，修改完畢後請務必點擊下方「儲存表格變更」按鈕。")
+        st.subheader("📋 已登載車輛管理", help="直接在表格文字上點擊兩下即可修改，修改完畢後點擊下方「儲存」按鈕。")
         v_df = pd.read_sql_query("SELECT id, owner_name as 姓名, plate_number as 車號 FROM vehicles WHERE account_id=%s ORDER BY id DESC", conn, params=(st.session_state.login_id,))
         
         if v_df.empty:
@@ -528,7 +528,7 @@ try:
         else:
             edited_v_df = st.data_editor(v_df, hide_index=True, use_container_width=True, column_config={"id": None}, key="v_editor")
             
-            if st.button("💾 儲存表格變更", type="primary"):
+            if st.button("💾 儲存", type="primary"):
                 c = conn.cursor()
                 has_changes = False
                 for idx, row in edited_v_df.iterrows():
@@ -551,7 +551,7 @@ try:
                     st.rerun()
 
     elif menu in ["序號登載", "🏷️ 序號登載"] and st.session_state.role == 'L2':
-        st.header("🏷️ 序號登載", help="請將領取到的實體準則序號登載入系統。若有多本請用「半形逗號 ( , )」隔開；若發生實體數量短少，可勾選『借閱異常』進行通報。")
+        st.header("🏷️ 序號登載", help="將領取到的準則序號登載。若有多本請用「半形逗號 ( , )」隔開；若未借閱到申請數量的準則，輸入完現有準則序號後勾選『借閱異常』。")
         bk_df = pd.read_sql_query(f"SELECT id, book_name, serial_number, status FROM books WHERE owner_id='{st.session_state.login_id}' AND status IN ('保留待領取', '借閱中')", conn)
 
         if bk_df.empty:
@@ -587,7 +587,7 @@ try:
                                 🟢 {b_name}
                             </div>
                             <div style="font-size: 14px; color: #4CAF50; padding-left: 24px; margin-bottom: 8px;">
-                                (共 {qty} 本) 📝 校正序號 (請用 , 隔開)
+                                (共 {qty} 本) 序號請用 , 隔開
                             </div>
                             """, unsafe_allow_html=True)
                             user_input = st.text_input(f"隱藏標題_{b_name}_c", value=", ".join(current_s), label_visibility="collapsed", key=f"c_{b_name}")
@@ -1014,8 +1014,8 @@ try:
         sq_in_clause = st.session_state.dynamic_sq_in_clause
         
         if menu == "👥 帳號管理":
-            st.subheader("👥 人事與帳號管理中心")
-            acc_tabs = st.tabs(["📝 新進班隊開通", "👤 結訓日與復權救援"])
+            st.subheader("👥 帳號管理中心")
+            acc_tabs = st.tabs(["📝 班隊開通", "👤 帳號管理"])
             
             with acc_tabs[0]:
                 st.subheader("📝 待審核名單", help="點擊卡片下方的按鈕，即可直接完成開通或刪除。")
