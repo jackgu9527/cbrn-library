@@ -286,7 +286,7 @@ if 'logged_in' not in st.session_state:
 
     with tab2:
         st.subheader("班隊註冊", help="新進班隊請在此註冊，送出後將由幹部審核開通。")
-        reg_squadron = st.selectbox("所屬中隊", ["學員一中隊", "學員二中隊", "學生一中隊", "學生二中隊", "聯合中隊①", "聯合中隊②", "大隊部"])
+        reg_squadron = st.selectbox("所屬中隊", ["學員一中隊", "學員二中隊", "學生一中隊", "學生二中隊"])
         reg_title = st.text_input("班隊全銜 (將作為系統顯示名稱)")
         reg_id = st.text_input("設定登入帳號")
         reg_pw = st.text_input("設定登入密碼", type="password")
