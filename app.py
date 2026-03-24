@@ -171,8 +171,8 @@ def duplicate_borrow_dialog(borrow_requests, warnings_list):
     st.warning("系統偵測到以下重複借閱風險：")
     for w in warnings_list:
         st.markdown(f"- {w}")
-    st.info("若您確定這些是「遺失或額外缺少需要補領」的準則，請按下確認送出。")
-    if st.button("✅ 我確認，強制送出申請", type="primary", use_container_width=True):
+    st.info("已跟幹部確認這本準則我已借閱但數量不足。")
+    if st.button("✅ 我確認尚需再借閱此本準則", type="primary", use_container_width=True):
         conn = get_db_connection()
         try:
             c = conn.cursor()
