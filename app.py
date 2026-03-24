@@ -1101,7 +1101,6 @@ try:
             req_df = pd.read_sql_query(f"SELECT br.id as 單號, br.login_id as 帳號, u.title as 班隊, br.book_name as 書名, br.quantity as 申請數量, u.status as 帳號狀態 FROM borrow_requests br JOIN users u ON br.login_id = u.login_id WHERE br.status='待審核' AND u.squadron IN ({sq_in_clause}) ORDER BY u.title, br.book_name, br.id", conn)
             
             if not req_df.empty:
-                st.info("💡 **雙層折疊審核**：點開【班隊】👉 處理【個別申請】。")
                 owned_counts = []
                 c = conn.cursor()
                 for _, row in req_df.iterrows():
@@ -1116,7 +1115,7 @@ try:
                     u_status = unit_df.iloc[0]['帳號狀態']
                     status_emoji = "❄️(已凍結)" if u_status == '結訓凍結' else "🟢(啟用中)"
                     
-                    with st.expander(f"🎓 班隊：【{unit_name}】 ｜ 狀態: {status_emoji} ｜ 待審核: {len(unit_df)} 筆"):
+                    with st.expander(f"【{unit_name}】 ｜ 狀態: {status_emoji} ｜ 待審核: {len(unit_df)} 筆"):
                         unit_actions[unit_name] = st.radio(f"【{unit_name}】批次處理", ["🔽","✅ 全審核","❌ 全踢退"], horizontal=True, key=f"u_req_{unit_name}", label_visibility="collapsed")
                         
                         if unit_actions[unit_name] == "✅ 全審核":
