@@ -1299,9 +1299,9 @@ try:
                     u_status = unit_df.iloc[0]['帳號狀態']
                     status_emoji = "❄️(已凍結)" if u_status == '結訓凍結' else "🟢(啟用中)"
                     
-                    st.markdown(f"### 【{sel_ret_unit}】待歸還: {len(unit_df)} 本")
+                    st.markdown(f"### 【{sel_ret_unit}】待歸還: {len(unit_df)} 本 ｜ 狀態: {status_emoji}")
                     
-                    unit_action = st.radio("隱藏的標題", ["🔽 展開個別處理", "✅ 班隊全數點收", "❌ 班隊全數踢退"], horizontal=True, key=f"u_ret_rad_{sel_ret_unit}", label_visibility="collapsed")
+                    unit_action = st.radio("隱藏標題", ["🔽 展開個別處理", "✅ 班隊全數點收", "❌ 班隊全數踢退"], horizontal=True, key=f"u_ret_rad_{sel_ret_unit}", label_visibility="collapsed")
                     
                     book_actions, item_actions = {}, {}
                     
@@ -1323,64 +1323,7 @@ try:
                                     st.write("")
                     
                     st.markdown("---")
-                    if st.button(f"💾 送出【{sel_ret_unit}】點收結果", type="primary", use_container_width=True):
-                        to_stock_ids, to_borrowed_ids, to_lost_ids = [], [], []
-                        
-                        if unit_action == "✅ 班隊全數點收":
-                            to_stock_ids.extend(unit_df['id'].tolist())
-                        elif unit_action == "❌ 班隊全數踢退":
-                            if u_status == '結訓凍結': to_lost_ids.extend(unit_df['id'].tolist())
-                            else: to_borrowed_ids.extend(unit_df['id'].tolist())
-                        else:
-                            for b_name in unit_df['書名'].unique():
-                                b_df = unit_df[unit_df['書名'] == b_name]
-                                u_b_key = f"{sel_ret_unit}_{b_name}"
-                                
-                                if book_actions[u_b_key] == "✅ 此書全點收":
-                                    to_stock_ids.extend(b_df['id'].tolist())
-                                elif book_actions[u_b_key] == "❌ 此書全踢退":
-                                    if u_status == '結訓凍結': to_lost_ids.extend(b_df['id'].tolist())
-                                    else: to_borrowed_ids.extend(b_df['id'].tolist())
-                                else:
-                                    for _, row in b_df.iterrows():
-                                        i_act = item_actions[row['id']]
-                                        if i_act == "✅ 點收": to_stock_ids.append(row['id'])
-                                        else:
-                                            if u_status == '結訓凍結': to_lost_ids.append(row['id'])
-                                            else: to_borrowed_ids.append(row['id'])
-                                            
-                        # 🚀 這裡就是靈魂所在：把分好的清單，丟給對話框去彈出二次確認！
-                        admin_return_approve_dialog(sel_ret_unit, to_stock_ids, to_borrowed_ids, to_lost_ids)
-                else:
-                    st.success("目前各班隊皆無待準則歸還之準則！")
-
-                with ret_tabs[1]:
-                    st.subheader("🚨 遺失準則", help="尋獲時，點擊右側按鈕即可結案！")
-                    lost_df = pd.read_sql_query(f"SELECT b.id, u.title as 班隊, b.book_name as 書名, b.serial_number as 序號 FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.status='遺失待賠' AND u.squadron IN ({sq_in_clause}) ORDER BY u.title, b.book_name", conn)
-                    
-                    if not lost_df.empty:
-                        for _, row in lost_df.iterrows():
-                            l_id = row['id']
-                            with st.container(border=True):
-                                col1, col2 = st.columns([7, 3])
-                                with col1:
-                                    st.markdown(f"{row['班隊']}  \n📘 **書名：** `{row['書名']}`  \n🔖 **序號：** `{row['序號']}`")
-                                with col2:
-                                    st.write("")
-                                    if st.button("✅ 尋獲", key=f"lost_res_{l_id}", type="primary", use_container_width=True):
-                                        try:
-                                            c = conn.cursor()
-                                            now_time = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S")
-                                            c.execute(f"UPDATE books SET status='在庫', owner_id='在庫' WHERE id={l_id}")
-                                            c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", (now_time, st.session_state.login_id, "遺失結案", f"尋獲或完成賠償，退庫: {row['書名']} ({row['序號']})"))
-                                            conn.commit()
-                                            st.session_state['sys_toast'] ="✅ 結案成功！已退回庫房。"
-                                            st.rerun()
-                                        except Exception as e:
-                                            conn.rollback()
-                                            st.error(f"❌ 結案失敗：{e}")
-                    else:
-                        st.success("✨ 準則妥善率 100%！目前中隊無任何遺失之準則！")
+                    if st.button(f"💾 送出【{sel_ret_unit}】點收結果", type="primary", use_container_width
 
             elif menu in ["💬 回報專區", "回報專區"]:
                 st.subheader("💬 Line 報表自動生成器")
