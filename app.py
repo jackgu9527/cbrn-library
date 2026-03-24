@@ -594,7 +594,7 @@ try:
                             form_data[f"c_{b_name}"] = {'type': 'correct', 'rows': b_rows.to_dict('records'), 'input': user_input, 'b_name': b_name}
 
                 st.markdown("---")
-                if st.form_submit_button("💾 儲存序號", type="primary", use_container_width=True):
+                if st.form_submit_button("💾 儲存", type="primary", use_container_width=True):
                     c = conn.cursor()
                     has_err = False
                     success_cnt = 0
@@ -670,11 +670,11 @@ try:
         if not available_books:
             st.warning("庫房無可借閱的準則。")
         else:
-            st.subheader("🎯 設置預設借閱數量", help="設定後，下方所有選取的準則都會自動帶入此數量")
+            st.subheader("🎯 設置預設借閱數量", help="設定所需借閱準則數量後，準則都會自動帶入此數量")
             default_req_qty = st.number_input("請輸入欲借閱的數量 (例如：貴班隊人數)", min_value=1, value=1)
             st.markdown("---")
             
-            st.subheader("📚 第二步：選擇準則", help="請從下拉選單中挑選您需要的準則。選取後，下方會自動展開該準則的數量設定卡片。")
+            st.subheader("📚 第二步：選擇準則", help="填寫所需借閱準則關鍵字選取，可選取多本準則。")
             book_options = [f"{b[0]} (庫存: {b[1]}本)" for b in available_books]
             selected_books = st.multiselect("選擇要借閱的準則", book_options)
             
@@ -701,11 +701,11 @@ try:
                         
                         if total_existing > 0:
                             if pending_count > 0:
-                                st.error(f"🚨 系統攔截：您目前已有 **{pending_count}** 本【{b_name}】正在「等待幹部審核中」，請勿重複送單！")
+                                st.error(f"🚨 系統攔截：您目前已有 **{pending_count}** 本【{b_name}】正在「等待幹部審核中」，請勿重複借閱！")
                                 can_submit = False
                             else:
                                 st.warning(f"⚠️ 系統偵測到您名下已持有 **{owned_count}** 本【{b_name}】。")
-                                confirm_extra = st.checkbox(f"☑️ 我確認此為「缺少數量再額外申請」", key=f"chk_extra_{b_name}")
+                                confirm_extra = st.checkbox(f"☑️ 我確認此為「缺少的準則需再額外申請」", key=f"chk_extra_{b_name}")
                                 if not confirm_extra:
                                     can_submit = False
                 
@@ -729,13 +729,13 @@ try:
         tabs = st.tabs(["🚚 借還書回報", "📱 準則清點回報"])
         
         with tabs[0]:
-            st.subheader("🚚 借還書回報", help="請點擊下方生成清單，並點擊黑框右上角的「📋」一秒複製！")
+            st.subheader("🚚 借還書回報", help="請點擊下方生成清單，並點擊黑框右上角的「📋」完成複製！")
             if st.button("🚀 生成借還書清單", type="primary"):
                 br_pending = pd.read_sql_query(f"SELECT book_name, SUM(quantity) as qty FROM borrow_requests WHERE login_id='{st.session_state.login_id}' AND status='待審核' GROUP BY book_name", conn)
                 bk_reserved = pd.read_sql_query(f"SELECT book_name, COUNT(id) as qty FROM books WHERE owner_id='{st.session_state.login_id}' AND status='保留待領取' GROUP BY book_name", conn)
                 rt_df = pd.read_sql_query(f"SELECT book_name, COUNT(id) as qty FROM books WHERE owner_id='{st.session_state.login_id}' AND status='歸還中' GROUP BY book_name", conn)
                 
-                msg = f"報告，班隊：{st.session_state.title}\n借還書清單：\n\n【申請借閱】：\n"
+                msg = f"班隊：{st.session_state.title}\n借還書清單：\n\n【申請借閱】：\n"
                 
                 borrow_items = []
                 if not br_pending.empty:
