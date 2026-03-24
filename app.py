@@ -1127,7 +1127,7 @@ try:
                                         conn.rollback() # 🚀 防護網：錯誤時回滾
                                         st.error(f"❌ 處理失敗：{e}")
                             with col2:
-                                if st.button("❌ 否決(刪除)", key=f"rej_reg_{uid}", use_container_width=True):
+                                if st.button("❌ 踢退開通", key=f"rej_reg_{uid}", use_container_width=True):
                                     try:
                                         c = conn.cursor()
                                         c.execute("DELETE FROM users WHERE id=%s", (uid,))
