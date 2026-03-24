@@ -10,6 +10,9 @@ import warnings
 import extra_streamlit_components as stx  
 import requests  
 import re  # 🚀 新增正則表達式，用於終極防呆清理
+import secrets  # 🚀 用於生成高強度的隨機 Token
+from werkzeug.security import generate_password_hash, check_password_hash # 🚀 用於密碼 Hash 加密
+import psycopg2.errors # 🚀 處理資料庫行級鎖 (Race Condition) 的例外
 
 # 關閉 Pandas 對於未嚴格使用 SQLAlchemy 的警告
 warnings.filterwarnings('ignore', category=UserWarning, module='pandas')
@@ -158,6 +161,16 @@ def init_db():
                         owner_name TEXT,
                         plate_number TEXT UNIQUE
                     )''')
+        # 🔒 修正漏洞二：新增 session_token 欄位
+        c.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS session_token TEXT")
+        
+        # 🔒 修正漏洞四：建立系統設定表 (防重複觸發的互斥鎖)
+        c.execute('''CREATE TABLE IF NOT EXISTS system_settings (
+                        setting_key TEXT PRIMARY KEY, 
+                        setting_value TEXT, 
+                        last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )''')
+        c.execute("INSERT INTO system_settings (setting_key, setting_value) VALUES ('daily_report_date', '1970-01-01') ON CONFLICT DO NOTHING")
         
         c.execute("SELECT COUNT(*) FROM users")
         if c.fetchone()[0] == 0:
@@ -210,7 +223,7 @@ except Exception as e:
     st.stop()
 
 # ==========================================
-# ⚡ 幽靈背景引擎：結訓日 24:00 全自動清查 (偵錯強化版)
+# ⚡ 幽靈背景引擎：(修復競態條件與 SQL 注入)
 # ==========================================
 def run_ghost_cleanup():
     if 'ghost_engine_ran' in st.session_state:
@@ -219,47 +232,65 @@ def run_ghost_cleanup():
     try:
         c = conn.cursor()
         tz_tw = timezone(timedelta(hours=8))
-        today_str = datetime.now(tz_tw).strftime('%Y-%m-%d')
-        now_time = datetime.now(tz_tw).strftime("%Y-%m-%d %H:%M:%S")
+        now = datetime.now(tz_tw)
+        today_str = now.strftime('%Y-%m-%d')
+        now_time = now.strftime("%H:%M:%S")
         
-        # 🛑 步驟一：先抓出「已逾期但尚未凍結」的帳號，強制轉為歸還中並凍結
-        c.execute(f"SELECT id, login_id, title FROM users WHERE role='L2' AND discharge_date < '{today_str}' AND status='啟用'")
+        # ------------------------------------------
+        # 🔒 修正漏洞四：行級鎖防止競態條件 (Race Condition)
+        # ------------------------------------------
+        try:
+            # NOWAIT 代表如果別人正在鎖定這行，直接拋出例外放棄，避免重複發送
+            c.execute("SELECT setting_value FROM system_settings WHERE setting_key='daily_report_date' FOR UPDATE NOWAIT")
+            last_date = c.fetchone()[0]
+            
+            if last_date != today_str and now.strftime("%H:%M") >= "08:00":
+                # 執行發送報表邏輯...
+                pending_reg = pd.read_sql_query("SELECT COUNT(*) FROM users WHERE status='待審核'", conn).iloc[0,0]
+                pending_bor = pd.read_sql_query("SELECT COUNT(*) FROM borrow_requests WHERE status='待審核'", conn).iloc[0,0]
+                pending_ret = pd.read_sql_query("SELECT COUNT(*) FROM books WHERE status='歸還中'", conn).iloc[0,0]
+                report_msg = f"\n📅 {today_str} 每日待辦彙整\n━━━━━━━━━━━━━━\n📝 待開通帳號：{pending_reg} 件\n📥 待審核借閱：{pending_bor} 件\n📤 待點收歸還：{pending_ret} 件\n━━━━━━━━━━━━━━\n💡 請長官抽空進入系統處理。"
+                send_line_notify(report_msg)
+                
+                # 更新鎖定表
+                c.execute("UPDATE system_settings SET setting_value=%s, last_updated=CURRENT_TIMESTAMP WHERE setting_key='daily_report_date'", (today_str,))
+        except psycopg2.errors.LockNotAvailable:
+            conn.rollback() # 被別人搶先觸發了，放棄本次發送
+        except Exception:
+            pass # 忽略第一次尚未建表的錯誤
+            
+        # ------------------------------------------
+        # 🔒 修正漏洞三：將所有 f-string 改為參數化防禦 (%s)
+        # ------------------------------------------
+        c.execute("SELECT id, login_id, title FROM users WHERE role='L2' AND discharge_date < %s AND status='啟用'", (today_str,))
         overdue_users = c.fetchall()
         for u_id, u_login, u_title in overdue_users:
-            c.execute(f"UPDATE books SET status='歸還中' WHERE owner_id='{u_login}' AND status IN ('借閱中', '保留待領取', '少領異常')")
-            c.execute(f"UPDATE users SET status='結訓凍結' WHERE id={u_id}")
+            c.execute("UPDATE books SET status='歸還中' WHERE owner_id=%s AND status IN ('借閱中', '保留待領取', '少領異常')", (u_login,))
+            c.execute("UPDATE users SET status='結訓凍結' WHERE id=%s", (u_id,))
             c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", (now_time, "SYSTEM", "結訓凍結", f"班隊 {u_title} 已結訓，自動代為歸還並凍結帳號。"))
                 
-        # 🛑 步驟二：抓出所有「結訓凍結」的帳號，準備進行淨化與超渡
         c.execute("SELECT id, login_id, title FROM users WHERE role='L2' AND status='結訓凍結'")
         frozen_users = c.fetchall()
         for f_id, f_login, f_title in frozen_users:
+            c.execute("UPDATE books SET owner_id='在庫' WHERE owner_id=%s AND status='在庫'", (f_login,))
             
-            # 🚀 終極淨化防呆：如果狀態已在庫，強制解除帳號綁定
-            c.execute(f"UPDATE books SET owner_id='在庫' WHERE owner_id='{f_login}' AND status='在庫'")
-            
-            # 淨化完畢後，再來計算他身上是不是真的沒書了
-            c.execute(f"SELECT COUNT(*) FROM books WHERE owner_id='{f_login}'")
+            c.execute("SELECT COUNT(*) FROM books WHERE owner_id=%s", (f_login,))
             leftover_qty = c.fetchone()[0]
             
             if leftover_qty == 0:
-                # 🚀 幽靈連帶刪除：砍掉該帳號名下綁定的車輛與帳號
-                c.execute(f"DELETE FROM vehicles WHERE account_id='{f_login}'")
-                c.execute(f"DELETE FROM users WHERE id={f_id}")
-                c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", (now_time, "SYSTEM", "帳號註銷", f"班隊 {f_title} 準則已結清，自動徹底刪除帳號與所屬車輛資料。"))
+                c.execute("DELETE FROM vehicles WHERE account_id=%s", (f_login,))
+                c.execute("DELETE FROM users WHERE id=%s", (f_id,))
+                c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", (now_time, "SYSTEM", "帳號註銷", f"班隊 {f_title} 準則已結清，徹底刪除帳號。"))
             else:
-                # 🚨 偵錯日誌：如果沒有刪除，把原因寫進操作紀錄！
-                c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", (now_time, "SYSTEM", "刪除阻擋", f"系統嘗試刪除 {f_title} 失敗，資料庫底層偵測到仍有 {leftover_qty} 本幽靈準則綁定在此帳號！"))
+                c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", (now_time, "SYSTEM", "刪除阻擋", f"系統嘗試刪除 {f_title} 失敗，偵測到仍有 {leftover_qty} 本幽靈準則！"))
                     
-        # 🛑 步驟三：清理七天前的歷史操作紀錄
-        seven_days_ago = (datetime.now(tz_tw) - timedelta(days=7)).strftime('%Y-%m-%d %H:%M:%S')
-        c.execute(f"DELETE FROM action_logs WHERE timestamp < '{seven_days_ago}' AND user_id NOT IN (SELECT login_id FROM users) AND user_id != 'SYSTEM'")
+        seven_days_ago = (now - timedelta(days=7)).strftime('%Y-%m-%d %H:%M:%S')
+        c.execute("DELETE FROM action_logs WHERE timestamp < %s AND user_id NOT IN (SELECT login_id FROM users) AND user_id != 'SYSTEM'", (seven_days_ago,))
         
         conn.commit()
     except Exception as e:
-        # 🔥 致命錯誤現形：如果 SQL 崩潰，亮紅燈並傳賴！
         err_msg = f"🚨 【幽靈引擎崩潰】背景清查發生異常：{e}"
-        send_line_notify(err_msg)  # 🚀 Line 告警
+        send_line_notify(err_msg) 
         st.error(err_msg)
         conn.rollback()
     finally:
@@ -281,34 +312,26 @@ if st.session_state.get('logout_triggered'):
     st.session_state['sys_toast'] = "👋 登出成功！安全連線已銷毀。"
 
 # ==========================================
-# 🔑 餅乾哨角：自動登入偵測機制 (修復自動登出的關鍵)
+# 🔑 餅乾哨角：安全 Token 登入偵測 (修正漏洞二與漏洞三)
 # ==========================================
-# 1. 先抓出目前瀏覽器裡所有的餅乾
 all_cookies = cookie_manager.get_all()
 
-# 2. 判斷是否需要執行「餅乾救援」
 if 'logged_in' not in st.session_state and not st.session_state.get('force_logout'):
-    # 🚀 改用 get_all() 來檢查，比單獨 get 更能避開組件讀取失敗
     if all_cookies and 'sys_user_token' in all_cookies:
-        stored_user = all_cookies['sys_user_token']
+        stored_token = all_cookies['sys_user_token'] # 這裡拿到的不再是帳號，而是一串亂碼 Token
         
-        # 進入資料庫查驗
         conn = get_db_connection()
         try:
-            safe_user_id = str(stored_user)
-            user_data = pd.read_sql_query("SELECT * FROM users WHERE login_id=%s", conn, params=(safe_user_id,))
+            # 🔒 修正漏洞三：使用 %s 參數化防禦 SQL 注入，且對比的是 session_token
+            user_data = pd.read_sql_query("SELECT * FROM users WHERE session_token=%s", conn, params=(str(stored_token),))
             
             if not user_data.empty and user_data.iloc[0]['status'] not in ['待審核', '停權', '結訓凍結']:
-                # 把資料填回系統記憶體 (Session State)
                 for col in user_data.columns: 
                     st.session_state[col] = user_data.iloc[0][col]
                 st.session_state['logged_in'] = True
-                
-                # 🎯 最重要的一步：成功識別後「立刻重啟一次網頁」
-                # 這能讓整個介面瞬間從「登入模式」切換成「首頁模式」，不會卡住。
                 st.rerun()
         except Exception as e:
-            send_line_notify(f"🚨 【自動登入失敗】帳號 {stored_user} 嘗試自動登入時出錯：{e}")
+            send_line_notify(f"🚨 【自動登入失敗】安全 Token 嘗試自動登入時出錯：{e}")
         finally:
             release_connection(conn)
 
@@ -322,19 +345,41 @@ if 'logged_in' not in st.session_state:
         if st.button("登入", type="primary"):
             conn = get_db_connection()
             try:
-                user = pd.read_sql_query("SELECT * FROM users WHERE login_id=%s AND password=%s", conn, params=(login_id, password))
+                # 🔒 修正漏洞三：參數化查詢，先只用帳號撈出資料
+                user = pd.read_sql_query("SELECT * FROM users WHERE login_id=%s", conn, params=(login_id,))
                 if not user.empty:
-                    if user.iloc[0]['status'] == '待審核': st.warning("⚠️ 您的帳號尚未開通，請等待幹部審核。")
-                    elif user.iloc[0]['status'] == '停權': st.error("🚨 您的帳號因違規停權！請聯絡幹部處理。")
-                    elif user.iloc[0]['status'] == '結訓凍結': st.error("❄️ 您的班隊已結訓，帳號已凍結鎖定！請聯絡幹部處理。")
+                    db_pass = user.iloc[0]['password']
+                    
+                    # 🔒 修正漏洞一：密碼 Hash 驗證 (並相容舊版系統的明碼)
+                    is_auth = False
+                    if db_pass.startswith('pbkdf2:') or db_pass.startswith('scrypt:'):
+                        is_auth = check_password_hash(db_pass, password)
                     else:
-                        for col in user.columns: st.session_state[col] = user.iloc[0][col]
-                        st.session_state['logged_in'] = True
-                        cookie_manager.set('sys_user_token', login_id, expires_at=datetime.now() + timedelta(days=30))
-                        log_action(login_id, "登入", "使用者成功登入系統")
-                        import time; time.sleep(0.5) 
-                        st.rerun()
-                else: st.error("❌ 帳號或密碼錯誤")
+                        is_auth = (db_pass == password) # 若資料庫裡還是舊版明碼，仍允許登入
+                        
+                    if is_auth:
+                        if user.iloc[0]['status'] == '待審核': st.warning("⚠️ 您的帳號尚未開通，請等待幹部審核。")
+                        elif user.iloc[0]['status'] == '停權': st.error("🚨 您的帳號因違規停權！請聯絡幹部處理。")
+                        elif user.iloc[0]['status'] == '結訓凍結': st.error("❄️ 您的班隊已結訓，帳號已凍結鎖定！")
+                        else:
+                            # 🔒 修正漏洞二：發行加密高強度 Token 存入 DB
+                            new_token = secrets.token_urlsafe(32)
+                            c = conn.cursor()
+                            c.execute("UPDATE users SET session_token=%s WHERE id=%s", (new_token, int(user.iloc[0]['id'])))
+                            conn.commit()
+                            
+                            for col in user.columns: st.session_state[col] = user.iloc[0][col]
+                            st.session_state['logged_in'] = True
+                            
+                            # 寫入瀏覽器 Cookie 的是高強度 Token，不再是明碼帳號
+                            cookie_manager.set('sys_user_token', new_token, expires_at=datetime.now() + timedelta(days=30))
+                            log_action(login_id, "登入", "使用者成功安全登入系統")
+                            import time; time.sleep(0.5) 
+                            st.rerun()
+                    else:
+                        st.error("❌ 帳號或密碼錯誤")
+                else: 
+                    st.error("❌ 帳號或密碼錯誤")
             except Exception as e:
                 conn.rollback()
                 st.error(f"❌ 登入發生錯誤：{e}")
