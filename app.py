@@ -1450,7 +1450,7 @@ try:
                         else:
                             inv_df = apply_shadow_sort(inv_df, has_unit=True)
                             for unit in inv_df['unit'].unique():
-                                inv_msg += f"==== 【{unit}】 ====\n"
+                                inv_msg += f"【{unit}】\n"
                                 for _, r in inv_df[inv_df['unit'] == unit].iterrows():
                                     inv_msg += f"📘 {r['book_name']} * {int(r['qty'])} ({r['status']})\n"
                                 inv_msg += "\n"
