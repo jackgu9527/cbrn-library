@@ -13,7 +13,6 @@ import re
 import secrets  
 from werkzeug.security import generate_password_hash, check_password_hash 
 import psycopg2.errors 
-import altair as alt # 🚀 新增：用於繪製戰情室視覺化圖表
 
 # 關閉 Pandas 對於未嚴格使用 SQLAlchemy 的警告
 warnings.filterwarnings('ignore', category=UserWarning, module='pandas')
