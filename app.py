@@ -1407,7 +1407,7 @@ try:
                         if not all_units: msg += "無借還書清單。\n"
                         else:
                             for unit in sorted(list(all_units)):
-                                msg += f"==== 【{unit}】 ====\n【申請借閱】：\n"
+                                msg += f"【{unit}】\n【申請借閱】：\n"
                                 borrow_items = {}
                                 if not req_df.empty:
                                     for _, r in req_df[req_df['unit'] == unit].iterrows(): borrow_items[r['book_name']] = borrow_items.get(r['book_name'], 0) + int(r['qty'])
