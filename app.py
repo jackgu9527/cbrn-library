@@ -551,37 +551,6 @@ try:
                 c_m3.metric("📤 待歸還準則", f"{pending_ret} 件")
                 c_m4.metric("🔴 借閱異常警示", f"{pending_abn} 件")
                 
-                st.markdown("---")
-                st.subheader("📈 準則庫存儀表板")
-                c_dash = conn.cursor()
-                c_dash.execute("SELECT status, COUNT(id) FROM books GROUP BY status")
-                stats = dict(c_dash.fetchall())
-                in_stock = stats.get('在庫', 0)
-                out_stock = sum(v for k, v in stats.items() if k != '在庫')
-                total_books = in_stock + out_stock
-                
-                col_chart, col_prog = st.columns([1, 1])
-                with col_chart:
-                    source = pd.DataFrame({"狀態": ["在庫", "借閱"], "數量": [in_stock, out_stock]})
-                    if total_books > 0:
-                        chart = alt.Chart(source).mark_arc(innerRadius=60).encode(
-                            theta=alt.Theta(field="數量", type="quantitative"),
-                            color=alt.Color(field="狀態", type="nominal", scale=alt.Scale(domain=["在庫", "借閱"], range=['#4CAF50', '#ff6666'])),
-                            tooltip=['狀態', '數量']
-                        ).properties(height=280)
-                        st.altair_chart(chart, use_container_width=True)
-                    else:
-                        st.info("系統尚無準則資料。")
-                with col_prog:
-                    st.write("")
-                    st.write("")
-                    st.markdown(f"### 總庫存：{total_books} 本")
-                    if total_books > 0:
-                        st.write(f"🟢 圖書館庫存 ({in_stock}/{total_books})")
-                        st.progress(in_stock / total_books)
-                        st.write(f"🔴 大隊部借閱 ({out_stock}/{total_books})")
-                        st.progress(out_stock / total_books)
-
             elif st.session_state.role == 'L2':
                 st.markdown(f"**所屬單位：** {st.session_state.squadron} - {st.session_state.title}")
                 if st.session_state.discharge_date:
