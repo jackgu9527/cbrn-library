@@ -504,7 +504,7 @@ with st.sidebar:
         else:
             st.session_state['current_sq'] = sq_list[0]
             st.markdown(f"📍 **管轄中隊：** `{st.session_state['current_sq']}`")
-        menu_options = ["🏠 首頁", "👥 帳號管理", "📤 準則借閱審核", "📥 準則歸還審核", "💬 回報專區", "📊 準則現況", "🔍 綜合查詢", "🗂️ 操作紀錄"]
+        menu_options = ["🏠 首頁", "👥 帳號管理", "📤 借閱審核", "📥 歸還審核", "💬 回報專區", "📊 準則現況", "🔍 綜合查詢", "🗂️ 操作紀錄"]
         if user_sq == '大隊部': menu_options.insert(2, "⚙️ 系統管理")
     else:
         st.session_state['current_sq'] = st.session_state.squadron
@@ -1101,7 +1101,7 @@ try:
                         force_return_dialog(ghost_id)
                     else: st.warning("請先輸入帳號！")
 
-        elif st.session_state.role == 'L1' and menu in ["👥 帳號管理", "📤 準則借閱審核", "📥 準則歸還審核", "💬 回報專區"]:
+        elif st.session_state.role == 'L1' and menu in ["👥 帳號管理", "📤 借閱審核", "📥 歸還審核", "💬 回報專區"]:
             target_sq = st.session_state.get('current_sq', '')
             sq_in_clause = st.session_state.dynamic_sq_in_clause
             
@@ -1173,7 +1173,7 @@ try:
                                                     st.error(f"❌ 重置失敗：{e}")
                     else: st.success("✨ 目前無可管理的訓員資料。")
 
-            elif menu == "📤 準則借閱審核":
+            elif menu == "📤 借閱審核":
                 st.subheader("📚 借閱準則審核")
                 req_df = pd.read_sql_query(f"SELECT br.id as 單號, br.login_id as 帳號, u.title as 班隊, br.book_name as 書名, br.quantity as 申請數量, u.status as 帳號狀態 FROM borrow_requests br JOIN users u ON br.login_id = u.login_id WHERE br.status='待審核' AND u.squadron IN ({sq_in_clause}) ORDER BY u.title, br.book_name, br.id", conn)
                 
@@ -1275,7 +1275,7 @@ try:
                 else:
                     st.success("目前無異常少領通報。")
 
-            elif menu == "📥 準則歸還審核":
+            elif menu == "📥 歸還審核":
                 st.subheader("📥 準則歸還與遺失")
                 ret_tabs = st.tabs(["📥 準則歸還清單", "🚨 遺失準則"])
                 
