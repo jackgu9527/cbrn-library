@@ -1397,7 +1397,7 @@ try:
                         
                         now = datetime.now(timezone(timedelta(hours=8)))
                         tw_wd = ["一", "二", "三", "四", "五", "六", "日"][now.weekday()]
-                        msg = f"長官好，{target_sq}借還書清單\n時間：{now.month}/{now.day}（{tw_wd}）\n\n"
+                        msg = f"劉姐好，{target_sq}借還書清單\n時間：{now.month}/{now.day}（{tw_wd}）\n\n"
                         
                         all_units = set()
                         if not req_df.empty: all_units.update(req_df['unit'].tolist())
