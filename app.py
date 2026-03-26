@@ -530,7 +530,7 @@ try:
     conn = get_db_connection()
     try:
         if menu in ["首頁", "🏠 首頁"]:
-            st.header("📊 首頁")
+            st.header("📊 首頁", help="檢視當前部隊的準則借閱與帳號待辦概況。")
             
             if st.session_state.role == 'L1':
                 target_sq = st.session_state.get('current_sq', '')
@@ -623,7 +623,7 @@ try:
                         st.error(f"❌ 儲存失敗：{e}")
 
         elif menu in ["車輛登載", "🚗 車輛登載"] and st.session_state.role == 'L2':
-            st.header("🚗 車輛登載與管理")
+            st.header("🚗 車輛登載與管理", help="新增或修改個人名下登記的車輛資訊。")
             with st.form("add_vehicle_form", clear_on_submit=True):
                 col1, col2 = st.columns(2)
                 with col1: v_name = st.text_input("姓名 (Owner Name)", placeholder="請輸入駕駛人姓名")
@@ -681,7 +681,7 @@ try:
                         st.error(f"❌ 儲存失敗：{e}")
 
         elif menu in ["序號登載", "🏷️ 序號登載"] and st.session_state.role == 'L2':
-            st.header("🏷️ 序號登載")
+            st.header("🏷️ 序號登載", help="將剛領取的準則輸入實體序號，或校正現有借閱準則的序號。")
             bk_df = pd.read_sql_query(f"SELECT id, book_name, serial_number, status FROM books WHERE owner_id='{st.session_state.login_id}' AND status IN ('保留待領取', '借閱中')", conn)
 
             if bk_df.empty:
@@ -777,7 +777,7 @@ try:
                             st.error(f"❌ 儲存失敗：{e}")
 
         elif menu in ["準則借閱", "📤 準則借閱"] and st.session_state.role == 'L2':
-            st.header("📤 準則借閱申請")
+            st.header("📤 準則借閱申請", help="從庫房挑選所需的準則並送出借閱申請，等待幹部審核。")
             c = conn.cursor()
             c.execute("SELECT book_name, COUNT(id) FROM books WHERE status='在庫' GROUP BY book_name")
             available_books = c.fetchall()
@@ -839,7 +839,7 @@ try:
                                 st.error(f"❌ 申請失敗：{e}")
 
         elif menu in ["💬 回報專區", "回報專區"] and st.session_state.role == 'L2':
-            st.header("💬 Line 借還書回報")
+            st.header("💬 Line 借還書回報", help="自動產生個人借還書及庫存清點文字，方便快速回報。")
             tabs = st.tabs(["🚚 借還書回報", "📱 準則清點回報"])
             with tabs[0]:
                 st.subheader("🚚 借還書回報", help="請點擊下方生成清單，並點擊黑框右上角的「📋」完成複製！")
@@ -1074,10 +1074,10 @@ try:
             sq_in_clause = st.session_state.dynamic_sq_in_clause
             
             if menu == "👥 帳號管理":
-                st.subheader("👥 帳號管理中心")
+                st.subheader("👥 帳號管理中心", help="管理所有下轄單位的註冊申請與人員帳號狀態。")
                 acc_tabs = st.tabs(["📝 班隊開通", "👤 帳號管理"])
                 with acc_tabs[0]:
-                    st.subheader("📝 班隊開通")
+                    st.subheader("📝 班隊開通", help="審核並開通新註冊的班隊帳號。")
                     reg_df = pd.read_sql_query(f"SELECT id, squadron as 中隊, title as 班隊, login_id as 帳號, discharge_date as 結訓日 FROM users WHERE status='待審核' AND squadron IN ({sq_in_clause})", conn)
                     if not reg_df.empty:
                         for _, row in reg_df.iterrows():
@@ -1102,7 +1102,7 @@ try:
                     else: st.success("✨ 目前無待審核的註冊申請。")
 
                 with acc_tabs[1]:
-                    st.subheader("👤 帳號管理")
+                    st.subheader("👤 帳號管理", help="管理現有訓員帳號的狀態、結訓日期與密碼重置。")
                     l2_users = pd.read_sql_query(f"SELECT id, squadron as 中隊, title as 班隊, login_id as 訓員帳號, status as 狀態, discharge_date as 結訓日 FROM users WHERE role='L2' AND status IN ('啟用', '結訓凍結') AND squadron IN ({sq_in_clause}) ORDER BY title", conn)
                     if not l2_users.empty:
                         for unit_name in l2_users['班隊'].unique():
@@ -1142,7 +1142,7 @@ try:
                     else: st.success("✨ 目前無可管理的訓員資料。")
 
             elif menu == "📤 借閱審核":
-                st.subheader("📚 借閱準則審核")
+                st.subheader("📚 借閱準則審核", help="審核訓員提交的準則借閱申請，可修改核准數量或直接踢退。")
                 req_df = pd.read_sql_query(f"SELECT br.id as 單號, br.login_id as 帳號, u.title as 班隊, br.book_name as 書名, br.quantity as 申請數量, u.status as 帳號狀態 FROM borrow_requests br JOIN users u ON br.login_id = u.login_id WHERE br.status='待審核' AND u.squadron IN ({sq_in_clause}) ORDER BY u.title, br.book_name, br.id", conn)
                 
                 if not req_df.empty:
@@ -1193,7 +1193,7 @@ try:
                     st.info("目前無待審核的準則。")
 
                 st.markdown("---")
-                st.subheader("🔴 借閱異常警示")
+                st.subheader("🔴 借閱異常警示", help="處理訓員少領或未領齊的異常準則，將其釋放回庫房。")
                 abnormal_df = pd.read_sql_query(f"SELECT b.id, u.title as 班隊, b.book_name as 書名, b.serial_number as 序號 FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.status='少領異常' AND u.squadron IN ({sq_in_clause}) ORDER BY u.title, b.book_name", conn)
                 if not abnormal_df.empty:
                     edited_abn_dfs, abn_checks = {}, {}
@@ -1244,7 +1244,7 @@ try:
                     st.success("目前無異常少領通報。")
 
             elif menu == "📥 歸還審核":
-                st.subheader("📥 準則歸還與遺失")
+                st.subheader("📥 準則歸還與遺失", help="點收歸還的準則，或處理已結訓但未歸還的遺失帳務。")
                 ret_tabs = st.tabs(["📥 準則歸還清單", "🚨 遺失準則"])
                 
                 with ret_tabs[0]:
@@ -1341,7 +1341,7 @@ try:
                         st.success("✨ 準則妥善率 100%！目前中隊無任何遺失之準則！")
 
             elif menu in ["💬 回報專區", "回報專區"]:
-                st.subheader("💬 Line 報表自動生成器")
+                st.subheader("💬 Line 報表自動生成器", help="自動彙整各班隊的借還書與清點現況，方便複製回報至 LINE 群組。")
                 line_tabs = st.tabs(["🚚 準則借還訊息生成", "📦 準則清點"])
                 
                 with line_tabs[0]:
@@ -1397,7 +1397,7 @@ try:
                     st.subheader("📦 準則清點", help="生成當下準則清點訊息，點擊生成訊息黑框右上角「📋」複製。")
                     st.markdown(f"📍 **目前產出中隊：** `{target_sq}`")
                         
-                    inv_mode = st.radio("🎯 回報範圍", ["中隊彙總", "特定班隊"], horizontal=True, key="inv_mode2")
+                    inv_mode = st.radio("🎯 回報範圍", ["中隊彙總", "中隊彙總（有序號）", "特定班隊"], horizontal=True, key="inv_mode2")
                     inv_selected_units = []
                     if inv_mode == "特定班隊":
                         c = conn.cursor()
@@ -1408,19 +1408,35 @@ try:
                     if st.button("🚀 生成準則清點訊息", type="primary"):
                         unit_filter = f" AND u.title IN ('{chr(39).join(inv_selected_units)}')" if inv_mode == "特定班隊" and inv_selected_units else ""
                             
-                        inv_df = pd.read_sql_query(f"SELECT u.title as unit, b.book_name, b.status, COUNT(b.id) as qty FROM books b JOIN users u ON b.owner_id = u.login_id WHERE u.squadron IN ({sq_in_clause}) AND b.status IN ('借閱中', '歸還中', '遺失待賠', '少領異常') {unit_filter} GROUP BY u.title, b.book_name, b.status", conn)
+                        query = f"""
+                        SELECT u.title as unit, 
+                               b.book_name, 
+                               b.status, 
+                               COUNT(b.id) as qty,
+                               STRING_AGG(b.serial_number, ', ') as serials
+                        FROM books b 
+                        JOIN users u ON b.owner_id = u.login_id 
+                        WHERE u.squadron IN ({sq_in_clause}) 
+                          AND b.status IN ('借閱中', '歸還中', '遺失待賠', '少領異常') {unit_filter} 
+                        GROUP BY u.title, b.book_name, b.status
+                        """
+                        inv_df = pd.read_sql_query(query, conn)
                         
                         now = datetime.now(timezone(timedelta(hours=8)))
                         tw_wd = ["一", "二", "三", "四", "五", "六", "日"][now.weekday()]
                         inv_msg = f"{target_sq}準則清點總表\n時間：{now.month}/{now.day}（{tw_wd}）\n\n"
                         
-                        if inv_df.empty: inv_msg += "目前無借閱任何準則。\n"
+                        if inv_df.empty: 
+                            inv_msg += "目前無借閱任何準則。\n"
                         else:
                             inv_df = apply_shadow_sort(inv_df, has_unit=True)
                             for unit in inv_df['unit'].unique():
                                 inv_msg += f"【{unit}】\n"
                                 for _, r in inv_df[inv_df['unit'] == unit].iterrows():
-                                    inv_msg += f"📘 {r['book_name']} * {int(r['qty'])} ({r['status']})\n"
+                                    if inv_mode == "中隊彙總（有序號）":
+                                        inv_msg += f"📘 {r['book_name']} * {int(r['qty'])} ({r['status']}) [序號: {r['serials']}]\n"
+                                    else:
+                                        inv_msg += f"📘 {r['book_name']} * {int(r['qty'])} ({r['status']})\n"
                                 inv_msg += "\n"
                         
                         st.code(inv_msg.strip(), language="text")
