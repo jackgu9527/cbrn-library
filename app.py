@@ -454,7 +454,7 @@ if 'logged_in' not in st.session_state:
                 release_connection(conn)
 
     with tab2:
-        st.subheader("班隊註冊", help="新進班隊請在此註冊，送出後將由幹部審核開通。")
+        st.subheader("班隊註冊", help="這是一個操作說明：\n\n**【注意事項】**\n請確認實體書本已回到庫房。\n\n**【操作步驟】**\n- 勾選左側框框\n- 點擊下方 `送出申請`\n\n🚨 提醒：送出後將由幹部審核！")
         reg_squadron = st.selectbox("所屬中隊", ["學員一中隊", "學員二中隊", "學生一中隊", "學生二中隊"])
         reg_title = st.text_input("班隊全銜 (將作為系統顯示名稱)")
         reg_id = st.text_input("設定登入帳號")
