@@ -41,7 +41,7 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           # 改用 LINE 官方帳號的 Token 與群組 ID
           LINE_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }} 
-          LINE_TARGET_ID: ${{ secrets.LINE_TARGET_ID }}
+          LINE_TARGET_ID: ${{ secrets.LINE_TARGET_ID_STUDENT2 }}
           # 傳遞選單結果與自訂文字給 Python
           MANUAL_OVERRIDE: ${{ github.event.inputs.report_type || 'auto' }}
           CUSTOM_TEXT: ${{ github.event.inputs.custom_message }} 
