@@ -101,22 +101,33 @@ def main():
     now = datetime.now(timezone(timedelta(hours=8)))
     weekday = now.weekday() # 0=一, 1=二, 2=三, 3=四, 4=五, 5=六, 6=日
     
+    # 抓取 GitHub 按鈕傳進來的選項，如果沒有就預設為 'auto'
+    override = os.environ.get('MANUAL_OVERRIDE', 'auto')
+    
     try:
         conn = psycopg2.connect(DATABASE_URL)
-        if weekday == 2: # 星期三
-            print("⏳ 星期三：準備發送【借還書清單】...")
+        
+        # 判斷邏輯：如果是強制選週三，或是自動模式且今天是週三
+        if override == 'wednesday' or (override == 'auto' and weekday == 2):
+            print("⏳ 準備發送【借還書清單】...")
             msg = generate_borrow_return_report(conn)
             send_line_notify(msg)
-        elif weekday == 3: # 星期四
-            print("⏳ 星期四：準備發送【準則清點總表】...")
+            
+        # 判斷邏輯：如果是強制選週四，或是自動模式且今天是週四
+        elif override == 'thursday' or (override == 'auto' and weekday == 3):
+            print("⏳ 準備發送【準則清點總表】...")
             msg = generate_inventory_report(conn)
             send_line_notify(msg)
+            
         else:
-            print("💡 今日非週三或週四，無需發送報表。")
+            print("💡 自動排程模式：今日非週三或週四，無需發送報表。")
+            
     except Exception as e:
         print(f"❌ 資料庫連線或執行錯誤：{e}")
     finally:
         if 'conn' in locals(): conn.close()
 
 if __name__ == "__main__":
+    main()
+
     main()
