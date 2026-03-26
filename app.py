@@ -126,8 +126,8 @@ def draw_status_card(book_name, qty, status, extra_info=""):
 # ==========================================
 @st.dialog("⚠️ 徹底刪除帳號")
 def delete_account_dialog(uid, title):
-    st.error(f"即將徹底刪除【{title}】的帳號與所有資料！\n\n此動作無法復原，請確認該班隊的準則皆已歸還。")
-    if st.button("🚨 我確認，直接刪除", use_container_width=True):
+    st.error(f"將徹底刪除【{title}】的帳號與所有資料！\n\n此動作無法復原，請確認該班隊的準則皆已歸還。")
+    if st.button("🚨 確認刪除", use_container_width=True):
         conn = get_db_connection()
         try:
             c = conn.cursor()
