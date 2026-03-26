@@ -1,0 +1,122 @@
+import os
+import psycopg2
+import pandas as pd
+from datetime import datetime, timezone, timedelta
+import requests
+import warnings
+
+# 忽略 pandas 警告
+warnings.filterwarnings('ignore', category=UserWarning, module='pandas')
+
+# 從環境變數抓取金鑰 (GitHub Secrets)
+DATABASE_URL = os.environ.get('DATABASE_URL')
+LINE_NOTIFY_TOKEN = os.environ.get('LINE_NOTIFY_TOKEN')
+
+def send_line_notify(message):
+    if not LINE_NOTIFY_TOKEN:
+        print("❌ 錯誤：缺少 LINE Notify Token。")
+        return
+    headers = {"Authorization": f"Bearer {LINE_NOTIFY_TOKEN}"}
+    data = {"message": f"\n{message}"}
+    try:
+        response = requests.post("https://notify-api.line.me/api/notify", headers=headers, data=data)
+        if response.status_code == 200:
+            print("✅ 報表已成功發送 (LINE Notify 已確認接收)！")
+        else:
+            print(f"❌ 發送失敗！錯誤碼: {response.status_code}, 訊息: {response.text}")
+    except Exception as e:
+        print(f"💥 發送過程發生未預期爆炸: {e}")
+
+# 📊 產出【借還書清單】(每週三)
+def generate_borrow_return_report(conn):
+    now = datetime.now(timezone(timedelta(hours=8)))
+    tw_wd = ["一", "二", "三", "四", "五", "六", "日"][now.weekday()]
+    msg = f"劉姐好，學生二中隊借還書清單\n時間：{now.month}/{now.day}（{tw_wd}）\n\n"
+    
+    req_df = pd.read_sql_query("SELECT u.title as unit, br.book_name, SUM(br.quantity) as qty FROM borrow_requests br JOIN users u ON br.login_id = u.login_id WHERE u.squadron = '學生二中隊' AND br.status='待審核' GROUP BY u.title, br.book_name", conn)
+    res_df = pd.read_sql_query("SELECT u.title as unit, b.book_name, COUNT(b.id) as qty FROM books b JOIN users u ON b.owner_id = u.login_id WHERE u.squadron = '學生二中隊' AND b.status='保留待領取' GROUP BY u.title, b.book_name", conn)
+    ret_df = pd.read_sql_query("SELECT u.title as unit, b.book_name, COUNT(b.id) as qty FROM books b JOIN users u ON b.owner_id = u.login_id WHERE u.squadron = '學生二中隊' AND b.status='歸還中' GROUP BY u.title, b.book_name ORDER BY b.book_name", conn)
+    
+    all_units = set()
+    if not req_df.empty: all_units.update(req_df['unit'].tolist())
+    if not res_df.empty: all_units.update(res_df['unit'].tolist())
+    if not ret_df.empty: all_units.update(ret_df['unit'].tolist())
+    
+    if not all_units:
+        msg += "無借還書清單。\n"
+        return msg
+        
+    for unit in sorted(list(all_units)):
+        msg += f"【{unit}】\n【申請借閱】：\n"
+        borrow_items = {}
+        if not req_df.empty:
+            for _, r in req_df[req_df['unit'] == unit].iterrows(): borrow_items[r['book_name']] = borrow_items.get(r['book_name'], 0) + int(r['qty'])
+        if not res_df.empty:
+            for _, r in res_df[res_df['unit'] == unit].iterrows(): borrow_items[r['book_name']] = borrow_items.get(r['book_name'], 0) + int(r['qty'])
+                
+        if borrow_items:
+            for b_name in sorted(borrow_items.keys()): msg += f"{b_name} * {borrow_items[b_name]}\n"
+        else: msg += "無\n"
+        
+        msg += "\n【申請歸還】：\n"
+        if not ret_df.empty and not ret_df[ret_df['unit'] == unit].empty:
+            for _, r in ret_df[ret_df['unit'] == unit].iterrows(): msg += f"{r['book_name']} * {int(r['qty'])}\n"
+        else: msg += "無\n"
+        msg += "\n"
+    return msg.strip()
+
+# 📦 產出【準則清點】(每週四)
+def generate_inventory_report(conn):
+    now = datetime.now(timezone(timedelta(hours=8)))
+    tw_wd = ["一", "二", "三", "四", "五", "六", "日"][now.weekday()]
+    msg = f"學生二中隊準則清點總表\n時間：{now.month}/{now.day}（{tw_wd}）\n\n"
+    
+    query = """
+    SELECT u.title as unit, b.book_name, b.status, COUNT(b.id) as qty
+    FROM books b 
+    JOIN users u ON b.owner_id = u.login_id 
+    WHERE u.squadron = '學生二中隊' 
+      AND b.status IN ('借閱中', '歸還中', '遺失待賠', '少領異常')
+    GROUP BY u.title, b.book_name, b.status
+    ORDER BY u.title, b.book_name
+    """
+    inv_df = pd.read_sql_query(query, conn)
+    
+    if inv_df.empty:
+        msg += "目前無借閱任何準則。\n"
+        return msg
+        
+    for unit in inv_df['unit'].unique():
+        msg += f"【{unit}】\n"
+        for _, r in inv_df[inv_df['unit'] == unit].iterrows():
+            msg += f"📘 {r['book_name']} * {int(r['qty'])} ({r['status']})\n"
+        msg += "\n"
+    return msg.strip()
+
+def main():
+    if not DATABASE_URL:
+        print("❌ 錯誤：缺少 DATABASE_URL。")
+        return
+        
+    now = datetime.now(timezone(timedelta(hours=8)))
+    weekday = now.weekday() # 0=一, 1=二, 2=三, 3=四, 4=五, 5=六, 6=日
+    
+    try:
+        conn = psycopg2.connect(DATABASE_URL)
+        if weekday == 2: # 星期三
+            print("⏳ 星期三：準備發送【借還書清單】...")
+            msg = generate_borrow_return_report(conn)
+            send_line_notify(msg)
+        elif weekday == 3: # 星期四
+            print("⏳ 星期四：準備發送【準則清點總表】...")
+            msg = generate_inventory_report(conn)
+            send_line_notify(msg)
+        else:
+            print("💡 今日非週三或週四，無需發送報表。")
+    except Exception as e:
+        print(f"❌ 資料庫連線或執行錯誤：{e}")
+    finally:
+        if 'conn' in locals(): conn.close()
+
+if __name__ == "__main__":
+    main()
