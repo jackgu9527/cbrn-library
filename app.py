@@ -910,7 +910,7 @@ try:
                                 edited_return_dfs[b_name] = None 
                             else:
                                 initial_checks = [st.session_state['l2_partial_return_memory'].get(row['id'], False) for _, row in b_df.iterrows()]
-                                b_df.insert(0, "勾選歸還序號", initial_checks)
+                                b_df.insert(0, "勾選歸還", initial_checks)
                                 edited_return_dfs[b_name] = st.data_editor(b_df, hide_index=True, disabled=["id", "書名", "序號"], width='stretch', column_config={"id": None, "書名": None}, key=f"return_editor_{b_name}")
                 st.markdown("---") 
                 if st.button("📤 送出目前的勾選項目", type="primary", use_container_width=True):
