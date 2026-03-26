@@ -45,4 +45,4 @@ jobs:
           # 傳遞選單結果與自訂文字給 Python
           MANUAL_OVERRIDE: ${{ github.event.inputs.report_type || 'auto' }}
           CUSTOM_TEXT: ${{ github.event.inputs.custom_message }} 
-        run: python Second student team.py
+        run: python student2.py
