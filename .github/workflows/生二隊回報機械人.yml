@@ -2,10 +2,8 @@ name: 自動發送學生二中隊報表
 
 on:
   schedule:
-    # 台灣時間每週三、週四的 17:00 (UTC 09:00) 執行
     - cron: '0 9 * * 3,4'
   workflow_dispatch: 
-    # 加入輸入選項，讓手動執行時可以有下拉選單
     inputs:
       report_type:
         description: '手動測試：請選擇要強制發送的報表'
@@ -16,6 +14,11 @@ on:
           - auto         # 自動判斷 (依據當天星期幾)
           - wednesday    # 強制發送週三：借還書清單
           - thursday     # 強制發送週四：準則清點總表
+          - custom       # 🌟 新增：發送自訂指定訊息
+      custom_message:
+        description: '📝 若上方選擇 custom，請在此輸入你要發送的文字'
+        required: false
+        type: string
 
 jobs:
   send-report:
@@ -36,7 +39,10 @@ jobs:
       - name: Run Report Bot
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          LINE_NOTIFY_TOKEN: ${{ secrets.LINE_NOTIFY_TOKEN }}
-          # 將下拉選單的結果，傳遞給 Python 程式
+          # 改用 LINE 官方帳號的 Token 與群組 ID
+          LINE_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }} 
+          LINE_TARGET_ID: ${{ secrets.LINE_TARGET_ID }}
+          # 傳遞選單結果與自訂文字給 Python
           MANUAL_OVERRIDE: ${{ github.event.inputs.report_type || 'auto' }}
+          CUSTOM_TEXT: ${{ github.event.inputs.custom_message }} 
         run: python report_bot.py
