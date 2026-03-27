@@ -650,13 +650,13 @@ try:
         elif menu in ["車輛登載", "🚗 車輛登載"] and st.session_state.role == 'L2':
             st.header("🚗 車輛登載", help="""
 :blue[**【🚗 車輛登載與管理】**]：  
-:yellow[**【姓名】**]：輸入駕駛人姓名  
+:yellow[**【姓名】**]：輸入駕駛姓名  
 :yellow[**【車號】**]：輸入車輛車號  
 :yellow[**【➕ 新增車輛】**]：輸入完成後按下➕ 新增車輛  
 """)
             with st.form("add_vehicle_form", clear_on_submit=True):
                 col1, col2 = st.columns(2)
-                with col1: v_name = st.text_input("姓名 (Owner Name)", placeholder="請輸入駕駛人姓名")
+                with col1: v_name = st.text_input("姓名 (Owner Name)", placeholder="請輸入駕駛姓名")
                 with col2: v_plate = st.text_input("車號 (Plate Number)", placeholder="例如：ABC1234")
                 submit_v = st.form_submit_button("➕ 新增車輛", type="primary", use_container_width=True)
                 if submit_v:
@@ -681,7 +681,7 @@ try:
             st.markdown("---")
             st.subheader("📋 車輛管理", help="""
 :blue[**【📋 車輛管理】**]：  
-:yellow[**【姓名】**]：點擊二次駕駛人姓名即可修改  
+:yellow[**【姓名】**]：點擊二次駕駛姓名即可修改  
 :yellow[**【車號】**]：點擊二次車輛車號即可修改  
 :yellow[**【💾 儲存】**]：修改好資料按下💾 儲存  
 """)
