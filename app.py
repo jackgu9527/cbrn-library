@@ -737,7 +737,7 @@ try:
                             with st.container(border=True):                                                                
                                 st.markdown(f"""
                                     <div style="display: block; width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: clamp(14px, 4vw, 18px); font-weight: bold; color: #ffb84d; margin-bottom: 2px;">🟡 {b_name}</div>
-                                    <div style="font-size: 14px; color: #ffb84d; margin-bottom: 8px;"><b>(共 {qty} 本)</b> 📝 請登載序號 (請用 , 隔開)</div>
+                                    <div style="font-size: 14px; color: #ffb84d; margin-bottom: 8px;"><b>(共 {qty} 本)</b> 登載序號用 , 隔開</div>
                                 """, unsafe_allow_html=True)
                                 user_input = st.text_input(f"隱藏標題_{b_name}_p", label_visibility="collapsed", key=f"p_{b_name}")
                                 abnormal = st.checkbox(f"☑️借閱異常：借閱與領回數量不符時勾選。", key=f"abn_{b_name}")
@@ -748,7 +748,7 @@ try:
                             with st.container(border=True):                                                                
                                 st.markdown(f"""
                                     <div style="display: block; width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: clamp(14px, 4vw, 18px); font-weight: bold; color: #4CAF50; margin-bottom: 2px;">🟢 {b_name}</div>
-                                    <div style="font-size: 14px; color: #4CAF50; margin-bottom: 8px;"><b>(共 {qty} 本)</b> 序號請用 , 隔開</div>
+                                    <div style="font-size: 14px; color: #4CAF50; margin-bottom: 8px;"><b>(共 {qty} 本)</b> 序號用 , 隔開</div>
                                 """, unsafe_allow_html=True)
                                 user_input = st.text_input(f"隱藏標題_{b_name}_c", value=", ".join(current_s), label_visibility="collapsed", key=f"c_{b_name}")
                                 form_data[f"c_{b_name}"] = {'type': 'correct', 'rows': b_rows.to_dict('records'), 'input': user_input, 'b_name': b_name}
