@@ -540,7 +540,8 @@ try:
     try:
         if menu in ["首頁", "🏠 首頁"]:
             st.header("📊 首頁", help="""
-:blue[**【📊 首頁】**]：       - :yellow[文書：檢視中隊待辦事項]  
+:blue[**【📊 首頁】**]
+- :yellow[文書：檢視中隊待辦事項]  
 :yellow[**【📝 待審核帳號】**]：申請帳號需審核數量
 :yellow[**【📤 待借閱準則】**]：申請借閱需審核數量
 :yellow[**【📤 待歸還準則】**]：申請歸還需審核數量
@@ -714,10 +715,10 @@ try:
         elif menu in ["序號登載", "🏷️ 序號登載"] and st.session_state.role == 'L2':
             st.header("🏷️ 序號登載", help="""
 :blue[**【🏷️ 序號登載】**]：  
-:yellow[**【登載】**]：`   `內登載序號，用`,`隔開  
+:yellow[**【登載】**]：在`   `內登載序號，用`,`隔開  
 :yellow[**【校正】**]：點擊`序號1,序號2`校正序號，用`,`隔開  
 :yellow[**【☑️借閱異常】**]:借閱與領回數量不符時    
-`   `內登載領回準則序號後，勾選☑️借閱異常  
+在`   `內登載領回準則序號後，勾選☑️借閱異常  
 :yellow[**【💾 儲存】**]：登載好序號後，按下 :red[**💾 儲存**]""")
             bk_df = pd.read_sql_query(f"SELECT id, book_name, serial_number, status FROM books WHERE owner_id='{st.session_state.login_id}' AND status IN ('保留待領取', '借閱中')", conn)
 
