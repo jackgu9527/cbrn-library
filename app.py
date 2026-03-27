@@ -755,26 +755,23 @@ try:
                         qty = len(b_rows)
                         if st_val == '保留待領取':
                             b_ids = b_rows['id'].tolist()
-                            with st.container(border=True):
+                            with st.container(border=True):                                
                                 st.markdown(f"""
-                                    <div style="font-size: clamp(14px, 4vw, 18px); font-weight: bold; color: #ffb84d; margin-bottom: 2px;">🟡 {b_name}</div>
-                                    <div style="font-size: 14px; font-weight: bold; color: #ffb84d; margin-bottom: 8px;">(共 {qty} 本)</div>
-                                    <div style="font-size: 14px; color: #ffb84d; margin-bottom: 8px;">📝 請登載序號 (請用 , 隔開)</div>
-                                """, unsafe_allow_html=True)
-
+                                     <div style="font-size: clamp(14px, 4vw, 18px); font-weight: bold; color: #ffb84d; margin-bottom: 2px;">🟡 {b_name}</div>
+                                     <div style="font-size: 14px; color: #ffb84d; margin-bottom: 8px;"><b>(共 {qty} 本)</b> 📝 請登載序號 (請用 , 隔開)</div>
+                                 """, unsafe_allow_html=True)
                                 user_input = st.text_input(f"隱藏標題_{b_name}_p", label_visibility="collapsed", key=f"p_{b_name}")
                                 abnormal = st.checkbox(f"☑️ 借閱異常：剩餘準則未借閱到勾選。", key=f"abn_{b_name}")
                                 form_data[f"p_{b_name}"] = {'type': 'pending', 'ids': b_ids, 'input': user_input, 'abnormal': abnormal, 'b_name': b_name}
 
                         elif st_val == '借閱中':
                             current_s = [str(r['serial_number']).strip() for _, r in b_rows.iterrows() if pd.notna(r['serial_number'])]
-                            with st.container(border=True):
+                            with st.container(border=True):                                
                                 st.markdown(f"""
-                                    <div style="font-size: clamp(14px, 4vw, 18px); font-weight: bold; color: #4CAF50; margin-bottom: 2px;">🟢 {b_name}</div>
-                                    <div style="font-size: 14px; font-weight: bold; color: #4CAF50; margin-bottom: 8px;">(共 {qty} 本)</div>
-                                    <div style="font-size: 14px; color: #4CAF50; margin-bottom: 8px;">序號請用 , 隔開</div>
-                                """, unsafe_allow_html=True)
-                                user_input = st.text_input(f"隱藏標題_{b_name}_c", value=", ".join(current_s), label_visibility="collapsed", key=f"c_{b_name}")
+                                     <div style="font-size: clamp(14px, 4vw, 18px); font-weight: bold; color: #4CAF50; margin-bottom: 2px;">🟢 {b_name}</div>
+                                     <div style="font-size: 14px; color: #4CAF50; margin-bottom: 8px;"><b>(共 {qty} 本)</b> 序號請用 , 隔開</div>
+                                 """, unsafe_allow_html=True)
+                                 user_input = st.text_input(f"隱藏標題_{b_name}_c", value=", ".join(current_s), label_visibility="collapsed", key=f"c_{b_name}")
                                 form_data[f"c_{b_name}"] = {'type': 'correct', 'rows': b_rows.to_dict('records'), 'input': user_input, 'b_name': b_name}
 
                     st.markdown("---")
