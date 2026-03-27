@@ -456,6 +456,8 @@ if 'logged_in' not in st.session_state:
 
     with tab2:
         st.subheader("班隊註冊", help="""
+:blue[**【班隊註冊】**]
+
 :yellow[**【所屬中隊】**]：請填寫報到的中隊
 
 :yellow[**【班隊全銜】**]：請填寫受訓的名稱填寫
