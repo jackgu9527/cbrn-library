@@ -455,9 +455,7 @@ if 'logged_in' not in st.session_state:
                 release_connection(conn)
 
     with tab2:
-        st.subheader("班隊註冊", help="st.button(
-    "送出申請", 
-    help="""
+        st.subheader("班隊註冊", help="""
 這是一個進階操作說明：
 
 **【注意事項】**
