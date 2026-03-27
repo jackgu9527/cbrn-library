@@ -457,15 +457,10 @@ if 'logged_in' not in st.session_state:
     with tab2:
         st.subheader("班隊註冊", help="""
 :blue[**【班隊註冊】**]
-
 :yellow[**【所屬中隊】**]：請填寫報到的中隊
-
 :yellow[**【班隊全銜】**]：請填寫受訓的名稱
-
 :yellow[**【設定登入帳號】**]：設定登錄頁面登錄帳號
-
 :yellow[**【設定登入密碼】**]：設定登錄頁面登錄密碼
-
 :yellow[**【結訓日期】**]：填寫受訓的結訓日期
 """)
         reg_squadron = st.selectbox("所屬中隊", ["學員一中隊", "學員二中隊", "學生一中隊", "學生二中隊"])
