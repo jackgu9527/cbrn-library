@@ -461,8 +461,8 @@ if 'logged_in' not in st.session_state:
 :yellow[**【班隊全銜】**]：請填寫受訓的名稱  
 :yellow[**【設定登入帳號】**]：設定登錄頁面登錄帳號  
 :yellow[**【設定登入密碼】**]：設定登錄頁面登錄密碼  
-:yellow[**【結訓日期】**]：填寫受訓的結訓日期  
-""")
+:yellow[**【結訓日期】**]：填寫受訓的結訓日期 
+:yellow[**【送出註冊申請】**]：點擊送出註冊申請  """)
         reg_squadron = st.selectbox("所屬中隊", ["學員一中隊", "學員二中隊", "學生一中隊", "學生二中隊"])
         reg_title = st.text_input("班隊全銜 （消除士兵班115-2期)")
         reg_id = st.text_input("設定登入帳號")
