@@ -604,12 +604,12 @@ try:
             with st.expander("⚙️ 帳密設置", expanded=False):
                 st.markdown("#### ⚙️ 個人設定", help="""
 :blue[**【⚙️ 個人設定】**]  
-:yellow[**【登入帳號】**]：輸入要修改的登錄帳號  
-:yellow[**【登入密碼】**]：輸入要修改的登錄密碼  
-:yellow[**【💾 儲存】**]：修改好帳密按下:red[**💾 儲存**]  """)
+:yellow[**【修改帳號】**]：在`   `內輸入輸入新帳號  
+:yellow[**【修改密碼】**]：在`   `內輸入輸入新密碼  
+:yellow[**【💾 儲存】**]：修改好帳號密碼按下:red[**💾 儲存**]  """)
                 col_i, col_p = st.columns(2)
-                with col_i: new_id = st.text_input("登入帳號", value=st.session_state.login_id, key="daily_id")
-                with col_p: new_pwd = st.text_input("登入密碼", type="password", placeholder="若不修改請留空", key="daily_pw")
+                with col_i: new_id = st.text_input("修改帳號", value=st.session_state.login_id, key="daily_id")
+                with col_p: new_pwd = st.text_input("修改密碼", type="password", placeholder="若不修改請空白", key="daily_pw")
                 
                 if st.button("💾 儲存", key="save_daily_settings", type="primary"):
                     try:
@@ -649,8 +649,8 @@ try:
         elif menu in ["車輛登載", "🚗 車輛登載"] and st.session_state.role == 'L2':
             st.header("🚗 車輛登載", help="""
 :blue[**【🚗 車輛登載與管理】**]  
-:yellow[**【姓名】**]：輸入駕駛姓名  
-:yellow[**【車號】**]：輸入車輛車號  
+:yellow[**【姓名】**]：在`   `內輸入駕駛姓名  
+:yellow[**【車號】**]：在`   `內輸入車輛車號  
 :yellow[**【➕ 新增車輛】**]：輸入完成後按下➕ 新增車輛  """)
             with st.form("add_vehicle_form", clear_on_submit=True):
                 col1, col2 = st.columns(2)
@@ -679,9 +679,10 @@ try:
             st.markdown("---")
             st.subheader("📋 車輛管理", help="""
 :blue[**【📋 車輛管理】**]  
-:yellow[**【姓名】**]：點擊二次駕駛姓名即可修改  
-:yellow[**【車號】**]：點擊二次車輛車號即可修改  
-:yellow[**【💾 儲存】**]：修改好資料按下:red[**💾 儲存**]  """)
+:yellow[**【👤 駕駛姓名】**]：在`   `內修改駕駛姓名  
+:yellow[**【🚘 車輛車號】**]：在`   `內修改車輛車號  
+:yellow[**【💾 儲存】**]：修改好資料按下:red[**💾 儲存**]  
+:yellow[**【🗑️ 刪除】**]：刪除車輛資訊按下🗑️ 刪除  """)
             v_df = pd.read_sql_query("SELECT id, owner_name as 姓名, plate_number as 車號 FROM vehicles WHERE account_id=%s ORDER BY id DESC", conn, params=(st.session_state.login_id,))
             
             if v_df.empty: 
@@ -699,7 +700,7 @@ try:
                         with st.container(border=True):
                             
                             # 輸入框區域
-                            new_name = st.text_input("👤 駕駛人姓名", value=orig_name, key=f"v_name_{v_id}")
+                            new_name = st.text_input("👤 駕駛姓名", value=orig_name, key=f"v_name_{v_id}")
                             new_plate = st.text_input("🚘 車輛車號", value=orig_plate, key=f"v_plate_{v_id}")
                             
                             st.write("") # 稍微空一行，讓排版有呼吸空間
