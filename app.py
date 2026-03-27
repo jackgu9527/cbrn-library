@@ -472,9 +472,7 @@ if 'logged_in' not in st.session_state:
 ~~已作廢的舊版準則免填此表~~。
 
 詳細規定請參考：[準則管理辦法總覽](https://google.com)
-"""
-)
-")
+""")")
         reg_squadron = st.selectbox("所屬中隊", ["學員一中隊", "學員二中隊", "學生一中隊", "學生二中隊"])
         reg_title = st.text_input("班隊全銜 (將作為系統顯示名稱)")
         reg_id = st.text_input("設定登入帳號")
