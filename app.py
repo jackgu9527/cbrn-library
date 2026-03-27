@@ -649,13 +649,10 @@ try:
 
         elif menu in ["車輛登載", "🚗 車輛登載"] and st.session_state.role == 'L2':
             st.header("🚗 車輛登載", help="""
-:blue[**【🚗 車輛登載與管理】**]：
-
-:yellow[**【姓名】**]：輸入駕駛人姓名
-
-:yellow[**【車號】**]：輸入車輛車號
-
-:yellow[**【➕ 新增車輛】**]：輸入完成後按下➕ 新增車輛
+:blue[**【🚗 車輛登載與管理】**]：  
+:yellow[**【姓名】**]：輸入駕駛人姓名  
+:yellow[**【車號】**]：輸入車輛車號  
+:yellow[**【➕ 新增車輛】**]：輸入完成後按下➕ 新增車輛  
 """)
             with st.form("add_vehicle_form", clear_on_submit=True):
                 col1, col2 = st.columns(2)
@@ -683,13 +680,10 @@ try:
             
             st.markdown("---")
             st.subheader("📋 車輛管理", help="""
-:blue[**【📋 車輛管理】**]：
-
-:yellow[**【姓名】**]：點擊二次駕駛人姓名即可修改
-
-:yellow[**【車號】**]：點擊二次車輛車號即可修改
-
-:yellow[**【💾 儲存】**]：修改好資料按下💾 儲存
+:blue[**【📋 車輛管理】**]：  
+:yellow[**【姓名】**]：點擊二次駕駛人姓名即可修改  
+:yellow[**【車號】**]：點擊二次車輛車號即可修改  
+:yellow[**【💾 儲存】**]：修改好資料按下💾 儲存  
 """)
             v_df = pd.read_sql_query("SELECT id, owner_name as 姓名, plate_number as 車號 FROM vehicles WHERE account_id=%s ORDER BY id DESC", conn, params=(st.session_state.login_id,))
             if v_df.empty: st.info("💡 目前尚無登載任何車輛。")
