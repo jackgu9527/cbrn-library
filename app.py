@@ -756,7 +756,12 @@ try:
                         if st_val == '保留待領取':
                             b_ids = b_rows['id'].tolist()
                             with st.container(border=True):
-                                st.markdown(f"""<div style="font-size: 15px; font-weight: bold; color: #ffb84d;">🟡 {b_name} (共 {qty} 本)</div><div style="font-size: 14px; color: #ffb84d; margin-bottom: 8px;">📝 請登載序號 (請用 , 隔開)</div>""", unsafe_allow_html=True)
+                                st.markdown(f"""
+                                    <div style="font-size: clamp(14px, 4vw, 18px); font-weight: bold; color: #ffb84d; margin-bottom: 2px;">🟡 {b_name}</div>
+                                    <div style="font-size: 14px; font-weight: bold; color: #ffb84d; margin-bottom: 8px;">(共 {qty} 本)</div>
+                                    <div style="font-size: 14px; color: #ffb84d; margin-bottom: 8px;">📝 請登載序號 (請用 , 隔開)</div>
+                                """, unsafe_allow_html=True)
+
                                 user_input = st.text_input(f"隱藏標題_{b_name}_p", label_visibility="collapsed", key=f"p_{b_name}")
                                 abnormal = st.checkbox(f"☑️ 借閱異常：剩餘準則未借閱到勾選。", key=f"abn_{b_name}")
                                 form_data[f"p_{b_name}"] = {'type': 'pending', 'ids': b_ids, 'input': user_input, 'abnormal': abnormal, 'b_name': b_name}
