@@ -603,13 +603,10 @@ try:
             st.markdown("---")
             with st.expander("⚙️ 帳密設置", expanded=False):
                 st.markdown("#### ⚙️ 個人設定", help="""
-:blue[**【⚙️ 個人設定】**]：
-
-:yellow[**【登入帳號】**]：輸入要修改的登錄帳號
-
-:yellow[**【登入密碼】**]：輸入要修改的登錄密碼
-
-:yellow[**【💾 儲存】**]：修改好帳密按下💾 儲存
+:blue[**【⚙️ 個人設定】**]：  
+:yellow[**【登入帳號】**]：輸入要修改的登錄帳號  
+:yellow[**【登入密碼】**]：輸入要修改的登錄密碼  
+:yellow[**【💾 儲存】**]：修改好帳密按下💾 儲存  
 """)
                 col_i, col_p = st.columns(2)
                 with col_i: new_id = st.text_input("登入帳號", value=st.session_state.login_id, key="daily_id")
