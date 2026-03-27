@@ -1543,7 +1543,7 @@ try:
 
         elif menu == "📊 準則現況":
             current_view_sq = st.session_state.get('current_sq', st.session_state.squadron)
-            st.header(f"📊【{current_view_sq}】\n準則現況", help="點擊下方各班隊名稱，即可展開查看該班隊目前持有的所有準則與詳細序號。")
+            st.header(f"📊【{current_view_sq}】\n\n準則現況", help="點擊下方各班隊名稱，即可展開查看該班隊目前持有的所有準則與詳細序號。")
             
             if st.session_state.role == 'L1':
                 sq_in_clause = st.session_state.dynamic_sq_in_clause
