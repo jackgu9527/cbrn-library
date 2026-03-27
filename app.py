@@ -1419,16 +1419,16 @@ try:
                     st.subheader("🚚 準則借還訊息生成", help="生成當下準則借還訊息，點擊生成訊息黑框右上角「📋」複製。")
                     st.markdown(f"📍 **目前產出中隊：** `{target_sq}`")
                     
-                    dyn_mode = st.radio("🎯 回報範圍", ["中隊彙總", "特定班隊"], horizontal=True, key="dyn_mode")
+                    dyn_mode = st.radio("🎯 回報範圍", ["中隊", "班隊"], horizontal=True, key="dyn_mode")
                     dyn_selected_units = []
-                    if dyn_mode == "特定班隊":
+                    if dyn_mode == "班隊":
                         c = conn.cursor()
                         c.execute(f"SELECT DISTINCT title FROM users WHERE squadron IN ({sq_in_clause}) AND role='L2'")
                         avail_units = [row[0] for row in c.fetchall()]
                         dyn_selected_units = st.multiselect("📌 請加入要回報的班隊 (可多選)：", avail_units, key="dyn_units")
                         
                     if st.button("🚀 生成準則借還訊息", type="primary"):
-                        unit_filter = f" AND u.title IN ('{chr(39).join(dyn_selected_units)}')" if dyn_mode == "特定班隊" and dyn_selected_units else ""
+                        unit_filter = f" AND u.title IN ('{chr(39).join(dyn_selected_units)}')" if dyn_mode == "班隊" and dyn_selected_units else ""
                         
                         req_df = pd.read_sql_query(f"SELECT u.title as unit, br.book_name, SUM(br.quantity) as qty FROM borrow_requests br JOIN users u ON br.login_id = u.login_id WHERE u.squadron IN ({sq_in_clause}) AND br.status='待審核'{unit_filter} GROUP BY u.title, br.book_name", conn)
                         res_df = pd.read_sql_query(f"SELECT u.title as unit, b.book_name, COUNT(b.id) as qty FROM books b JOIN users u ON b.owner_id = u.login_id WHERE u.squadron IN ({sq_in_clause}) AND b.status='保留待領取'{unit_filter} GROUP BY u.title, b.book_name", conn)
@@ -1468,16 +1468,16 @@ try:
                     st.subheader("📦 準則清點", help="生成當下準則清點訊息，點擊生成訊息黑框右上角「📋」複製。")
                     st.markdown(f"📍 **目前產出中隊：** `{target_sq}`")
                         
-                    inv_mode = st.radio("🎯 回報範圍", ["中隊彙總", "中隊彙總（有序號）", "特定班隊"], horizontal=True, key="inv_mode2")
+                    inv_mode = st.radio("🎯 回報範圍", ["中隊", "中隊(序號)", "班隊"], horizontal=True, key="inv_mode2")
                     inv_selected_units = []
-                    if inv_mode == "特定班隊":
+                    if inv_mode == "班隊":
                         c = conn.cursor()
                         c.execute(f"SELECT DISTINCT title FROM users WHERE squadron IN ({sq_in_clause}) AND role='L2'")
                         avail_units = [row[0] for row in c.fetchall()]
                         inv_selected_units = st.multiselect("📌 請加入要回報的班隊 (可多選)：", avail_units, key="inv_units2")
                         
                     if st.button("🚀 生成準則清點訊息", type="primary"):
-                        unit_filter = f" AND u.title IN ('{chr(39).join(inv_selected_units)}')" if inv_mode == "特定班隊" and inv_selected_units else ""
+                        unit_filter = f" AND u.title IN ('{chr(39).join(inv_selected_units)}')" if inv_mode == "班隊" and inv_selected_units else ""
                             
                         query = f"""
                         SELECT u.title as unit, 
@@ -1504,7 +1504,7 @@ try:
                             for unit in inv_df['unit'].unique():
                                 inv_msg += f"【{unit}】\n"
                                 for _, r in inv_df[inv_df['unit'] == unit].iterrows():
-                                    if inv_mode == "中隊彙總（有序號）":
+                                    if inv_mode == "中隊(序號)":
                                         inv_msg += f"📘 {r['book_name']} * {int(r['qty'])} ({r['status']}) [序號: {r['serials']}]\n"
                                     else:
                                         inv_msg += f"📘 {r['book_name']} * {int(r['qty'])} ({r['status']})\n"
