@@ -683,35 +683,60 @@ try:
 :yellow[**【車號】**]：點擊二次車輛車號即可修改  
 :yellow[**【💾 儲存】**]：修改好資料按下:red[**💾 儲存**]  """)
             v_df = pd.read_sql_query("SELECT id, owner_name as 姓名, plate_number as 車號 FROM vehicles WHERE account_id=%s ORDER BY id DESC", conn, params=(st.session_state.login_id,))
-            if v_df.empty: st.info("💡 目前尚無登載任何車輛。")
+            
+            if v_df.empty: 
+                st.info("💡 目前尚無登載任何車輛。")
             else:
-                edited_v_df = st.data_editor(v_df, hide_index=True, use_container_width=True, column_config={"id": None}, key="v_editor")
-                if st.button("💾 儲存", type="primary"):
-                    try:
-                        c = conn.cursor()
-                        has_changes = False
-                        for idx, row in edited_v_df.iterrows():
-                            orig_row = v_df.iloc[idx]
-                            if row['姓名'] != orig_row['姓名'] or row['車號'] != orig_row['車號']:
-                                new_name = str(row['姓名']).strip()
-                                new_plate = re.sub(r'[^A-Za-z0-9]', '', str(row['車號'])).upper()
-                                v_id = int(row['id'])
+                for idx, row in v_df.iterrows():
+                    v_id = row['id']
+                    orig_name = row['姓名']
+                    orig_plate = row['車號']
+                    
+                    # 建立卡片外框
+                    with st.container(border=True):
+                        # 第一排：姓名與車號輸入框
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            new_name = st.text_input("姓名", value=orig_name, key=f"v_name_{v_id}")
+                        with col2:
+                            new_plate = st.text_input("車號", value=orig_plate, key=f"v_plate_{v_id}")
+                            
+                        # 第二排：儲存與刪除按鈕
+                        col_save, col_del = st.columns(2)
+                        with col_save:
+                            if st.button("💾 儲存修改", key=f"v_save_{v_id}", type="primary", use_container_width=True):
                                 try:
-                                    c.execute("UPDATE vehicles SET owner_name=%s, plate_number=%s WHERE id=%s", (new_name, new_plate, v_id))
-                                    has_changes = True
-                                except IntegrityError:
+                                    c = conn.cursor()
+                                    clean_name = str(new_name).strip()
+                                    clean_plate = re.sub(r'[^A-Za-z0-9]', '', str(new_plate)).upper()
+                                    
+                                    if clean_name != orig_name or clean_plate != orig_plate:
+                                        try:
+                                            c.execute("UPDATE vehicles SET owner_name=%s, plate_number=%s WHERE id=%s", (clean_name, clean_plate, v_id))
+                                            conn.commit()
+                                            st.session_state['sys_toast'] = "✅ 車輛資料更新成功！"
+                                            st.rerun()
+                                        except IntegrityError:
+                                            conn.rollback()
+                                            st.error(f"❌ 更新失敗：車號 {clean_plate} 已存在於系統中！")
+                                    else:
+                                        st.warning("⚠️ 資料沒有更動。")
+                                except Exception as e:
                                     conn.rollback()
-                                    st.error(f"❌ 更新失敗：車號 {new_plate} 已存在於系統中！")
-                                    has_changes = False
-                                    break
-                        if has_changes:
-                            conn.commit()
-                            st.session_state['sys_toast'] = "✅ 車輛資料更新成功！"
-                            st.rerun()
-                    except Exception as e:
-                        conn.rollback()
-                        st.error(f"❌ 儲存失敗：{e}")
-
+                                    st.error(f"❌ 儲存失敗：{e}")
+                                    
+                        with col_del:
+                            if st.button("🗑️ 刪除", key=f"v_del_{v_id}", use_container_width=True):
+                                try:
+                                    c = conn.cursor()
+                                    c.execute("DELETE FROM vehicles WHERE id=%s", (v_id,))
+                                    conn.commit()
+                                    st.session_state['sys_toast'] = "🗑️ 車輛已刪除！"
+                                    st.rerun()
+                                except Exception as e:
+                                    conn.rollback()
+                                    st.error(f"❌ 刪除失敗：{e}")
+            
         elif menu in ["序號登載", "🏷️ 序號登載"] and st.session_state.role == 'L2':
             st.header("🏷️ 序號登載與校正", help="""
 :blue[**【🏷️ 序號登載與校正】**]  
