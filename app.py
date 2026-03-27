@@ -603,7 +603,7 @@ try:
             st.markdown("---")
             with st.expander("⚙️ 帳密設置", expanded=False):
                 st.markdown("#### ⚙️ 個人設定", help="""
-:blue[**【⚙️ 個人設定】**]：  
+:blue[**【⚙️ 個人設定】**]  
 :yellow[**【登入帳號】**]：輸入要修改的登錄帳號  
 :yellow[**【登入密碼】**]：輸入要修改的登錄密碼  
 :yellow[**【💾 儲存】**]：修改好帳密按下:red[**💾 儲存**]  """)
@@ -648,7 +648,7 @@ try:
 
         elif menu in ["車輛登載", "🚗 車輛登載"] and st.session_state.role == 'L2':
             st.header("🚗 車輛登載", help="""
-:blue[**【🚗 車輛登載與管理】**]：  
+:blue[**【🚗 車輛登載與管理】**]  
 :yellow[**【姓名】**]：輸入駕駛姓名  
 :yellow[**【車號】**]：輸入車輛車號  
 :yellow[**【➕ 新增車輛】**]：輸入完成後按下➕ 新增車輛  """)
@@ -678,7 +678,7 @@ try:
             
             st.markdown("---")
             st.subheader("📋 車輛管理", help="""
-:blue[**【📋 車輛管理】**]：  
+:blue[**【📋 車輛管理】**]  
 :yellow[**【姓名】**]：點擊二次駕駛姓名即可修改  
 :yellow[**【車號】**]：點擊二次車輛車號即可修改  
 :yellow[**【💾 儲存】**]：修改好資料按下:red[**💾 儲存**]  """)
@@ -713,8 +713,8 @@ try:
                         st.error(f"❌ 儲存失敗：{e}")
 
         elif menu in ["序號登載", "🏷️ 序號登載"] and st.session_state.role == 'L2':
-            st.header("🏷️ 序號登載", help="""
-:blue[**【🏷️ 序號登載】**]：  
+            st.header("🏷️ 序號登載與校正", help="""
+:blue[**【🏷️ 序號登載與校正】**]  
 :yellow[**【登載】**]：在`   `內登載序號，用`,`隔開  
 :yellow[**【校正】**]：點擊`序號1,序號2`校正序號，用`,`隔開  
 :yellow[**【☑️借閱異常】**]:借閱與領回數量不符時    
