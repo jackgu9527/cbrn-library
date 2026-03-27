@@ -29,6 +29,7 @@ st.markdown("""
     [data-testid="stSidebar"] div.stMarkdown p { white-space: nowrap !important; overflow: hidden !important; text-overflow: ellipsis !important; }
     hr.custom-divider { margin: 0.5em 0 !important; border: none; border-top: 1px solid rgba(255, 255, 255, 0.2); }
     div[data-testid="stTooltipContent"] { max-width: 85vw !important; width: max-content !important; }
+    [data-testid="stCheckbox"] p { white-space: nowrap !important; font-size: clamp(12px, 3.5vw, 15px) !important; }
     </style>
 """, unsafe_allow_html=True)
 
