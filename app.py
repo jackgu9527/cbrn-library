@@ -112,7 +112,7 @@ def draw_status_card(book_name, qty, status, extra_info=""):
     
     html = f"""
     <div style="border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; padding: 10px; margin-bottom: 10px; background-color: rgba(0,0,0,0.1);">
-        <div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 15px; font-weight: bold; width: 100%; color: {color}; margin-bottom: 4px;">
+        <div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: clamp(14px, 4vw, 18px); font-weight: bold; width: 100%; color: {color}; margin-bottom: 4px;">
             {icon} {book_name}
         </div>
         <div style="display: flex; justify-content: space-between; font-size: 14px; color: {color}; padding-left: 24px;">
