@@ -461,7 +461,7 @@ if 'logged_in' not in st.session_state:
 :yellow[**【班隊全銜】**]：請填寫受訓的名稱  
 :yellow[**【設定登入帳號】**]：設定登錄頁面登錄帳號  
 :yellow[**【設定登入密碼】**]：設定登錄頁面登錄密碼  
-:yellow[**【結訓日期】**]：填寫受訓的結訓日期 
+:yellow[**【結訓日期】**]：填寫受訓的結訓日期   
 :yellow[**【送出註冊申請】**]：點擊送出註冊申請  """)
         reg_squadron = st.selectbox("所屬中隊", ["學員一中隊", "學員二中隊", "學生一中隊", "學生二中隊"])
         reg_title = st.text_input("班隊全銜 （消除士兵班115-2期)")
@@ -549,8 +549,7 @@ try:
 :blue[**【🔵申請中】**]：顯示準則狀態已申請借閱
 :yellow[**【🟡已審核】**]：顯示準則狀態文書已審核
 :green[**【🟢借閱中】**]：顯示準則狀態序號已登載
-:red[**【🔴歸還中】**]：顯示準則狀況已申請歸還 
-""")
+:red[**【🔴歸還中】**]：顯示準則狀況已申請歸還 """)
             
             if st.session_state.role == 'L1':
                 target_sq = st.session_state.get('current_sq', '')
@@ -606,8 +605,7 @@ try:
 :blue[**【⚙️ 個人設定】**]：  
 :yellow[**【登入帳號】**]：輸入要修改的登錄帳號  
 :yellow[**【登入密碼】**]：輸入要修改的登錄密碼  
-:yellow[**【💾 儲存】**]：修改好帳密按下💾 儲存  
-""")
+:yellow[**【💾 儲存】**]：修改好帳密按下:red[**💾 儲存**]  """)
                 col_i, col_p = st.columns(2)
                 with col_i: new_id = st.text_input("登入帳號", value=st.session_state.login_id, key="daily_id")
                 with col_p: new_pwd = st.text_input("登入密碼", type="password", placeholder="若不修改請留空", key="daily_pw")
@@ -652,8 +650,7 @@ try:
 :blue[**【🚗 車輛登載與管理】**]：  
 :yellow[**【姓名】**]：輸入駕駛姓名  
 :yellow[**【車號】**]：輸入車輛車號  
-:yellow[**【➕ 新增車輛】**]：輸入完成後按下➕ 新增車輛  
-""")
+:yellow[**【➕ 新增車輛】**]：輸入完成後按下➕ 新增車輛  """)
             with st.form("add_vehicle_form", clear_on_submit=True):
                 col1, col2 = st.columns(2)
                 with col1: v_name = st.text_input("姓名 (Owner Name)", placeholder="請輸入駕駛姓名")
@@ -683,8 +680,7 @@ try:
 :blue[**【📋 車輛管理】**]：  
 :yellow[**【姓名】**]：點擊二次駕駛姓名即可修改  
 :yellow[**【車號】**]：點擊二次車輛車號即可修改  
-:yellow[**【💾 儲存】**]：修改好資料按下💾 儲存  
-""")
+:yellow[**【💾 儲存】**]：修改好資料按下:red[**💾 儲存**]  """)
             v_df = pd.read_sql_query("SELECT id, owner_name as 姓名, plate_number as 車號 FROM vehicles WHERE account_id=%s ORDER BY id DESC", conn, params=(st.session_state.login_id,))
             if v_df.empty: st.info("💡 目前尚無登載任何車輛。")
             else:
@@ -718,11 +714,10 @@ try:
         elif menu in ["序號登載", "🏷️ 序號登載"] and st.session_state.role == 'L2':
             st.header("🏷️ 序號登載", help="""
 :blue[**【🏷️ 序號登載】**]：  
-:yellow[**【登載】**]：在 `   ` 內登載序號，多本請用 `,` 隔開  
-:yellow[**【校正】**]：點擊 `序號1, 序號2` 校正序號，多本請用 `,` 隔開  
-:yellow[**【☑️ 借閱異常】**]：借閱與領回數量不符時，在 `   ` 內登載領回的序號後，勾選 ☑️ 借閱異常  
-:yellow[**【💾 儲存】**]：登載好資料後，按下 :red[**💾 儲存**]
-""")
+:yellow[**【登載】**]：`   ` 內登載序號，多本請用`,`隔開  
+:yellow[**【校正】**]：點擊`序號1,序號2`校正序號，多本請用`,`隔開  
+:yellow[**【☑️借閱異常】**]：借閱與領回數量不符時，在`   `內登載領回序號後，勾選☑️借閱異常  
+:yellow[**【💾 儲存】**]：登載好序號後，按下 :red[**💾 儲存**]""")
             bk_df = pd.read_sql_query(f"SELECT id, book_name, serial_number, status FROM books WHERE owner_id='{st.session_state.login_id}' AND status IN ('保留待領取', '借閱中')", conn)
 
             if bk_df.empty:
@@ -743,7 +738,7 @@ try:
                                     <div style="font-size: 14px; color: #ffb84d; margin-bottom: 8px;"><b>(共 {qty} 本)</b> 📝 請登載序號 (請用 , 隔開)</div>
                                 """, unsafe_allow_html=True)
                                 user_input = st.text_input(f"隱藏標題_{b_name}_p", label_visibility="collapsed", key=f"p_{b_name}")
-                                abnormal = st.checkbox(f"☑️ 借閱異常：借閱與領回數量不符時勾選。", key=f"abn_{b_name}")
+                                abnormal = st.checkbox(f"☑️借閱異常：借閱與領回數量不符時勾選。", key=f"abn_{b_name}")
                                 form_data[f"p_{b_name}"] = {'type': 'pending', 'ids': b_ids, 'input': user_input, 'abnormal': abnormal, 'b_name': b_name}
 
                         elif st_val == '借閱中':
