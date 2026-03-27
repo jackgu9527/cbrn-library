@@ -458,16 +458,21 @@ if 'logged_in' not in st.session_state:
         st.subheader("班隊註冊", help="""
 :blue[**【班隊註冊】**]
 
-:yellow[**【所屬中隊】**]：請填寫報到的中隊
+:yellow[**【所屬中隊】**]：  
+請填寫報到的中隊  
 
-:yellow[**【班隊全銜】**]：請填寫受訓的名稱填寫
+:yellow[**【班隊全銜】**]：  
+請填寫受訓的名稱填寫  
 
-:yellow[**【設定登入帳號】**]：設定登錄頁面登錄帳號
+:yellow[**【設定登入帳號】**]：  
+設定登錄頁面登錄帳號  
 
-:yellow[**【設定登入密碼】**]：設定登錄頁面登錄密碼
+:yellow[**【設定登入密碼】**]：  
+設定登錄頁面登錄密碼  
 
-:yellow[**【結訓日期】**]：填寫受訓的結訓日期
-""")
+:yellow[**【結訓日期】**]：  
+填寫受訓的結訓日期  
+"""
         reg_squadron = st.selectbox("所屬中隊", ["學員一中隊", "學員二中隊", "學生一中隊", "學生二中隊"])
         reg_title = st.text_input("班隊全銜 （消除士兵班115-2期)")
         reg_id = st.text_input("設定登入帳號")
@@ -569,7 +574,7 @@ try:
 顯示準則狀態序號已登載  
 :red[**【🔴歸還中】**]：  
 顯示準則狀況已申請歸還  
-""")
+"""
             
             if st.session_state.role == 'L1':
                 target_sq = st.session_state.get('current_sq', '')
@@ -632,7 +637,7 @@ try:
 
 :yellow[**【💾 儲存】**]：  
 修改好帳密按下💾 儲存  
-""")
+"""
                 col_i, col_p = st.columns(2)
                 with col_i: new_id = st.text_input("登入帳號", value=st.session_state.login_id, key="daily_id")
                 with col_p: new_pwd = st.text_input("登入密碼", type="password", placeholder="若不修改請留空", key="daily_pw")
@@ -714,14 +719,14 @@ try:
 :blue[**【📋 車輛管理】**]：
 
 :yellow[**【姓名】**]：  
-點擊二次`駕駛人姓名`即可修改  
+點擊二次駕駛人姓名即可修改  
 
 :yellow[**【車號】**]：  
-點擊二次`車輛車號`即可修改  
+點擊二次車輛車號即可修改  
 
 :yellow[**【💾 儲存】**]：  
 修改好資料按下💾 儲存  
-""")
+"""
             v_df = pd.read_sql_query("SELECT id, owner_name as 姓名, plate_number as 車號 FROM vehicles WHERE account_id=%s ORDER BY id DESC", conn, params=(st.session_state.login_id,))
             if v_df.empty: st.info("💡 目前尚無登載任何車輛。")
             else:
