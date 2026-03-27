@@ -455,7 +455,28 @@ if 'logged_in' not in st.session_state:
                 release_connection(conn)
 
     with tab2:
-        st.subheader("班隊註冊", help="新進班隊請在此註冊，送出後將由幹部審核開通。")
+        st.subheader("班隊註冊", help="st.button(
+    "送出申請", 
+    help="""
+這是一個進階操作說明：
+
+**【注意事項】**
+> 請確認實體書本已回到庫房，若未歸還請勿點擊！
+
+---
+
+**【操作步驟】**
+1. 確認書名是否正確。
+2. 確認書籍狀態為 :green[良好]。
+3. 點擊下方 `送出申請` 按鈕。
+
+🚨 **緊急提醒：** 若有破損，請勾選 :red[異常回報]！
+~~已作廢的舊版準則免填此表~~。
+
+詳細規定請參考：[準則管理辦法總覽](https://google.com)
+"""
+)
+")
         reg_squadron = st.selectbox("所屬中隊", ["學員一中隊", "學員二中隊", "學生一中隊", "學生二中隊"])
         reg_title = st.text_input("班隊全銜 (將作為系統顯示名稱)")
         reg_id = st.text_input("設定登入帳號")
