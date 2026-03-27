@@ -670,7 +670,15 @@ try:
                         st.error(f"❌ 儲存失敗：{e}")
 
         elif menu in ["車輛登載", "🚗 車輛登載"] and st.session_state.role == 'L2':
-            st.header("🚗 車輛登載與管理", help="新增或修改個人名下登記的車輛資訊。")
+            st.header("🚗 車輛登載與管理", help="""
+:blue[**【🚗 車輛登載與管理】**]：
+
+:yellow[**【姓名】**]：
+輸入駕駛人姓名
+
+:yellow[**【車號】**]：
+輸入車輛車號
+""")
             with st.form("add_vehicle_form", clear_on_submit=True):
                 col1, col2 = st.columns(2)
                 with col1: v_name = st.text_input("姓名 (Owner Name)", placeholder="請輸入駕駛人姓名")
