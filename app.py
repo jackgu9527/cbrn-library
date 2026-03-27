@@ -772,7 +772,7 @@ try:
                                      <div style="font-size: 14px; color: #4CAF50; margin-bottom: 8px;"><b>(共 {qty} 本)</b> 序號請用 , 隔開</div>
                                  """, unsafe_allow_html=True)
                                  user_input = st.text_input(f"隱藏標題_{b_name}_c", value=", ".join(current_s), label_visibility="collapsed", key=f"c_{b_name}")
-                                form_data[f"c_{b_name}"] = {'type': 'correct', 'rows': b_rows.to_dict('records'), 'input': user_input, 'b_name': b_name}
+                                 form_data[f"c_{b_name}"] = {'type': 'correct', 'rows': b_rows.to_dict('records'), 'input': user_input, 'b_name': b_name}
 
                     st.markdown("---")
                     if st.form_submit_button("💾 儲存", type="primary", use_container_width=True):
