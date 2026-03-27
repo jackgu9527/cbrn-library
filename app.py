@@ -624,13 +624,13 @@ try:
                 st.markdown("#### ⚙️ 個人設定", help="""
 :blue[**【⚙️ 個人設定】**]：
 
-:yellow[**【登入帳號】**]：
-輸入要修改的登錄帳號
+:yellow[**【登入帳號】**]：  
+輸入要修改的登錄帳號  
 
-:yellow[**【登入密碼】**]：
-輸入要修改的登錄密碼
+:yellow[**【登入密碼】**]：  
+輸入要修改的登錄密碼  
 
-:yellow[**【💾 儲存】**]：
+:yellow[**【💾 儲存】**]：  
 修改好帳密按下💾 儲存  
 """)
                 col_i, col_p = st.columns(2)
@@ -679,10 +679,10 @@ try:
 :yellow[**【姓名】**]：  
 輸入駕駛人姓名  
 
-:yellow[**【車號】**]：
+:yellow[**【車號】**]：  
 輸入車輛車號  
 
-:yellow[**【➕ 新增車輛】**]：
+:yellow[**【➕ 新增車輛】**]：  
 輸入完成後按下➕ 新增車輛  
 """)  
             with st.form("add_vehicle_form", clear_on_submit=True):
@@ -713,13 +713,13 @@ try:
             st.subheader("📋 車輛管理", help="""
 :blue[**【📋 車輛管理】**]：
 
-:yellow[**【姓名】**]：
-點擊二次`駕駛人姓名`即可修改
+:yellow[**【姓名】**]：  
+點擊二次`駕駛人姓名`即可修改  
 
-:yellow[**【車號】**]：
-點擊二次`車輛車號`即可修改
+:yellow[**【車號】**]：  
+點擊二次`車輛車號`即可修改  
 
-:yellow[**【💾 儲存】**]：
+:yellow[**【💾 儲存】**]：  
 修改好資料按下💾 儲存  
 """)
             v_df = pd.read_sql_query("SELECT id, owner_name as 姓名, plate_number as 車號 FROM vehicles WHERE account_id=%s ORDER BY id DESC", conn, params=(st.session_state.login_id,))
