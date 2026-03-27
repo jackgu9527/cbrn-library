@@ -692,19 +692,20 @@ try:
                     orig_name = row['姓名']
                     orig_plate = row['車號']
                     
-                    # 建立卡片外框
-                    with st.container(border=True):
-                        # 第一排：姓名與車號輸入框
-                        col1, col2 = st.columns(2)
-                        with col1:
-                            new_name = st.text_input("姓名", value=orig_name, key=f"v_name_{v_id}")
-                        with col2:
-                            new_plate = st.text_input("車號", value=orig_plate, key=f"v_plate_{v_id}")
+                    # 1. 最外層：折疊選單 (標題顯示 姓名 + 車號)
+                    with st.expander(f"🚗 {orig_name} - {orig_plate}"):
+                        
+                        # 2. 內層：卡片式邊框
+                        with st.container(border=True):
                             
-                        # 第二排：儲存與刪除按鈕
-                        col_save, col_del = st.columns(2)
-                        with col_save:
-                            if st.button("💾 儲存修改", key=f"v_save_{v_id}", type="primary", use_container_width=True):
+                            # 輸入框區域
+                            new_name = st.text_input("👤 駕駛人姓名", value=orig_name, key=f"v_name_{v_id}")
+                            new_plate = st.text_input("🚘 車輛車號", value=orig_plate, key=f"v_plate_{v_id}")
+                            
+                            st.write("") # 稍微空一行，讓排版有呼吸空間
+                            
+                            # 滿版大按鈕 1：儲存 (紅色主按鈕)
+                            if st.button("💾 儲存", key=f"v_save_{v_id}", type="primary", use_container_width=True):
                                 try:
                                     c = conn.cursor()
                                     clean_name = str(new_name).strip()
@@ -725,7 +726,7 @@ try:
                                     conn.rollback()
                                     st.error(f"❌ 儲存失敗：{e}")
                                     
-                        with col_del:
+                            # 滿版大按鈕 2：刪除 (黑色次按鈕)
                             if st.button("🗑️ 刪除", key=f"v_del_{v_id}", use_container_width=True):
                                 try:
                                     c = conn.cursor()
