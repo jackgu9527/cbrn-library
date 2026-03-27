@@ -541,7 +541,23 @@ try:
     conn = get_db_connection()
     try:
         if menu in ["首頁", "🏠 首頁"]:
-            st.header("📊 首頁", help="**【首頁儀表板】**\n\n檢視當前部隊的準則借閱與帳號待辦概況。系統會自動統計各項數據供長官參考。\n\n**指標說明：**\n- 📝 待開通帳號\n- 📤 待借閱與歸還\n- 🚨 異常警示")
+            st.header("📊 首頁", help="""
+:blue[**【首頁儀表板】**]：
+：yellow[文書：檢視中隊文書待辦事項]
+：yellow[訓員：檢視班隊持有準則現況]
+
+:yellow[【📝 待審核帳號】]：
+訓員申請帳號需審核數量
+
+:yellow[【📤 待借閱準則】]：
+訓員申請借閱需審核數量
+
+:yellow[【📤 待歸還準則】]：
+訓員申請歸還需審核數量
+
+:yellow[【🔴 借閱異常警示】]：
+訓員借閱準則未領取數量
+""")
             
             if st.session_state.role == 'L1':
                 target_sq = st.session_state.get('current_sq', '')
