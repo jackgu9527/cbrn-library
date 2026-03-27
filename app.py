@@ -710,7 +710,18 @@ try:
                             st.error(f"❌ 新增失敗：{e}")
             
             st.markdown("---")
-            st.subheader("📋 車輛管理", help="直接在表格文字上點擊兩下即可修改，修改完畢後點擊下方「儲存」按鈕。")
+            st.subheader("📋 車輛管理", help="""
+:blue[**【📋 車輛管理】**]：
+
+:yellow[**【姓名】**]：
+點擊二次`駕駛人姓名`即可修改
+
+:yellow[**【車號】**]：
+點擊二次`車輛車號`即可修改
+
+:yellow[**【💾 儲存】**]：
+修改好資料按下💾 儲存  
+""")
             v_df = pd.read_sql_query("SELECT id, owner_name as 姓名, plate_number as 車號 FROM vehicles WHERE account_id=%s ORDER BY id DESC", conn, params=(st.session_state.login_id,))
             if v_df.empty: st.info("💡 目前尚無登載任何車輛。")
             else:
