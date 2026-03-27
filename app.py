@@ -469,7 +469,7 @@ if 'logged_in' not in st.session_state:
 :yellow[**【結訓日期】**]：填寫受訓的結訓日期
 """)
         reg_squadron = st.selectbox("所屬中隊", ["學員一中隊", "學員二中隊", "學生一中隊", "學生二中隊"])
-        reg_title = st.text_input("班隊全銜 (將作為系統顯示名稱)")
+        reg_title = st.text_input("班隊全銜 （消除士兵班115-2期)")
         reg_id = st.text_input("設定登入帳號")
         reg_pw = st.text_input("設定登入密碼", type="password")
         reg_date = st.date_input("結訓日期")
@@ -670,8 +670,8 @@ try:
                         st.error(f"❌ 儲存失敗：{e}")
 
         elif menu in ["車輛登載", "🚗 車輛登載"] and st.session_state.role == 'L2':
-            st.header("🚗 車輛登載與管理", help="""
-:blue[**【🚗 車輛登載與管理】**]：
+            st.header("🚗 車輛登載", help="""
+:blue[**【🚗 車輛登載】**]：
 
 :yellow[**【姓名】**]：
 輸入駕駛人姓名
@@ -704,7 +704,7 @@ try:
                             st.error(f"❌ 新增失敗：{e}")
             
             st.markdown("---")
-            st.subheader("📋 已登載車輛管理", help="直接在表格文字上點擊兩下即可修改，修改完畢後點擊下方「儲存」按鈕。")
+            st.subheader("📋 車輛管理", help="直接在表格文字上點擊兩下即可修改，修改完畢後點擊下方「儲存」按鈕。")
             v_df = pd.read_sql_query("SELECT id, owner_name as 姓名, plate_number as 車號 FROM vehicles WHERE account_id=%s ORDER BY id DESC", conn, params=(st.session_state.login_id,))
             if v_df.empty: st.info("💡 目前尚無登載任何車輛。")
             else:
