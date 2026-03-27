@@ -629,6 +629,9 @@ try:
 
 :yellow[**【登入密碼】**]：
 輸入要修改的登錄密碼
+
+:yellow[**【💾 儲存】**]：
+修改好帳密按下💾 儲存  
 """)
                 col_i, col_p = st.columns(2)
                 with col_i: new_id = st.text_input("登入帳號", value=st.session_state.login_id, key="daily_id")
@@ -671,14 +674,17 @@ try:
 
         elif menu in ["車輛登載", "🚗 車輛登載"] and st.session_state.role == 'L2':
             st.header("🚗 車輛登載", help="""
-:blue[**【🚗 車輛登載】**]：
+:blue[**【🚗 車輛登載與管理】**]：
 
-:yellow[**【姓名】**]：
-輸入駕駛人姓名
+:yellow[**【姓名】**]：  
+輸入駕駛人姓名  
 
 :yellow[**【車號】**]：
-輸入車輛車號
-""")
+輸入車輛車號  
+
+:yellow[**【➕ 新增車輛】**]：
+輸入完成後按下➕ 新增車輛  
+""")  
             with st.form("add_vehicle_form", clear_on_submit=True):
                 col1, col2 = st.columns(2)
                 with col1: v_name = st.text_input("姓名 (Owner Name)", placeholder="請輸入駕駛人姓名")
