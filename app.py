@@ -716,7 +716,13 @@ try:
                         st.error(f"❌ 儲存失敗：{e}")
 
         elif menu in ["序號登載", "🏷️ 序號登載"] and st.session_state.role == 'L2':
-            st.header("🏷️ 序號登載", help="將剛領取的準則輸入實體序號，或校正現有借閱準則的序號。")
+            st.header("🏷️ 序號登載", help="""
+:blue[**【🏷️ 序號登載】**]：  
+:yellow[**【登載】**]：在 `   ` 內登載序號，多本請用 `,` 隔開  
+:yellow[**【校正】**]：點擊 `序號1, 序號2` 校正序號，多本請用 `,` 隔開  
+:yellow[**【☑️ 借閱異常】**]：借閱與領回數量不符時，在 `   ` 內登載領回的序號後，勾選 ☑️ 借閱異常  
+:yellow[**【💾 儲存】**]：登載好資料後，按下 :red[**💾 儲存**]
+""")
             bk_df = pd.read_sql_query(f"SELECT id, book_name, serial_number, status FROM books WHERE owner_id='{st.session_state.login_id}' AND status IN ('保留待領取', '借閱中')", conn)
 
             if bk_df.empty:
