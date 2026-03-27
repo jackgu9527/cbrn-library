@@ -462,7 +462,7 @@ if 'logged_in' not in st.session_state:
 請填寫報到的中隊  
 
 :yellow[**【班隊全銜】**]：  
-請填寫受訓的名稱填寫  
+請填寫受訓的名稱    
 
 :yellow[**【設定登入帳號】**]：  
 設定登錄頁面登錄帳號  
