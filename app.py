@@ -611,7 +611,15 @@ try:
             # ======== 🟢 全局共用：個人設定修改面板 ========
             st.markdown("---")
             with st.expander("⚙️ 帳密設置", expanded=False):
-                st.markdown("#### ⚙️ 個人設定", help="修改登入帳號與密碼。")
+                st.markdown("#### ⚙️ 個人設定", help="""
+:blue[**【⚙️ 個人設定】**]：
+
+:yellow[**【登入帳號】**]：
+輸入要修改的登錄帳號
+
+:yellow[**【登入密碼】**]：
+輸入要修改的登錄密碼
+""")
                 col_i, col_p = st.columns(2)
                 with col_i: new_id = st.text_input("登入帳號", value=st.session_state.login_id, key="daily_id")
                 with col_p: new_pwd = st.text_input("登入密碼", type="password", placeholder="若不修改請留空", key="daily_pw")
