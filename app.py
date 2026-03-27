@@ -458,20 +458,15 @@ if 'logged_in' not in st.session_state:
         st.subheader("班隊註冊", help="""
 :blue[**【班隊註冊】**]
 
-:yellow[**【所屬中隊】**]：  
-請填寫報到的中隊  
+:yellow[**【所屬中隊】**]：請填寫報到的中隊
 
-:yellow[**【班隊全銜】**]：  
-請填寫受訓的名稱    
+:yellow[**【班隊全銜】**]：請填寫受訓的名稱
 
-:yellow[**【設定登入帳號】**]：  
-設定登錄頁面登錄帳號  
+:yellow[**【設定登入帳號】**]：設定登錄頁面登錄帳號
 
-:yellow[**【設定登入密碼】**]：  
-設定登錄頁面登錄密碼  
+:yellow[**【設定登入密碼】**]：設定登錄頁面登錄密碼
 
-:yellow[**【結訓日期】**]：  
-填寫受訓的結訓日期  
+:yellow[**【結訓日期】**]：填寫受訓的結訓日期
 """)
         reg_squadron = st.selectbox("所屬中隊", ["學員一中隊", "學員二中隊", "學生一中隊", "學生二中隊"])
         reg_title = st.text_input("班隊全銜 （消除士兵班115-2期)")
@@ -552,17 +547,13 @@ try:
 :blue[**【首頁儀表板】**]：
 - :yellow[文書：檢視中隊文書待辦事項]
 
-:yellow[**【📝 待審核帳號】**]：
-訓員申請帳號需審核數量
+:yellow[**【📝 待審核帳號】**]：訓員申請帳號需審核數量
 
-:yellow[**【📤 待借閱準則】**]：
-訓員申請借閱需審核數量
+:yellow[**【📤 待借閱準則】**]：訓員申請借閱需審核數量
 
-:yellow[**【📤 待歸還準則】**]：
-訓員申請歸還需審核數量
+:yellow[**【📤 待歸還準則】**]：訓員申請歸還需審核數量
 
-:yellow[**【🔴 借閱異常警示】**]：
-訓員借閱準則未領取數量
+:yellow[**【🔴 借閱異常警示】**]：訓員借閱準則未領取數量
 
 - :yellow[訓員：檢視班隊持有準則現況]
 
@@ -629,14 +620,11 @@ try:
                 st.markdown("#### ⚙️ 個人設定", help="""
 :blue[**【⚙️ 個人設定】**]：
 
-:yellow[**【登入帳號】**]：  
-輸入要修改的登錄帳號  
+:yellow[**【登入帳號】**]：輸入要修改的登錄帳號
 
-:yellow[**【登入密碼】**]：  
-輸入要修改的登錄密碼  
+:yellow[**【登入密碼】**]：輸入要修改的登錄密碼
 
-:yellow[**【💾 儲存】**]：  
-修改好帳密按下💾 儲存  
+:yellow[**【💾 儲存】**]：修改好帳密按下💾 儲存
 """)
                 col_i, col_p = st.columns(2)
                 with col_i: new_id = st.text_input("登入帳號", value=st.session_state.login_id, key="daily_id")
@@ -681,14 +669,11 @@ try:
             st.header("🚗 車輛登載", help="""
 :blue[**【🚗 車輛登載與管理】**]：
 
-:yellow[**【姓名】**]：  
-輸入駕駛人姓名  
+:yellow[**【姓名】**]：輸入駕駛人姓名
 
-:yellow[**【車號】**]：  
-輸入車輛車號  
+:yellow[**【車號】**]：輸入車輛車號
 
-:yellow[**【➕ 新增車輛】**]：  
-輸入完成後按下➕ 新增車輛  
+:yellow[**【➕ 新增車輛】**]：輸入完成後按下➕ 新增車輛
 """)
             with st.form("add_vehicle_form", clear_on_submit=True):
                 col1, col2 = st.columns(2)
@@ -718,14 +703,11 @@ try:
             st.subheader("📋 車輛管理", help="""
 :blue[**【📋 車輛管理】**]：
 
-:yellow[**【姓名】**]：  
-點擊二次駕駛人姓名即可修改  
+:yellow[**【姓名】**]：點擊二次駕駛人姓名即可修改
 
-:yellow[**【車號】**]：  
-點擊二次車輛車號即可修改  
+:yellow[**【車號】**]：點擊二次車輛車號即可修改
 
-:yellow[**【💾 儲存】**]：  
-修改好資料按下💾 儲存  
+:yellow[**【💾 儲存】**]：修改好資料按下💾 儲存
 """)
             v_df = pd.read_sql_query("SELECT id, owner_name as 姓名, plate_number as 車號 FROM vehicles WHERE account_id=%s ORDER BY id DESC", conn, params=(st.session_state.login_id,))
             if v_df.empty: st.info("💡 目前尚無登載任何車輛。")
