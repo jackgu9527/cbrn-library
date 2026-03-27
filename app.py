@@ -511,7 +511,7 @@ with st.sidebar:
         if len(sq_list) > 1: st.session_state['current_sq'] = st.selectbox("選擇中隊", sq_list, key="global_sq_selector")
         else:
             st.session_state['current_sq'] = sq_list[0]
-            st.markdown(f"📍 **管轄中隊：** `{st.session_state['current_sq']}`")
+            st.markdown(f"**管轄中隊：** `{st.session_state['current_sq']}`")
         menu_options = ["🏠 首頁", "👥 帳號管理", "📤 借閱審核", "📥 歸還審核", "💬 回報專區", "📊 準則現況", "🔍 綜合查詢", "🗂️ 操作紀錄"]
         if user_sq == '大隊部': menu_options.insert(2, "⚙️ 系統管理")
     else:
@@ -539,8 +539,8 @@ try:
     conn = get_db_connection()
     try:
         if menu in ["首頁", "🏠 首頁"]:
-            st.header("📊 首頁", help="""
-:blue[**【📊 首頁】**]
+            st.header("🏠 首頁", help="""
+:blue[**【🏠 首頁】**]
 - :yellow[文書：檢視中隊待辦事項]  
 :yellow[**【📝 待審核帳號】**]：申請帳號需審核數量
 :yellow[**【📤 待借閱準則】**]：申請借閱需審核數量
@@ -1543,7 +1543,7 @@ try:
 
         elif menu == "📊 準則現況":
             current_view_sq = st.session_state.get('current_sq', st.session_state.squadron)
-            st.subheader(f"{current_view_sq}準則現況", help="點擊下方各班隊名稱，即可展開查看該班隊目前持有的所有準則與詳細序號。")
+            st.subheader(f"📊{current_view_sq}準則現況", help="點擊下方各班隊名稱，即可展開查看該班隊目前持有的所有準則與詳細序號。")
             
             if st.session_state.role == 'L1':
                 sq_in_clause = st.session_state.dynamic_sq_in_clause
