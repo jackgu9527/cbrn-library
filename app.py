@@ -1477,6 +1477,10 @@ try:
         release_connection(conn)
 
 except Exception as e:
+    # 🌟 讓 Streamlit 的控制訊號 (煞車/重整) 正常通過，不觸發崩潰警報
+    if type(e).__name__ in ['StopException', 'RerunException']:
+        raise e
+        
     err_full = f"🚨 【系統發生未知崩潰】\n異常位置：全域攔截器\n錯誤內容：{e}"
     send_line_notify(err_full)
     st.error(f"系統發生預期外錯誤，已同步通報管理員。錯誤代碼：{e}")
