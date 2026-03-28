@@ -14,19 +14,30 @@ import secrets
 from werkzeug.security import generate_password_hash, check_password_hash 
 import psycopg2.errors 
 from contextlib import contextmanager
+import time
 
 warnings.filterwarnings('ignore', category=UserWarning, module='pandas')
 
 st.set_page_config(page_title="大隊部準則管理系統", layout="wide")
 
+# 🎨 1. 側邊欄視覺革命 & UI 核心樣式注入
 st.markdown("""
     <style>
+    /* 核心文字縮略設定 (保留完美神作) */
     .single-line-text { white-space: nowrap !important; overflow: hidden !important; text-overflow: ellipsis !important; display: block !important; max-width: 100% !important; }
     [data-testid="stExpander"] details summary p { white-space: nowrap !important; overflow: hidden !important; text-overflow: ellipsis !important; max-width: 100%; }
     [data-testid="stSidebar"] div.stMarkdown p { white-space: nowrap !important; overflow: hidden !important; text-overflow: ellipsis !important; }
     hr.custom-divider { margin: 0.5em 0 !important; border: none; border-top: 1px solid rgba(255, 255, 255, 0.2); }
     div[data-testid="stTooltipContent"] { max-width: 85vw !important; width: max-content !important; }
     [data-testid="stCheckbox"] p { white-space: nowrap !important; font-size: clamp(12px, 3.5vw, 15px) !important; }
+    
+    /* 🚀 側邊欄視覺革命：斬除紅圈、極致靠左、高光追蹤 */
+    [data-testid="stSidebar"] div[role="radiogroup"] > label > div:first-child { display: none !important; }
+    [data-testid="stSidebar"] div[role="radiogroup"] { gap: 4px !important; }
+    [data-testid="stSidebar"] div[role="radiogroup"] > label { padding: 10px 8px !important; margin: 0 !important; border-radius: 6px; transition: background 0.2s; }
+    [data-testid="stSidebar"] div[role="radiogroup"] > label:hover { background-color: rgba(255, 255, 255, 0.05); }
+    [data-testid="stSidebar"] div[role="radiogroup"] > label[data-checked="true"] { background-color: rgba(255, 75, 75, 0.1); border-left: 4px solid #ff4b4b; }
+    [data-testid="stSidebar"] div[role="radiogroup"] > label[data-checked="true"] p { color: #ff4b4b !important; font-weight: 800 !important; font-size: 1.05em !important; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -44,13 +55,15 @@ CSV_FILE = csv_candidates[0] if csv_candidates else None
 def get_pool():
     return pool.ThreadedConnectionPool(1, 10, st.secrets["DATABASE_URL"], connect_timeout=5)
 
+# 🛡️ 4. 柔性防呆煞車系統 (資料庫連線)
 def get_db_connection():
     db_pool = get_pool()
     try:
         conn = db_pool.getconn()
     except psycopg2.pool.PoolError:
-        st.warning("🚦 系統忙碌中 (點擊過快)，請稍等一秒鐘再試...")
-        st.stop()
+        st.toast("⏳ 系統滿載處理中，為您自動重整...")
+        time.sleep(1)
+        st.rerun()
         
     try:
         with conn.cursor() as c:
@@ -60,8 +73,9 @@ def get_db_connection():
         try:
             conn = db_pool.getconn()
         except psycopg2.pool.PoolError:
-            st.warning("🚦 系統忙碌中 (點擊過快)，請稍等一秒鐘再試...")
-            st.stop()
+            st.toast("⏳ 系統滿載處理中，為您自動重整...")
+            time.sleep(1)
+            st.rerun()
     return conn
 
 def release_connection(conn):
@@ -72,11 +86,13 @@ def release_connection(conn):
         try: conn.close()
         except Exception: pass
 
+# 🛡️ 4. 柔性防呆煞車系統 (資料庫交易)
 @contextmanager
 def db_transaction(success_msg=None, error_prefix="操作失敗"):
     if st.session_state.get('db_locked', False):
-        st.warning("⏳ 系統處理中，請勿重複點擊...")
-        st.stop()
+        st.toast("⏳ 系統處理中，請稍候...")
+        time.sleep(1)
+        st.rerun()
     st.session_state['db_locked'] = True
     
     conn = get_db_connection()
@@ -144,7 +160,7 @@ def draw_status_card(book_name, qty, status, extra_info=""):
     
     html = f"""
     <div style="border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; padding: 10px; margin-bottom: 10px; background-color: rgba(0,0,0,0.1);">
-        <div style="display: block; width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: clamp(14px, 4vw, 18px); font-weight: bold; color: {color}; margin-bottom: 4px;">
+        <div class="single-line-text" style="font-size: clamp(14px, 4vw, 18px); font-weight: bold; color: {color}; margin-bottom: 4px;">
             {icon} {book_name}
         </div>
         <div style="display: flex; justify-content: space-between; font-size: 14px; color: {color}; padding-left: 24px;">
@@ -194,6 +210,7 @@ def duplicate_borrow_dialog(borrow_requests, warnings_list):
                           (st.session_state.login_id, st.session_state.title, b_name, qty, '待審核'))
                 c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)",
                           (now_time, st.session_state.login_id, "申請借閱(強制)", f"申請 {b_name} {qty} 本"))
+        if 'cart' in st.session_state: st.session_state.cart = {}
         st.rerun()
             
 @st.dialog("🚨 幹部借閱審核確認")
@@ -612,11 +629,18 @@ try:
                     orig_plate = row['車號']
                     
                     with st.expander(f"🚗 {orig_name} - {orig_plate}"):
-                        with st.container(border=True):
-                            new_name = st.text_input("👤 駕駛姓名", value=orig_name, key=f"v_name_{v_id}")
-                            new_plate = st.text_input("🚘 車輛車號", value=orig_plate, key=f"v_plate_{v_id}")
-                            st.write("") 
-                            
+                        # 🏭 3. 擴建「UI 卡片工廠」 (車輛卡片)
+                        st.markdown(f"""
+                        <div style="padding: 10px; background-color: rgba(255,255,255,0.05); border-radius: 8px; margin-bottom: 15px;">
+                            <strong style="color: #4da6ff; font-size: 16px;">✏️ 編輯車輛資訊</strong>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        new_name = st.text_input("👤 駕駛姓名", value=orig_name, key=f"v_name_{v_id}")
+                        new_plate = st.text_input("🚘 車輛車號", value=orig_plate, key=f"v_plate_{v_id}")
+                        st.write("") 
+                        
+                        col_save, col_del = st.columns(2)
+                        with col_save:
                             if st.button("💾 儲存", key=f"v_save_{v_id}", type="primary", use_container_width=True):
                                 clean_name = str(new_name).strip()
                                 clean_plate = re.sub(r'[^A-Za-z0-9]', '', str(new_plate)).upper()
@@ -627,7 +651,7 @@ try:
                                     st.rerun()
                                 else:
                                     st.warning("⚠️ 資料沒有更動。")
-                                    
+                        with col_del:        
                             if st.button("🗑️ 刪除", key=f"v_del_{v_id}", use_container_width=True):
                                 with db_transaction(success_msg="🗑️ 車輛已刪除！") as c:
                                     c.execute("DELETE FROM vehicles WHERE id=%s", (v_id,))
@@ -657,7 +681,7 @@ try:
                             b_ids = b_rows['id'].tolist()
                             with st.container(border=True):                                                                
                                 st.markdown(f"""
-                                    <div style="display: block; width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: clamp(14px, 4vw, 18px); font-weight: bold; color: #ffb84d; margin-bottom: 2px;">🟡 {b_name}</div>
+                                    <div class="single-line-text" style="font-size: clamp(14px, 4vw, 18px); font-weight: bold; color: #ffb84d; margin-bottom: 2px;">🟡 {b_name}</div>
                                     <div style="font-size: 14px; color: #ffb84d; margin-bottom: 8px;"><b>(共 {qty} 本)</b> 登載序號用 , 隔開</div>
                                 """, unsafe_allow_html=True)
                                 user_input = st.text_input(f"隱藏標題_{b_name}_p", label_visibility="collapsed", key=f"p_{b_name}")
@@ -668,7 +692,7 @@ try:
                             current_s = [str(r['serial_number']).strip() for _, r in b_rows.iterrows() if pd.notna(r['serial_number'])]
                             with st.container(border=True):                                                                
                                 st.markdown(f"""
-                                    <div style="display: block; width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: clamp(14px, 4vw, 18px); font-weight: bold; color: #4CAF50; margin-bottom: 2px;">🟢 {b_name}</div>
+                                    <div class="single-line-text" style="font-size: clamp(14px, 4vw, 18px); font-weight: bold; color: #4CAF50; margin-bottom: 2px;">🟢 {b_name}</div>
                                     <div style="font-size: 14px; color: #4CAF50; margin-bottom: 8px;"><b>(共 {qty} 本)</b> 序號用 , 隔開</div>
                                 """, unsafe_allow_html=True)
                                 user_input = st.text_input(f"隱藏標題_{b_name}_c", value=", ".join(current_s), label_visibility="collapsed", key=f"c_{b_name}")
@@ -751,19 +775,71 @@ try:
                 default_req_qty = st.number_input("請輸入欲借閱的數量 (例如：貴班隊人數)", min_value=1, value=1)
                 st.markdown("---")
                 
+                # 🛒 2. 導入「購物車」借閱系統 (Session State 記憶體暫存)
+                if 'cart' not in st.session_state:
+                    st.session_state.cart = {}
+
                 st.subheader("📚 第二步：選擇準則", help="填寫所需借閱準則關鍵字選取，可選取多本準則。")
                 book_options = [f"{b[0]} (庫存: {b[1]}本)" for b in available_books]
-                selected_books = st.multiselect("選擇要借閱的準則", book_options)
                 
-                if selected_books:
-                    borrow_requests = {}
-                    warnings_list = []
-                    
-                    for selection in selected_books:
+                # 極速單選加入流
+                col_sel, col_add = st.columns([7, 3])
+                with col_sel:
+                    selected_book = st.selectbox("選擇要借閱的準則", ["-- 請輸入關鍵字搜尋 --"] + book_options, label_visibility="collapsed")
+                with col_add:
+                    if st.button("➕ 加入清單", type="secondary", use_container_width=True):
+                        if selected_book != "-- 請輸入關鍵字搜尋 --":
+                            b_name = selected_book.split(" (")[0]
+                            max_qty = int(selected_book.split("庫存: ")[1].replace("本)", ""))
+                            if b_name not in st.session_state.cart:
+                                st.session_state.cart[b_name] = {'qty': min(default_req_qty, max_qty), 'max_qty': max_qty}
+                                st.toast(f"✅ 已加入：{b_name}")
+                            else:
+                                st.toast(f"⚠️ {b_name} 已在清單中！")
+                            st.rerun()
+
+                # 完美雙行卡片排版渲染購物車
+                if st.session_state.cart:
+                    st.markdown("#### 🛒 借閱清單")
+                    for b_name, data in list(st.session_state.cart.items()):
                         with st.container(border=True):
-                            b_name = selection.split(" (")[0]
-                            max_qty = int(selection.split("庫存: ")[1].replace("本)", ""))
+                            # 第一行：名稱 (自動縮略)
+                            st.markdown(f"<div class='single-line-text' style='font-size: 16px; font-weight: bold; margin-bottom: 8px;' title='幫助說明：{b_name}'>📘 {b_name}</div>", unsafe_allow_html=True)
                             
+                            # 第二行：借閱數量： [ 30 ] ➖ ➕ ｜  [ 🗑️ 移除]
+                            c1, c2, c3, c4, c5, c6 = st.columns([2.5, 2.5, 1, 1, 0.5, 2.5])
+                            with c1:
+                                st.markdown("<div style='margin-top: 8px; font-size: 14px; color: #475569;'>借閱數量：</div>", unsafe_allow_html=True)
+                            with c2:
+                                new_qty = st.number_input("qty", value=data['qty'], min_value=1, max_value=data['max_qty'], key=f"cart_inp_{b_name}", label_visibility="collapsed")
+                                if new_qty != data['qty']:
+                                    st.session_state.cart[b_name]['qty'] = new_qty
+                                    st.rerun()
+                            with c3:
+                                if st.button("➖", key=f"cart_dec_{b_name}", use_container_width=True):
+                                    if st.session_state.cart[b_name]['qty'] > 1:
+                                        st.session_state.cart[b_name]['qty'] -= 1
+                                        st.rerun()
+                            with c4:
+                                if st.button("➕", key=f"cart_inc_{b_name}", use_container_width=True):
+                                    if st.session_state.cart[b_name]['qty'] < data['max_qty']:
+                                        st.session_state.cart[b_name]['qty'] += 1
+                                        st.rerun()
+                            with c5:
+                                st.markdown("<div style='margin-top: 8px; color: #cbd5e1;'>｜</div>", unsafe_allow_html=True)
+                            with c6:
+                                if st.button("🗑️ 移除", key=f"cart_rm_{b_name}", use_container_width=True):
+                                    del st.session_state.cart[b_name]
+                                    st.rerun()
+                    
+                    st.markdown("---")
+                    # 一次性打包送出邏輯
+                    if st.button("🚀 送出借閱申請", type="primary", use_container_width=True):
+                        warnings_list = []
+                        borrow_requests = {}
+                        
+                        for b_name, data in st.session_state.cart.items():
+                            borrow_requests[b_name] = data['qty']
                             c.execute("SELECT COUNT(*) FROM books WHERE owner_id=%s AND book_name=%s AND status!='在庫'", (st.session_state.login_id, b_name))
                             owned_count = int(c.fetchone()[0])
                             
@@ -771,27 +847,21 @@ try:
                             pending_req = c.fetchone()[0]
                             pending_count = int(pending_req) if pending_req else 0
                             
-                            auto_val = min(default_req_qty, max_qty)
-                            qty = st.number_input(f"欲借閱【{b_name}】的數量", min_value=1, max_value=max_qty, value=auto_val, key=f"req_{b_name}")
-                            borrow_requests[b_name] = qty
-                            
                             if (owned_count + pending_count) > 0:
                                 warn_msg = f"【{b_name}】已持有: {owned_count} 本 / 審核中: {pending_count} 本"
-                                st.warning(f"⚠️ 系統偵測到：{warn_msg}")
                                 warnings_list.append(warn_msg)
-                    
-                    st.markdown("---")
-                    if st.button("🚀 送出借閱申請", type="primary", use_container_width=True):
+                        
                         if warnings_list:
                             duplicate_borrow_dialog(borrow_requests, warnings_list)
                         else:
-                            with db_transaction(success_msg="✅ 申請已送出！請等待幹部審核。") as c:
+                            with db_transaction(success_msg="✅ 申請已送出！請等待幹部審核。") as c_trans:
                                 now_time = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S")
                                 for b_name, qty in borrow_requests.items():
-                                    c.execute("INSERT INTO borrow_requests (login_id, unit, book_name, quantity, status) VALUES (%s, %s, %s, %s, %s)", 
+                                    c_trans.execute("INSERT INTO borrow_requests (login_id, unit, book_name, quantity, status) VALUES (%s, %s, %s, %s, %s)", 
                                               (st.session_state.login_id, st.session_state.title, b_name, qty, '待審核'))
-                                    c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)",
+                                    c_trans.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)",
                                               (now_time, st.session_state.login_id, "申請借閱", f"申請 {b_name} {qty} 本"))
+                            st.session_state.cart = {} # 清空購物車
                             st.rerun()
 
         elif menu in ["💬 回報專區", "回報專區"] and st.session_state.role == 'L2':
@@ -867,16 +937,18 @@ try:
                 for b_name in books_df['書名'].unique():
                     b_df = books_df[books_df['書名'] == b_name].reset_index(drop=True)
                     qty = len(b_df)
-                    st.markdown(f"""<div style="font-size: 18px; font-weight: bold; color: #4CAF50; margin-bottom: 10px;">🟢 {b_name}</div>""", unsafe_allow_html=True)
+                    st.markdown(f"""<div class="single-line-text" style="font-size: 18px; font-weight: bold; color: #4CAF50; margin-bottom: 10px;">🟢 {b_name}</div>""", unsafe_allow_html=True)
                     col_chk, col_exp = st.columns([2.5, 7.5])
                     with col_chk: category_checks[b_name] = st.checkbox(f"☑️ 全數歸還 ({qty}本)", key=f"all_ret_{b_name}")
                     with col_exp:
                         with st.expander(f"🔽 展開個別序號"):
                             if category_checks[b_name]:
+                                # 🛡️ 4. 批次操作的 UX 減壓：外面打勾，裡面直接鎖死給神級提示
                                 st.success(f"✨ 已選擇全數歸還！送出後將一併歸還這 {qty} 本準則。")
                                 edited_return_dfs[b_name] = None 
                             else:
-                                initial_checks = [st.session_state['l2_partial_return_memory'].get(row['id'], False) for _, row in b_df.iterrows()]
+                                # 🛡️ 4. 批次操作的 UX 減壓：預設全部打好勾 True！
+                                initial_checks = [st.session_state['l2_partial_return_memory'].get(row['id'], True) for _, row in b_df.iterrows()]
                                 b_df.insert(0, "勾選歸還", initial_checks)
                                 edited_return_dfs[b_name] = st.data_editor(b_df, hide_index=True, disabled=["id", "書名", "序號"], width='stretch', column_config={"id": None, "書名": None}, key=f"return_editor_{b_name}")
                 st.markdown("---") 
@@ -950,8 +1022,15 @@ try:
                                 g_df = sq_df[sq_df['display_group'] == g]
                                 for _, row in g_df.iterrows():
                                     uid = row['id']
+                                    # 🏭 3. 擴建「UI 卡片工廠」 (帳號管理卡片)
                                     with st.container(border=True):
-                                        st.markdown(f"**👤 {row['title']}** ({row['role']})  \n🆔 帳號: `{row['login_id']}`  \n🔑 密碼: `********`  \n{'🟢' if row['status']=='啟用' else '🔴'} 狀態: `{row['status']}`")
+                                        st.markdown(f"""
+                                        <div style="padding: 10px; background-color: rgba(255,255,255,0.05); border-radius: 8px; margin-bottom: 15px;">
+                                            <div style="font-size: 16px; font-weight: bold; margin-bottom: 4px;">👤 {row['title']} <span style="font-size: 12px; color: #a0a0a0;">({row['role']})</span></div>
+                                            <div style="font-size: 14px; color: #d0d0d0;">🆔 帳號: <code>{row['login_id']}</code> &nbsp; | &nbsp; 🔑 密碼: <code>********</code></div>
+                                            <div style="font-size: 14px; margin-top: 4px;">{'🟢' if row['status']=='啟用' else '🔴'} 狀態: <strong>{row['status']}</strong></div>
+                                        </div>
+                                        """, unsafe_allow_html=True)
                                         with st.expander("✏️ 編輯詳細資料與權限"):
                                             col_edit1, col_edit2 = st.columns(2)
                                             with col_edit1:
@@ -1137,7 +1216,8 @@ try:
                             with col_exp:
                                 with st.expander(f"📘 {b_name} (待釋放 {len(b_df)} 本)"):
                                     if not abn_checks[u_key]:
-                                        b_df.insert(0, "✅ 結案", False)
+                                        # 🛡️ 4. 批次操作的 UX 減壓：內部展開也預設打勾方便結案
+                                        b_df.insert(0, "✅ 結案", True)
                                         edited_abn_dfs[u_key] = st.data_editor(b_df, hide_index=True, disabled=["id", "班隊", "書名", "序號"], width='stretch', column_config={"✅ 結案": st.column_config.CheckboxColumn("✅ 結案(退庫)"), "id": None, "班隊": None, "書名": None}, key=f"abn_chk_{u_key}")
                     st.markdown("---")
                     if st.button("🔄 釋放異常庫存", type="primary"):
@@ -1404,7 +1484,6 @@ try:
             current_view_sq = st.session_state.get('current_sq', st.session_state.squadron)
             st.subheader(f"📊{current_view_sq}準則現況", help="點擊下方各班隊名稱，即可展開查看該班隊目前持有的所有準則與詳細序號。")
             
-            # 💥 猛藥：徹底解決 N+1 查詢！只敲一次資料庫的門，打包全部資料回來分類！
             if st.session_state.role == 'L1':
                 query = "SELECT u.title as unit, b.book_name, b.status, b.serial_number FROM books b JOIN users u ON b.owner_id = u.login_id WHERE u.squadron = ANY(%s) AND b.status IN ('借閱中', '保留待領取', '少領異常', '歸還中') ORDER BY u.title, b.book_name"
                 books_df = pd.read_sql_query(query, conn, params=(target_sq_list,))
