@@ -452,12 +452,13 @@ if 'logged_in' not in st.session_state:
 sq_list = st.session_state.get('base_sq_list', [str(st.session_state.squadron).strip()])
 
 with st.sidebar:
+    # 1. 最上方直接顯示身分與職稱 (移除 ID 與多餘分隔線)
     st.markdown(f"### {'🧑‍✈️' if st.session_state.role == 'L1' else '🎓'} {st.session_state.title}")
-    st.markdown(f"🆔 {st.session_state.login_id}")
-    st.markdown("---")
     
+    # 2. 緊接著顯示中隊選擇或所屬中隊
     if st.session_state.role == 'L1':
-        if len(sq_list) > 1: st.session_state['current_sq'] = st.selectbox("選擇中隊", sq_list, key="global_sq_selector")
+        if len(sq_list) > 1: 
+            st.session_state['current_sq'] = st.selectbox("選擇中隊", sq_list, key="global_sq_selector", label_visibility="collapsed")
         else:
             st.session_state['current_sq'] = sq_list[0]
             st.markdown(f"**管轄中隊：** `{st.session_state['current_sq']}`")
@@ -468,9 +469,12 @@ with st.sidebar:
         st.markdown(f"📍 **所屬中隊：** `{st.session_state['current_sq']}`")
         menu_options = ["🏠 首頁", "📤 準則借閱", "🏷️ 序號登載", "📥 準則歸還", "💬 回報專區", "🔍 綜合查詢", "🚗 車輛登載"]
         
-    menu = st.radio("功能導覽", menu_options)
+    # 3. 功能導覽 (上下加上自訂的細分隔線)
     st.markdown('<hr class="custom-divider">', unsafe_allow_html=True)
-    if st.button("🚪 登出系統"):
+    menu = st.radio("隱藏標題", menu_options, label_visibility="collapsed")
+    st.markdown('<hr class="custom-divider">', unsafe_allow_html=True)
+    
+    if st.button("🚪 登出系統", use_container_width=True):
         st.session_state['logout_triggered'] = True
         st.rerun()
 
