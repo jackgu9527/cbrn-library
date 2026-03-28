@@ -63,7 +63,6 @@ def release_connection(conn):
         try: conn.close()
         except Exception: pass
 
-# 🌟 升級版智慧工具箱：加入 st.stop() 完美阻斷錯誤蔓延
 @contextmanager
 def db_transaction(success_msg=None, error_prefix="操作失敗"):
     conn = get_db_connection()
@@ -76,7 +75,7 @@ def db_transaction(success_msg=None, error_prefix="操作失敗"):
     except IntegrityError:
         conn.rollback()
         st.error(f"❌ {error_prefix}：資料衝突或已存在於系統中！")
-        st.stop()  # 發生錯誤直接煞車，不執行後續重整
+        st.stop()
     except Exception as e:
         conn.rollback()
         st.error(f"❌ {error_prefix}：{e}")
@@ -85,6 +84,10 @@ def db_transaction(success_msg=None, error_prefix="操作失敗"):
         release_connection(conn)
 
 def send_line_notify(message):
+    """
+    未來這裡將專門用於 LINE Messaging API 推播【系統重大異常告警】。
+    不會再用來發送日常報表（日常報表將移交給 GCP 獨立伺服器處理）。
+    """
     try:
         token = st.secrets.get("LINE_NOTIFY_TOKEN")
         if not token: return
@@ -308,58 +311,13 @@ except Exception as e:
     st.error(err_msg)
     st.stop()
 
-def run_ghost_cleanup():
-    if 'ghost_engine_ran' in st.session_state: return
-    conn = get_db_connection()
-    try:
-        c = conn.cursor()
-        tz_tw = timezone(timedelta(hours=8))
-        now = datetime.now(tz_tw)
-        today_str = now.strftime('%Y-%m-%d')
-        now_time = now.strftime("%H:%M:%S")
-        
-        try:
-            c.execute("SELECT setting_value FROM system_settings WHERE setting_key='daily_report_date' FOR UPDATE NOWAIT")
-            last_date = c.fetchone()[0]
-            if last_date != today_str and now.strftime("%H:%M") >= "08:00":
-                pending_reg = pd.read_sql_query("SELECT COUNT(*) FROM users WHERE status='待審核'", conn).iloc[0,0]
-                pending_bor = pd.read_sql_query("SELECT COUNT(*) FROM borrow_requests WHERE status='待審核'", conn).iloc[0,0]
-                pending_ret = pd.read_sql_query("SELECT COUNT(*) FROM books WHERE status='歸還中'", conn).iloc[0,0]
-                report_msg = f"\n📅 {today_str} 每日待辦彙整\n━━━━━━━━━━━━━━\n📝 待開通帳號：{pending_reg} 件\n📥 待審核借閱：{pending_bor} 件\n📤 待點收歸還：{pending_ret} 件\n━━━━━━━━━━━━━━\n💡 請長官抽空進入系統處理。"
-                send_line_notify(report_msg)
-                c.execute("UPDATE system_settings SET setting_value=%s, last_updated=CURRENT_TIMESTAMP WHERE setting_key='daily_report_date'", (today_str,))
-        except psycopg2.errors.LockNotAvailable: conn.rollback()
-        except Exception: pass
-            
-        c.execute("SELECT id, login_id, title FROM users WHERE role='L2' AND discharge_date < %s AND status='啟用'", (today_str,))
-        for u_id, u_login, u_title in c.fetchall():
-            c.execute("UPDATE books SET status='歸還中' WHERE owner_id=%s AND status IN ('借閱中', '保留待領取', '少領異常')", (u_login,))
-            c.execute("UPDATE users SET status='結訓凍結' WHERE id=%s", (u_id,))
-            c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", (now_time, "SYSTEM", "結訓凍結", f"班隊 {u_title} 已結訓，自動代為歸還並凍結帳號。"))
-                
-        c.execute("SELECT id, login_id, title FROM users WHERE role='L2' AND status='結訓凍結'")
-        for f_id, f_login, f_title in c.fetchall():
-            c.execute("UPDATE books SET owner_id='在庫' WHERE owner_id=%s AND status='在庫'", (f_login,))
-            c.execute("SELECT COUNT(*) FROM books WHERE owner_id=%s", (f_login,))
-            leftover_qty = c.fetchone()[0]
-            if leftover_qty == 0:
-                c.execute("DELETE FROM borrow_requests WHERE login_id=%s", (f_login,))
-                c.execute("DELETE FROM vehicles WHERE account_id=%s", (f_login,))
-                c.execute("DELETE FROM users WHERE id=%s", (f_id,))
-                c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", (now_time, "SYSTEM", "帳號註銷", f"班隊 {f_title} 準則已結清，徹底刪除帳號。"))
-            else:
-                c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", (now_time, "SYSTEM", "刪除阻擋", f"系統嘗試刪除 {f_title} 失敗，偵測到仍有 {leftover_qty} 本幽靈準則！"))
-                    
-        seven_days_ago = (now - timedelta(days=7)).strftime('%Y-%m-%d %H:%M:%S')
-        c.execute("DELETE FROM action_logs WHERE timestamp < %s AND user_id NOT IN (SELECT login_id FROM users) AND user_id != 'SYSTEM'", (seven_days_ago,))
-        conn.commit()
-    except Exception as e:
-        conn.rollback()
-    finally:
-        release_connection(conn)
-        st.session_state['ghost_engine_ran'] = True
-
-run_ghost_cleanup()
+# 🧠 權限大腦初始化函數
+def calculate_permissions(user_sq):
+    user_sq = str(user_sq).strip()
+    if user_sq == '大隊部': return ['大隊部', '聯合中隊①', '聯合中隊②', '學員一中隊', '學員二中隊', '學生一中隊', '學生二中隊']
+    elif user_sq == '聯合中隊①': return ['聯合中隊①', '學員一中隊', '學生一中隊']
+    elif user_sq == '聯合中隊②': return ['聯合中隊②', '學員二中隊', '學生二中隊']
+    return [user_sq]
 
 cookie_manager = stx.CookieManager(key="main_cookie_auth")
 if st.session_state.get('logout_triggered'):
@@ -378,6 +336,8 @@ if 'logged_in' not in st.session_state and not st.session_state.get('force_logou
             user_data = pd.read_sql_query("SELECT * FROM users WHERE session_token=%s", conn, params=(str(stored_token),))
             if not user_data.empty and user_data.iloc[0]['status'] not in ['待審核', '停權', '結訓凍結']:
                 for col in user_data.columns: st.session_state[col] = user_data.iloc[0][col]
+                # 植入大腦
+                st.session_state['base_sq_list'] = calculate_permissions(user_data.iloc[0]['squadron'])
                 st.session_state['logged_in'] = True
                 st.rerun()
         except Exception: pass
@@ -407,6 +367,8 @@ if 'logged_in' not in st.session_state:
                             c.execute("UPDATE users SET session_token=%s WHERE id=%s", (new_token, int(user.iloc[0]['id'])))
                             conn.commit()
                             for col in user.columns: st.session_state[col] = user.iloc[0][col]
+                            # 植入大腦
+                            st.session_state['base_sq_list'] = calculate_permissions(user.iloc[0]['squadron'])
                             st.session_state['logged_in'] = True
                             cookie_manager.set('sys_user_token', new_token, expires_at=datetime.now() + timedelta(days=30))
                             log_action(login_id, "登入", "使用者成功安全登入系統")
@@ -449,11 +411,8 @@ if 'logged_in' not in st.session_state:
             else: st.warning("請填寫所有欄位")
     st.stop()
 
-user_sq = str(st.session_state.squadron).strip()
-if user_sq == '大隊部': sq_list = ['大隊部', '聯合中隊①', '聯合中隊②', '學員一中隊', '學員二中隊', '學生一中隊', '學生二中隊']
-elif user_sq == '聯合中隊①': sq_list = ['聯合中隊①', '學員一中隊', '學生一中隊']
-elif user_sq == '聯合中隊②': sq_list = ['聯合中隊②', '學員二中隊', '學生二中隊']
-else: sq_list = [user_sq]
+# 讀取權限大腦的資料
+sq_list = st.session_state.get('base_sq_list', [str(st.session_state.squadron).strip()])
 
 with st.sidebar:
     st.markdown(f"### {'🧑‍✈️' if st.session_state.role == 'L1' else '🎓'} {st.session_state.title}")
@@ -466,7 +425,7 @@ with st.sidebar:
             st.session_state['current_sq'] = sq_list[0]
             st.markdown(f"**管轄中隊：** `{st.session_state['current_sq']}`")
         menu_options = ["🏠 首頁", "👥 帳號管理", "📤 借閱審核", "📥 歸還審核", "💬 回報專區", "📊 準則現況", "🔍 綜合查詢", "🗂️ 操作紀錄"]
-        if user_sq == '大隊部': menu_options.insert(2, "⚙️ 系統管理")
+        if str(st.session_state.squadron).strip() == '大隊部': menu_options.insert(2, "⚙️ 系統管理")
     else:
         st.session_state['current_sq'] = st.session_state.squadron
         st.markdown(f"📍 **所屬中隊：** `{st.session_state['current_sq']}`")
@@ -478,7 +437,7 @@ with st.sidebar:
         st.session_state['logout_triggered'] = True
         st.rerun()
 
-target_sq = st.session_state.get('current_sq', user_sq)
+target_sq = st.session_state.get('current_sq', str(st.session_state.squadron).strip())
 if target_sq == '大隊部': target_sq_list = ['大隊部', '學員一中隊', '學員二中隊', '學生一中隊', '學生二中隊']
 elif target_sq == '聯合中隊①': target_sq_list = ['聯合中隊①', '學員一中隊', '學生一中隊']
 elif target_sq == '聯合中隊②': target_sq_list = ['聯合中隊②', '學員二中隊', '學生二中隊']
@@ -509,10 +468,19 @@ try:
                 dyn_in = st.session_state.dynamic_sq_in_clause
                 sq_filter = f"IN ({dyn_in})"
                 
-                pending_reg = pd.read_sql_query(f"SELECT COUNT(*) FROM users WHERE status='待審核' AND squadron {sq_filter}", conn).iloc[0,0]
-                pending_bor = pd.read_sql_query(f"SELECT COUNT(*) FROM borrow_requests br JOIN users u ON br.login_id = u.login_id WHERE br.status='待審核' AND u.squadron {sq_filter}", conn).iloc[0,0]
-                pending_ret = pd.read_sql_query(f"SELECT COUNT(*) FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.status='歸還中' AND u.squadron {sq_filter}", conn).iloc[0,0]
-                pending_abn = pd.read_sql_query(f"SELECT COUNT(*) FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.status='少領異常' AND u.squadron {sq_filter}", conn).iloc[0,0]
+                # ⚡ 極速計數器：拋棄 Pandas，原生 SQL 瞬間取值
+                with conn.cursor() as c:
+                    c.execute(f"SELECT COUNT(*) FROM users WHERE status='待審核' AND squadron {sq_filter}")
+                    pending_reg = c.fetchone()[0]
+                    
+                    c.execute(f"SELECT COUNT(*) FROM borrow_requests br JOIN users u ON br.login_id = u.login_id WHERE br.status='待審核' AND u.squadron {sq_filter}")
+                    pending_bor = c.fetchone()[0]
+                    
+                    c.execute(f"SELECT COUNT(*) FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.status='歸還中' AND u.squadron {sq_filter}")
+                    pending_ret = c.fetchone()[0]
+                    
+                    c.execute(f"SELECT COUNT(*) FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.status='少領異常' AND u.squadron {sq_filter}")
+                    pending_abn = c.fetchone()[0]
                 
                 c_m1, c_m2, c_m3, c_m4 = st.columns(4)
                 c_m1.metric("📝 待審核帳號", f"{pending_reg} 件")
