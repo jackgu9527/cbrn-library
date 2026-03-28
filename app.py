@@ -13,6 +13,7 @@ import re
 import secrets  
 from werkzeug.security import generate_password_hash, check_password_hash 
 import psycopg2.errors 
+from contextlib import contextmanager # 🌟 【升級】引入上下文管理器魔法
 
 # 關閉 Pandas 對於未嚴格使用 SQLAlchemy 的警告
 warnings.filterwarnings('ignore', category=UserWarning, module='pandas')
@@ -45,7 +46,8 @@ CSV_FILE = csv_candidates[0] if csv_candidates else None
 
 @st.cache_resource(ttl=3600)
 def get_pool():
-    return pool.ThreadedConnectionPool(1, 20, st.secrets["DATABASE_URL"], connect_timeout=5)
+    # 🌟 【升級】將連線池上限從 20 降為黃金比例 10，釋放資料庫記憶體！
+    return pool.ThreadedConnectionPool(1, 10, st.secrets["DATABASE_URL"], connect_timeout=5)
 
 def get_db_connection():
     db_pool = get_pool()
@@ -65,6 +67,31 @@ def release_connection(conn):
         send_line_notify(f"🚨 【系統告警】連線池異常！原因：{e}") 
         try: conn.close()
         except Exception: pass
+
+# 🌟 【升級】新增：世界級的資料庫智慧工具箱 (上下文管理器)
+@contextmanager
+def db_transaction(success_msg=None, error_prefix="操作失敗"):
+    """
+    自動處理連線借用、Commit、Rollback 與連線歸還的防彈裝甲。
+    用法: with db_transaction(success_msg="✅ 成功！") as c:
+    """
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as c:
+            yield c  # 將工具箱裡的「游標 (Cursor)」借給主程式去執行 SQL
+        
+        conn.commit()  # 如果上面沒出錯，自動幫你 Commit 存檔！
+        if success_msg:
+            st.session_state['sys_toast'] = success_msg  # 自動彈出成功提示
+            
+    except IntegrityError:
+        conn.rollback()  # 遇到資料重複(例如車號重複)，自動退回
+        st.error(f"❌ {error_prefix}：資料衝突或已存在於系統中！")
+    except Exception as e:
+        conn.rollback()  # 遇到任何未知崩潰，自動退回保護資料庫
+        st.error(f"❌ {error_prefix}：{e}")
+    finally:
+        release_connection(conn)  # 無論成功或失敗，絕對強制把鑰匙還給工具室！
 
 def send_line_notify(message):
     try:
@@ -130,18 +157,10 @@ def draw_status_card(book_name, qty, status, extra_info=""):
 def delete_account_dialog(uid, title):
     st.error(f"將徹底刪除【{title}】的帳號與所有資料！\n\n此動作無法復原，請確認該班隊的準則皆已歸還。")
     if st.button("🚨 確認刪除", use_container_width=True):
-        conn = get_db_connection()
-        try:
-            c = conn.cursor()
+        # 🌟 【升級示範】使用智慧工具箱，10 幾行的錯誤處理縮減為 3 行！
+        with db_transaction(success_msg="🗑️ 帳號已永久刪除！") as c:
             c.execute("DELETE FROM users WHERE id=%s", (uid,))
-            conn.commit()
-            st.session_state['sys_toast'] = "🗑️ 帳號已永久刪除！"
-            st.rerun()
-        except Exception as e:
-            conn.rollback()
-            st.error(f"刪除失敗: {e}")
-        finally:
-            release_connection(conn)
+        st.rerun()
 
 @st.dialog("🛠️ 強制退回庫房 (上帝模式)")
 def force_return_dialog(ghost_id):
@@ -581,8 +600,9 @@ try:
                     else: st.info(f"📅 距離結訓日還有：{days_left} 天")
 
                 st.markdown("#### 📦 準則借閱總覽")
-                br_df = pd.read_sql_query(f"SELECT book_name, quantity FROM borrow_requests WHERE login_id='{st.session_state.login_id}' AND status='待審核'", conn)
-                bk_df = pd.read_sql_query(f"SELECT book_name, status FROM books WHERE owner_id='{st.session_state.login_id}' AND status IN ('保留待領取', '借閱中', '歸還中')", conn)
+                # 🌟 【升級示範】導入防彈保險箱寫法，徹底封殺 SQL 注入風險！
+                br_df = pd.read_sql_query("SELECT book_name, quantity FROM borrow_requests WHERE login_id=%s AND status='待審核'", conn, params=(st.session_state.login_id,))
+                bk_df = pd.read_sql_query("SELECT book_name, status FROM books WHERE owner_id=%s AND status IN ('保留待領取', '借閱中', '歸還中')", conn, params=(st.session_state.login_id,))
 
                 status_items = []
                 if not br_df.empty:
@@ -727,17 +747,11 @@ try:
                                     conn.rollback()
                                     st.error(f"❌ 儲存失敗：{e}")
                                     
-                            # 滿版大按鈕 2：刪除 (黑色次按鈕)
+                            # 🌟 【升級示範】滿版大按鈕 2：刪除 (使用智慧工具箱！)
                             if st.button("🗑️ 刪除", key=f"v_del_{v_id}", use_container_width=True):
-                                try:
-                                    c = conn.cursor()
+                                with db_transaction(success_msg="🗑️ 車輛已刪除！") as c:
                                     c.execute("DELETE FROM vehicles WHERE id=%s", (v_id,))
-                                    conn.commit()
-                                    st.session_state['sys_toast'] = "🗑️ 車輛已刪除！"
-                                    st.rerun()
-                                except Exception as e:
-                                    conn.rollback()
-                                    st.error(f"❌ 刪除失敗：{e}")
+                                st.rerun()
             
         elif menu in ["序號登載", "🏷️ 序號登載"] and st.session_state.role == 'L2':
             st.header("🏷️ 序號登載與校正", help="""
@@ -1214,7 +1228,7 @@ try:
 
             elif menu == "📤 借閱審核":
                 st.subheader("📚 借閱準則審核", help="審核訓員提交的準則借閱申請，可修改核准數量或直接踢退。")
-                req_df = pd.read_sql_query(f"SELECT br.id as 單號, br.login_id as 帳號, u.title as 班隊, br.book_name as 書名, br.quantity as 申請數量, u.status as 帳號狀態 FROM borrow_requests br JOIN users u ON br.login_id = u.login_id WHERE br.status='待審核' AND u.squadron IN ({sq_in_clause}) ORDER BY u.title, br.book_name, br.id", conn)
+                req_df = pd.read_sql_query(f"SELECT br.id as 單號, br.login_id as 帳號, u.title as 班隊, br.book_name as 書名, br.quantity as 申請數量, u.status as 帳號狀態 FROM borrow_requests br JOIN users u ON b.owner_id = u.login_id WHERE br.status='待審核' AND u.squadron IN ({sq_in_clause}) ORDER BY u.title, br.book_name, br.id", conn)
                 
                 if not req_df.empty:
                     unit_list = req_df['班隊'].unique()
@@ -1396,18 +1410,13 @@ try:
                                     st.markdown(f"{row['班隊']}  \n📘 **書名：** `{row['書名']}`  \n🔖 **序號：** `{row['序號']}`")
                                 with col2:
                                     st.write("")
+                                    # 🌟 【升級示範】使用智慧工具箱處理尋獲遺失準則
                                     if st.button("✅ 尋獲", key=f"lost_res_{l_id}", type="primary", use_container_width=True):
-                                        try:
-                                            c = conn.cursor()
+                                        with db_transaction(success_msg="✅ 結案成功！已退回庫房。") as c:
                                             now_time = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S")
-                                            c.execute(f"UPDATE books SET status='在庫', owner_id='在庫' WHERE id={l_id}")
+                                            c.execute("UPDATE books SET status='在庫', owner_id='在庫' WHERE id=%s", (l_id,))
                                             c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", (now_time, st.session_state.login_id, "遺失結案", f"尋獲或完成賠償，退庫: {row['書名']} ({row['序號']})"))
-                                            conn.commit()
-                                            st.session_state['sys_toast'] ="✅ 結案成功！已退回庫房。"
-                                            st.rerun()
-                                        except Exception as e:
-                                            conn.rollback()
-                                            st.error(f"❌ 結案失敗：{e}")
+                                        st.rerun()
                     else:
                         st.success("✨ 準則妥善率 100%！目前中隊無任何遺失之準則！")
 
