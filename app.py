@@ -1019,6 +1019,39 @@ try:
 
         elif menu == "⚙️ 系統管理" and st.session_state.role == 'L1' and str(st.session_state.squadron).strip() == '大隊部':
             st.header("👑 系統管理員模式", help="系統最高權限可查看與修改所有人員權限。")
+            # 👇 --- 新增這個對話框函數 --- 👇
+            @st.dialog("⚙️ 編輯與管理帳號")
+            def edit_user_dialog(user_row):
+                uid = user_row['id']
+                st.markdown(f"**正在編輯：** `{user_row['title']}` ({user_row['login_id']})")
+                
+                col_edit1, col_edit2 = st.columns(2)
+                with col_edit1:
+                    new_login = st.text_input("帳號", value=user_row['login_id'], key=f"d_id_{uid}")
+                    new_pwd = st.text_input("密碼 (若不修改請留空)", type="password", placeholder="輸入新密碼", key=f"d_pw_{uid}")
+                    role_opts = ["L1", "L2"]
+                    new_role = st.selectbox("身分權限", role_opts, index=role_opts.index(user_row['role']) if user_row['role'] in role_opts else 0, key=f"d_ro_{uid}")
+                with col_edit2:
+                    new_sq = st.text_input("中隊", value=user_row['squadron'], key=f"d_sq_{uid}")
+                    new_ti = st.text_input("職務/班隊", value=user_row['title'], key=f"d_ti_{uid}")
+                    status_opts = ["啟用", "待審核", "結訓凍結", "停權"]
+                    new_st = st.selectbox("狀態", status_opts, index=status_opts.index(user_row['status']) if user_row['status'] in status_opts else 0, key=f"d_st_{uid}")
+                
+                st.markdown("---")
+                col_save, col_del = st.columns(2)
+                with col_save:
+                    if st.button("💾 儲存修改", key=f"d_s_{uid}", type="primary", use_container_width=True):
+                        with db_transaction(success_msg="✅ 更新成功！") as c:
+                            if new_pwd:
+                                c.execute("""UPDATE users SET login_id=%s, password=%s, role=%s, squadron=%s, title=%s, status=%s WHERE id=%s""", (new_login, generate_password_hash(new_pwd), new_role, new_sq, new_ti, new_st, uid))
+                            else:
+                                c.execute("""UPDATE users SET login_id=%s, role=%s, squadron=%s, title=%s, status=%s WHERE id=%s""", (new_login, new_role, new_sq, new_ti, new_st, uid))
+                        st.rerun()
+                with col_del:
+                    if st.button("🗑️ 徹底刪除", key=f"d_d_{uid}", use_container_width=True):
+                        with db_transaction(success_msg="🗑️ 帳號已永久刪除！") as c:
+                            c.execute("DELETE FROM users WHERE id=%s", (uid,))
+                        st.rerun()
             with st.expander("➕ 新增人員", expanded=False):
                 st.markdown("#### 📝 配發帳號")
                 col1, col2, col3 = st.columns(3)
