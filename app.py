@@ -1042,9 +1042,9 @@ try:
 
             elif menu == "📤 借閱審核":
                 st.subheader("📚 借閱準則審核", help="審核訓員提交的準則借閱申請，可修改核准數量或直接踢退。")
-                req_df = pd.read_sql_query(f"SELECT br.id as 單號, br.login_id as 帳號, u.title as 班隊, br.book_name as 書名, br.quantity as 申請數量, u.status as 帳號狀態 FROM borrow_requests br JOIN users u ON br.owner_id = u.login_id WHERE br.status='待審核' AND u.squadron IN ({sq_in_clause}) ORDER BY u.title, br.book_name, br.id", conn)
+                req_df = pd.read_sql_query(f"SELECT br.id as 單號, br.login_id as 帳號, u.title as 班隊, br.book_name as 書名, br.quantity as 申請數量, u.status as 帳號狀態 FROM borrow_requests br JOIN users u ON br.login_id = u.login_id WHERE br.status='待審核' AND u.squadron IN ({sq_in_clause}) ORDER BY u.title, br.book_name, br.id", conn)
                 
-                if not req_df.empty:
+                 if not req_df.empty:
                     unit_list = req_df['班隊'].unique()
                     selected_unit = st.selectbox("📌 選擇要審核的班隊", unit_list)
                     
