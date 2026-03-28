@@ -46,13 +46,23 @@ def get_pool():
 
 def get_db_connection():
     db_pool = get_pool()
-    conn = db_pool.getconn()
+    try:
+        conn = db_pool.getconn()
+    except psycopg2.pool.PoolError:
+        # 🌟 猛藥二：如果鑰匙真的被借光，優雅煞車，絕不亮紅燈癱瘓！
+        st.warning("🚦 系統忙碌中 (點擊過快)，請稍等一秒鐘再試...")
+        st.stop()
+        
     try:
         with conn.cursor() as c:
             c.execute("SELECT 1")
     except Exception:
         db_pool.putconn(conn, close=True)
-        conn = db_pool.getconn()
+        try:
+            conn = db_pool.getconn()
+        except psycopg2.pool.PoolError:
+            st.warning("🚦 系統忙碌中 (點擊過快)，請稍等一秒鐘再試...")
+            st.stop()
     return conn
 
 def release_connection(conn):
@@ -63,7 +73,6 @@ def release_connection(conn):
         try: conn.close()
         except Exception: pass
 
-# 🌟 升級版智慧工具箱：植入「防連點狀態鎖 (db_locked)」
 @contextmanager
 def db_transaction(success_msg=None, error_prefix="操作失敗"):
     if st.session_state.get('db_locked', False):
@@ -124,7 +133,6 @@ def log_action(user_id, action, details):
     finally:
         release_connection(conn)
 
-# 🎨 萬用卡片工廠 (UI Factory)
 def draw_status_card(book_name, qty, status, extra_info=""):
     style_map = {
         '申請中': ('🔵', '#4da6ff'), '待審核': ('🔵', '#4da6ff'),
@@ -312,8 +320,14 @@ def init_db():
     finally:
         release_connection(conn)
 
-try:
+# 🌟 猛藥一：把耗時的 init_db 快取起來，避免連點時重複向資料庫借鑰匙！
+@st.cache_resource
+def run_system_init():
     init_db()
+    return True
+
+try:
+    run_system_init()
 except Exception as e:
     err_msg = f"🚨 【系統癱瘓】資料庫連線或初始化失敗！詳細錯誤：{e}"
     send_line_notify(err_msg) 
@@ -504,8 +518,8 @@ try:
                     else: st.info(f"📅 距離結訓日還有：{days_left} 天")
 
                 st.markdown("#### 📦 準則借閱總覽")
-                br_df = pd.read_sql_query("SELECT book_name, quantity FROM borrow_requests WHERE login_id=%s AND status='待審核'", conn, params=(st.session_state.login_id,))
-                bk_df = pd.read_sql_query("SELECT book_name, status FROM books WHERE owner_id=%s AND status IN ('保留待領取', '借閱中', '歸還中')", conn, params=(st.session_state.login_id,))
+                br_df = pd.read_sql_query(f"SELECT book_name, quantity FROM borrow_requests WHERE login_id='{st.session_state.login_id}' AND status='待審核'", conn)
+                bk_df = pd.read_sql_query(f"SELECT book_name, status FROM books WHERE owner_id='{st.session_state.login_id}' AND status IN ('保留待領取', '借閱中', '歸還中')", conn)
 
                 status_items = []
                 if not br_df.empty:
