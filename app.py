@@ -1049,9 +1049,7 @@ try:
                         st.rerun()
                 with col_del:
                     if st.button("🗑️ 徹底刪除", key=f"d_d_{uid}", use_container_width=True):
-                        with db_transaction(success_msg="🗑️ 帳號已永久刪除！") as c:
-                            c.execute("DELETE FROM users WHERE id=%s", (uid,))
-                        st.rerun()
+                        delete_account_dialog(uid, user_row['title'])
             with st.expander("➕ 新增人員", expanded=False):
                 st.markdown("#### 📝 配發帳號")
                 col1, col2, col3 = st.columns(3)
