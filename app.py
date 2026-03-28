@@ -1094,40 +1094,19 @@ try:
                                 g_df = sq_df[sq_df['display_group'] == g]
                                 for _, row in g_df.iterrows():
                                     uid = row['id']
-                                    # 🏭 3. 擴建「UI 卡片工廠」 (帳號管理卡片)
+                                    # 🏭 3. 擴建「UI 卡片工廠」 (大幅瘦身版：移除原本厚重的 expander)
                                     with st.container(border=True):
                                         st.markdown(f"""
-                                        <div style="padding: 10px; background-color: rgba(255,255,255,0.05); border-radius: 8px; margin-bottom: 15px;">
+                                        <div style="padding: 10px; background-color: rgba(255,255,255,0.05); border-radius: 8px; margin-bottom: 8px;">
                                             <div style="font-size: 16px; font-weight: bold; margin-bottom: 4px;">👤 {row['title']} <span style="font-size: 12px; color: #a0a0a0;">({row['role']})</span></div>
                                             <div style="font-size: 14px; color: #d0d0d0;">🆔 帳號: <code>{row['login_id']}</code> &nbsp; | &nbsp; 🔑 密碼: <code>********</code></div>
                                             <div style="font-size: 14px; margin-top: 4px;">{'🟢' if row['status']=='啟用' else '🔴'} 狀態: <strong>{row['status']}</strong></div>
                                         </div>
                                         """, unsafe_allow_html=True)
-                                        with st.expander("✏️ 編輯詳細資料與權限"):
-                                            col_edit1, col_edit2 = st.columns(2)
-                                            with col_edit1:
-                                                new_login = st.text_input("帳號", value=row['login_id'], key=f"l1_id_{uid}")
-                                                new_pwd = st.text_input("密碼 (若不修改請留空)", type="password", placeholder="輸入新密碼", key=f"l1_pw_{uid}")
-                                                role_opts = ["L1", "L2"]
-                                                new_role = st.selectbox("身分權限", role_opts, index=role_opts.index(row['role']) if row['role'] in role_opts else 0, key=f"l1_ro_{uid}")
-                                            with col_edit2:
-                                                new_sq = st.text_input("中隊", value=row['squadron'], key=f"l1_sq_{uid}")
-                                                new_ti = st.text_input("職務/班隊", value=row['title'], key=f"l1_ti_{uid}")
-                                                status_opts = ["啟用", "待審核", "結訓凍結", "停權"]
-                                                new_st = st.selectbox("狀態", status_opts, index=status_opts.index(row['status']) if row['status'] in status_opts else 0, key=f"l1_st_{uid}")
-                                            
-                                            col_save, col_del = st.columns(2)
-                                            with col_save:
-                                                if st.button("💾 儲存", key=f"l1_s_{uid}", type="primary", use_container_width=True):
-                                                    with db_transaction(success_msg="✅ 更新成功！") as c:
-                                                        if new_pwd:
-                                                            c.execute("""UPDATE users SET login_id=%s, password=%s, role=%s, squadron=%s, title=%s, status=%s WHERE id=%s""", (new_login, generate_password_hash(new_pwd), new_role, new_sq, new_ti, new_st, uid))
-                                                        else:
-                                                            c.execute("""UPDATE users SET login_id=%s, role=%s, squadron=%s, title=%s, status=%s WHERE id=%s""", (new_login, new_role, new_sq, new_ti, new_st, uid))
-                                                    st.rerun()
-                                            with col_del:
-                                                if st.button("🗑️ 刪除帳號", key=f"l1_d_{uid}", use_container_width=True):
-                                                    delete_account_dialog(uid, row['title'])
+                                        
+                                        # 🎯 魔法在這裡：將 8 個元件壓縮成 1 個按鈕，點擊才載入！
+                                        if st.button("⚙️ 管理此帳號", key=f"mgr_{uid}", use_container_width=True):
+                                            edit_user_dialog(row)
                                                         
             st.subheader("📥 準則資料庫擴充與同步")
             if st.button("🔄 從最新 CSV 同步新增準則", type="primary", use_container_width=True):
