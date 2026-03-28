@@ -63,8 +63,14 @@ def release_connection(conn):
         try: conn.close()
         except Exception: pass
 
+# 🌟 升級版智慧工具箱：植入「防連點狀態鎖 (db_locked)」
 @contextmanager
 def db_transaction(success_msg=None, error_prefix="操作失敗"):
+    if st.session_state.get('db_locked', False):
+        st.warning("⏳ 系統處理中，請勿重複點擊...")
+        st.stop()
+    st.session_state['db_locked'] = True
+    
     conn = get_db_connection()
     try:
         with conn.cursor() as c:
@@ -75,19 +81,18 @@ def db_transaction(success_msg=None, error_prefix="操作失敗"):
     except IntegrityError:
         conn.rollback()
         st.error(f"❌ {error_prefix}：資料衝突或已存在於系統中！")
+        st.session_state['db_locked'] = False
         st.stop()
     except Exception as e:
         conn.rollback()
         st.error(f"❌ {error_prefix}：{e}")
+        st.session_state['db_locked'] = False
         st.stop()
     finally:
         release_connection(conn)
+        st.session_state['db_locked'] = False
 
 def send_line_notify(message):
-    """
-    未來這裡將專門用於 LINE Messaging API 推播【系統重大異常告警】。
-    不會再用來發送日常報表（日常報表將移交給 GCP 獨立伺服器處理）。
-    """
     try:
         token = st.secrets.get("LINE_NOTIFY_TOKEN")
         if not token: return
@@ -119,6 +124,7 @@ def log_action(user_id, action, details):
     finally:
         release_connection(conn)
 
+# 🎨 萬用卡片工廠 (UI Factory)
 def draw_status_card(book_name, qty, status, extra_info=""):
     style_map = {
         '申請中': ('🔵', '#4da6ff'), '待審核': ('🔵', '#4da6ff'),
@@ -163,6 +169,7 @@ def force_return_dialog(ghost_id):
                 st.session_state['sys_toast'] = f"✅ 已強制收回 {reclaimed} 本幽靈準則！"
             else:
                 st.warning("⚠️ 系統沒有在底層找到屬於這個帳號的準則。")
+                st.session_state['db_locked'] = False
                 st.stop()
         st.rerun()
 
@@ -256,7 +263,9 @@ def admin_return_approve_dialog(selected_unit, to_stock_ids, to_borrowed_ids, to
                 c.execute(f"UPDATE books SET status='遺失待賠' WHERE id IN ({id_list_str})")
                 has_action = True
                 
-            if not has_action: st.stop()
+            if not has_action: 
+                st.session_state['db_locked'] = False
+                st.stop()
         st.rerun()
 
 def init_db():
@@ -311,7 +320,6 @@ except Exception as e:
     st.error(err_msg)
     st.stop()
 
-# 🧠 權限大腦初始化函數
 def calculate_permissions(user_sq):
     user_sq = str(user_sq).strip()
     if user_sq == '大隊部': return ['大隊部', '聯合中隊①', '聯合中隊②', '學員一中隊', '學員二中隊', '學生一中隊', '學生二中隊']
@@ -336,7 +344,6 @@ if 'logged_in' not in st.session_state and not st.session_state.get('force_logou
             user_data = pd.read_sql_query("SELECT * FROM users WHERE session_token=%s", conn, params=(str(stored_token),))
             if not user_data.empty and user_data.iloc[0]['status'] not in ['待審核', '停權', '結訓凍結']:
                 for col in user_data.columns: st.session_state[col] = user_data.iloc[0][col]
-                # 植入大腦
                 st.session_state['base_sq_list'] = calculate_permissions(user_data.iloc[0]['squadron'])
                 st.session_state['logged_in'] = True
                 st.rerun()
@@ -367,7 +374,6 @@ if 'logged_in' not in st.session_state:
                             c.execute("UPDATE users SET session_token=%s WHERE id=%s", (new_token, int(user.iloc[0]['id'])))
                             conn.commit()
                             for col in user.columns: st.session_state[col] = user.iloc[0][col]
-                            # 植入大腦
                             st.session_state['base_sq_list'] = calculate_permissions(user.iloc[0]['squadron'])
                             st.session_state['logged_in'] = True
                             cookie_manager.set('sys_user_token', new_token, expires_at=datetime.now() + timedelta(days=30))
@@ -402,6 +408,7 @@ if 'logged_in' not in st.session_state:
                     c.execute("SELECT COUNT(*) FROM users WHERE login_id=%s", (reg_id,))
                     if c.fetchone()[0] > 0: 
                         st.error("❌ 此帳號已被使用！")
+                        st.session_state['db_locked'] = False
                         st.stop()
                     hashed_pw = generate_password_hash(reg_pw)
                     c.execute("INSERT INTO users (login_id, password, role, squadron, title, discharge_date, status) VALUES (%s,%s,%s,%s,%s,%s,%s)",
@@ -411,7 +418,6 @@ if 'logged_in' not in st.session_state:
             else: st.warning("請填寫所有欄位")
     st.stop()
 
-# 讀取權限大腦的資料
 sq_list = st.session_state.get('base_sq_list', [str(st.session_state.squadron).strip()])
 
 with st.sidebar:
@@ -468,7 +474,6 @@ try:
                 dyn_in = st.session_state.dynamic_sq_in_clause
                 sq_filter = f"IN ({dyn_in})"
                 
-                # ⚡ 極速計數器：拋棄 Pandas，原生 SQL 瞬間取值
                 with conn.cursor() as c:
                     c.execute(f"SELECT COUNT(*) FROM users WHERE status='待審核' AND squadron {sq_filter}")
                     pending_reg = c.fetchone()[0]
@@ -537,6 +542,7 @@ try:
                         c.execute("SELECT COUNT(*) FROM users WHERE login_id=%s AND id!=%s", (final_id, uid))
                         if c.fetchone()[0] > 0: 
                             st.error("❌ 此帳號已被使用！")
+                            st.session_state['db_locked'] = False
                             st.stop()
                             
                         if new_pwd:
@@ -671,6 +677,7 @@ try:
                                     p_ids = data['ids']
                                     if len(raw_input) > len(p_ids):
                                         st.error(f"❌ 【{b_name}】輸入序號數量 ({len(raw_input)}) 超過待領取額度 ({len(p_ids)})！")
+                                        st.session_state['db_locked'] = False
                                         st.stop()
                                     for i in range(len(p_ids)):
                                         b_id = p_ids[i]
@@ -687,6 +694,7 @@ try:
                                                 success_cnt += 1
                                             else:
                                                 st.error(f"❌ 【{b_name}】序號 {new_s} 已被借閱！")
+                                                st.session_state['db_locked'] = False
                                                 st.stop()
                                         elif data['abnormal']:
                                             c.execute(f"UPDATE books SET status='少領異常' WHERE id={b_id}")
@@ -696,6 +704,7 @@ try:
                                     b_rows = data['rows']
                                     if len(raw_input) != len(b_rows) and len(raw_input) > 0:
                                         st.error(f"❌ 【{b_name}】校正數量 ({len(raw_input)}) 與已借閱數量 ({len(b_rows)}) 不符！")
+                                        st.session_state['db_locked'] = False
                                         st.stop()
                                     if len(raw_input) == len(b_rows):
                                         for i, r in enumerate(b_rows):
@@ -714,6 +723,7 @@ try:
                                                     success_cnt += 1
                                                 else:
                                                     st.error(f"❌ 【{b_name}】校正失敗：序號 {new_s} 已被他人借閱！")
+                                                    st.session_state['db_locked'] = False
                                                     st.stop()
                         if success_cnt > 0:
                             st.rerun()
@@ -786,24 +796,31 @@ try:
                     bk_reserved = pd.read_sql_query(f"SELECT book_name, COUNT(id) as qty FROM books WHERE owner_id='{st.session_state.login_id}' AND status='保留待領取' GROUP BY book_name", conn)
                     rt_df = pd.read_sql_query(f"SELECT book_name, COUNT(id) as qty FROM books WHERE owner_id='{st.session_state.login_id}' AND status='歸還中' GROUP BY book_name", conn)
                     
-                    msg = f"班隊：{st.session_state.title}\n借還書清單：\n\n【申請借閱】：\n"
+                    msg = f"班隊：{st.session_state.title}\n借還書清單：\n\n"
+                    
                     borrow_items = []
                     if not br_pending.empty:
                         for _, r in br_pending.iterrows(): borrow_items.append({'book_name': r['book_name'], 'qty': int(r['qty']), 'status': '申請中'})
                     if not bk_reserved.empty:
                         for _, r in bk_reserved.iterrows(): borrow_items.append({'book_name': r['book_name'], 'qty': int(r['qty']), 'status': '已審核'})
                     
+                    borrow_msg = ""
                     if borrow_items:
+                        borrow_msg += "【申請借閱】：\n"
                         df_b = apply_shadow_sort(pd.DataFrame(borrow_items))
-                        for _, r in df_b.iterrows(): msg += f"{r['book_name']} * {r['qty']} ({r['status']})\n"
-                    else: msg += "無\n"
+                        for _, r in df_b.iterrows(): borrow_msg += f"{r['book_name']} * {r['qty']} ({r['status']})\n"
                     
-                    msg += "\n【申請歸還】：\n"
+                    return_msg = ""
                     if not rt_df.empty:
+                        return_msg += "【申請歸還】：\n"
                         rt_df['status'] = '歸還中'
                         rt_df = apply_shadow_sort(rt_df)
-                        for _, r in rt_df.iterrows(): msg += f"{r['book_name']} * {int(r['qty'])} (歸還中)\n"
-                    else: msg += "無\n"
+                        for _, r in rt_df.iterrows(): return_msg += f"{r['book_name']} * {int(r['qty'])} (歸還中)\n"
+                    
+                    if borrow_msg: msg += borrow_msg + "\n"
+                    if return_msg: msg += return_msg
+                    if not borrow_msg and not return_msg: msg += "無借還書清單\n"
+                        
                     st.code(msg.strip(), language="text")
                     
             with tabs[1]:
@@ -898,6 +915,7 @@ try:
                             c.execute("SELECT COUNT(*) FROM users WHERE login_id=%s", (add_id,))
                             if c.fetchone()[0] > 0: 
                                 st.error("❌ 此帳號已被使用！請更換帳號。")
+                                st.session_state['db_locked'] = False
                                 st.stop()
                             hashed_pw = generate_password_hash(add_pw)
                             c.execute("INSERT INTO users (login_id, password, role, squadron, title, status) VALUES (%s,%s,%s,%s,%s,%s)", (add_id, hashed_pw, r_val, add_sq, add_title, add_status))
@@ -1260,22 +1278,29 @@ try:
                         if not all_units: msg += "無借還書清單。\n"
                         else:
                             for unit in sorted(list(all_units)):
-                                msg += f"【{unit}】\n【申請借閱】：\n"
+                                unit_msg = ""
                                 borrow_items = {}
+                                
                                 if not req_df.empty:
                                     for _, r in req_df[req_df['unit'] == unit].iterrows(): borrow_items[r['book_name']] = borrow_items.get(r['book_name'], 0) + int(r['qty'])
                                 if not res_df.empty:
                                     for _, r in res_df[res_df['unit'] == unit].iterrows(): borrow_items[r['book_name']] = borrow_items.get(r['book_name'], 0) + int(r['qty'])
                                         
                                 if borrow_items:
-                                    for b_name in sorted(borrow_items.keys()): msg += f"{b_name} * {borrow_items[b_name]}\n"
-                                else: msg += "無\n"
+                                    unit_msg += "【申請借閱】：\n"
+                                    for b_name in sorted(borrow_items.keys()): unit_msg += f"{b_name} * {borrow_items[b_name]}\n"
                                 
-                                msg += "\n【申請歸還】：\n"
+                                return_items = []
                                 if not ret_df.empty and not ret_df[ret_df['unit'] == unit].empty:
-                                    for _, r in ret_df[ret_df['unit'] == unit].iterrows(): msg += f"{r['book_name']} * {int(r['qty'])}\n"
-                                else: msg += "無\n"
-                                msg += "\n"
+                                    for _, r in ret_df[ret_df['unit'] == unit].iterrows(): return_items.append(f"{r['book_name']} * {int(r['qty'])}\n")
+                                
+                                if return_items:
+                                    if unit_msg: unit_msg += "\n"
+                                    unit_msg += "【申請歸還】：\n"
+                                    for i in return_items: unit_msg += i
+                                    
+                                if unit_msg:
+                                    msg += f"【{unit}】\n{unit_msg}\n"
                         st.code(msg.strip(), language="text")
 
                 with line_tabs[1]:
