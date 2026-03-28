@@ -507,7 +507,7 @@ with st.sidebar:
     menu = st.radio("隱藏標題", menu_options, label_visibility="collapsed")
     st.markdown('<hr class="custom-divider">', unsafe_allow_html=True)
     
-    if st.button("🚪 登出系統", use_container_width=True):
+    if st.button("🚪 登出", use_container_width=True):
         st.session_state['logout_triggered'] = True
         st.rerun()
 
