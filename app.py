@@ -65,6 +65,14 @@ st.markdown("""
         font-weight: 800 !important; 
         font-size: 1.05em !important; 
     }
+    /* 4. 🔪 徹底消滅原生拖曳條，並強制瘦身側邊欄寬度 */
+    [data-testid="stSidebarResizer"] { 
+        display: none !important; 
+    }
+    [data-testid="stSidebar"] {
+        min-width: 220px !important;
+        max-width: 220px !important;
+    }
     </style>
 """, unsafe_allow_html=True)
 
