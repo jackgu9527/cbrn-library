@@ -31,15 +31,40 @@ st.markdown("""
     div[data-testid="stTooltipContent"] { max-width: 85vw !important; width: max-content !important; }
     [data-testid="stCheckbox"] p { white-space: nowrap !important; font-size: clamp(12px, 3.5vw, 15px) !important; }
     
-    /* 🚀 側邊欄視覺革命：斬除紅圈、極限壓縮垂直空間、高光追蹤 */
+    /* 🚀 側邊欄視覺革命 2.0：絕對靠左、暴力高光追蹤 */
+    
+    /* 1. 打擊側邊欄牆壁：消除 Streamlit 預設的巨大左右留白 */
+    [data-testid="stSidebarUserContent"] { 
+        padding-left: 0.5rem !important; 
+        padding-right: 0.5rem !important; 
+        padding-top: 1.5rem !important; 
+    }
+    
+    /* 2. 斬除紅圈與壓縮垂直空間 */
     [data-testid="stSidebar"] div[role="radiogroup"] > label > div:first-child { display: none !important; }
     [data-testid="stSidebar"] div[role="radiogroup"] { gap: 2px !important; }
-    [data-testid="stSidebar"] div[role="radiogroup"] > label { padding: 6px 10px !important; margin: 0 !important; border-radius: 6px; transition: background 0.2s; }
+    [data-testid="stSidebar"] div[role="radiogroup"] > label { 
+        padding: 8px 10px !important; 
+        margin: 0 !important; 
+        border-radius: 6px; 
+        transition: background 0.2s; 
+    }
+    [data-testid="stSidebar"] div[role="radiogroup"] > label p { 
+        margin: 0 !important; 
+        line-height: 1.2 !important; 
+    }
     [data-testid="stSidebar"] div[role="radiogroup"] > label:hover { background-color: rgba(255, 255, 255, 0.05); }
-    [data-testid="stSidebar"] div[role="radiogroup"] > label[data-checked="true"] { background-color: rgba(255, 75, 75, 0.1); border-left: 4px solid #ff4b4b; }
-    [data-testid="stSidebar"] div[role="radiogroup"] > label[data-checked="true"] p { color: #ff4b4b !important; font-weight: 800 !important; font-size: 1.05em !important; }
-    [data-testid="stSidebar"] div[role="radiogroup"] > label p { margin: 0 !important; line-height: 1.2 !important; }
-    [data-testid="stSidebar"] .block-container { padding-top: 1.5rem !important; }
+    
+    /* 3. 🌟 修復高光紅色追蹤 (改用 input:checked 確保絕對相容最新版 Streamlit) */
+    [data-testid="stSidebar"] div[role="radiogroup"] > label:has(input:checked) { 
+        background-color: rgba(255, 75, 75, 0.1) !important; 
+        border-left: 4px solid #ff4b4b !important; 
+    }
+    [data-testid="stSidebar"] div[role="radiogroup"] > label:has(input:checked) p { 
+        color: #ff4b4b !important; 
+        font-weight: 800 !important; 
+        font-size: 1.05em !important; 
+    }
     </style>
 """, unsafe_allow_html=True)
 
