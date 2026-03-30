@@ -494,12 +494,12 @@ with st.sidebar:
             st.session_state['current_sq'] = st.selectbox("選擇中隊", sq_list, key="global_sq_selector", label_visibility="collapsed")
         else:
             st.session_state['current_sq'] = sq_list[0]
-            st.markdown(f"`{st.session_state['current_sq']}`")
+            st.markdown(f"**{st.session_state['current_sq']}**")
         menu_options = ["🏠 首頁", "👥 帳號管理", "📤 借閱審核", "📥 歸還審核", "💬 回報專區", "📊 準則現況", "🔍 綜合查詢", "🗂️ 操作紀錄"]
         if str(st.session_state.squadron).strip() == '大隊部': menu_options.insert(2, "⚙️ 系統管理")
     else:
         st.session_state['current_sq'] = st.session_state.squadron
-        st.markdown(f"`{st.session_state['current_sq']}`")
+        st.markdown(f"**{st.session_state['current_sq']}**")
         menu_options = ["🏠 首頁", "📤 準則借閱", "🏷️ 序號登載", "📥 準則歸還", "💬 回報專區", "🔍 綜合查詢", "🚗 車輛登載"]
         
     # 3. 功能導覽 (上下加上自訂的細分隔線)
