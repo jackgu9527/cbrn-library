@@ -70,8 +70,8 @@ st.markdown("""
         display: none !important; 
     }
     [data-testid="stSidebar"] {
-        min-width: 160px !important;
-        max-width: 160px !important;
+        min-width: 170px !important;
+        max-width: 170px !important;
     }
     </style>
 """, unsafe_allow_html=True)
