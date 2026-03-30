@@ -1176,7 +1176,7 @@ try:
                                         delete_account_dialog(uid, row['班隊'])
                     else: st.success("✨ 目前無待審核的註冊申請。")
 
-                with acc_tabs[1]:
+              with acc_tabs[1]:
                     st.subheader("👤 帳號管理", help="管理現有訓員帳號的狀態、結訓日期與密碼重置。")
                     l2_users = pd.read_sql_query("SELECT id, squadron as 中隊, title as 班隊, login_id as 訓員帳號, status as 狀態, discharge_date as 結訓日 FROM users WHERE role='L2' AND status IN ('啟用', '結訓凍結') AND squadron = ANY(%s) ORDER BY title", conn, params=(target_sq_list,))
                     if not l2_users.empty:
