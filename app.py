@@ -1149,7 +1149,7 @@ try:
             target_sq = st.session_state.get('current_sq', '')
             
             if menu == "👥 帳號管理":
-                st.subheader("👥 帳號管理中心", help="""
+               st.subheader("👥 帳號管理中心", help="""
 :blue[**【📝 班隊開通】**]  
 :yellow[**【✅審核開通】**]：開通此帳號的使用權
 :yellow[**【❌踢退開通】**]：踢退此帳號的使用權
