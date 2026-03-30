@@ -1149,10 +1149,16 @@ try:
             target_sq = st.session_state.get('current_sq', '')
             
             if menu == "👥 帳號管理":
-                st.subheader("👥 帳號管理中心", help="管理所有下轄單位的註冊申請與人員帳號狀態。")
+                st.subheader("👥 帳號管理中心", help="""
+:blue[**【👥 帳號管理中心】**]  
+:yellow[**【📝 班隊開通】**]：審核班隊註冊資訊
+:yellow[**【👤 帳號管理】**]：管理班隊帳密資訊
                 acc_tabs = st.tabs(["📝 班隊開通", "👤 帳號管理"])
                 with acc_tabs[0]:
-                    st.subheader("📝 班隊開通", help="審核並開通新註冊的班隊帳號。")
+                    st.subheader("📝 班隊開通", help="""
+:blue[**【📝 班隊開通】**]  
+:yellow[**【✅審核開通】**]：開通此帳號的使用權 
+:yellow[**【❌ 踢退開通】**]：踢退此帳號的使用權
                     reg_df = pd.read_sql_query("SELECT id, squadron as 中隊, title as 班隊, login_id as 帳號, discharge_date as 結訓日 FROM users WHERE status='待審核' AND squadron = ANY(%s)", conn, params=(target_sq_list,))
                     if not reg_df.empty:
                         for _, row in reg_df.iterrows():
@@ -1166,7 +1172,7 @@ try:
                                             c.execute("UPDATE users SET status='啟用' WHERE id=%s", (uid,))
                                         st.rerun()
                                 with col2:
-                                    if st.button("❌ 否決(刪除)", key=f"rej_reg_{uid}", use_container_width=True):
+                                    if st.button("❌ 踢退開通", key=f"rej_reg_{uid}", use_container_width=True):
                                         delete_account_dialog(uid, row['班隊'])
                     else: st.success("✨ 目前無待審核的註冊申請。")
 
