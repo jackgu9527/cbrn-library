@@ -1157,7 +1157,7 @@ try:
 :yellow[**【📅 結訓日期】**]：點擊更改結訓日期  
 :yellow[**【💾 儲存】**]：按下 :red[**💾 儲存**]  
 :yellow[**【🔑重置密碼為123】**]：  
-    按下🔑重置密碼為123重置密碼""")
+按下🔑重置密碼為123重置密碼""")
               acc_tabs = st.tabs(["📝 班隊開通", "👤 帳號管理"])
               with acc_tabs[0]:
                     st.subheader("📝 班隊開通")
@@ -1189,7 +1189,7 @@ try:
                                     uid = row['id']
                                     with st.container(border=True):
                                         status_emoji = '🟢' if row['狀態'] == '啟用' else '❄️'
-                                        st.markdown(f"🆔 **登入帳號：** `{row['訓員帳號']}` ｜ {status_emoji} **狀態：** `{row['狀態']}`")
+                                        st.markdown(f"🆔 **登入帳號：** `{row['訓員帳號']}`\n\n{status_emoji} **狀態：** `{row['狀態']}`")
                                         def_date = pd.to_datetime(row['結訓日']).date() if pd.notna(row['結訓日']) else datetime.now(timezone(timedelta(hours=8))).date()
                                         new_date = st.date_input("📅 結訓日期 (點擊修改)", value=def_date, key=f"d_{uid}")
                                         col_s, col_r = st.columns(2)
