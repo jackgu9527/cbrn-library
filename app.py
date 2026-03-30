@@ -1156,8 +1156,8 @@ try:
 :blue[**【👤 帳號管理】**]  
 :yellow[**【📅 結訓日期】**]：點擊更改結訓日期  
 :yellow[**【💾 儲存】**]：按下 :red[**💾 儲存**]  
-:yellow[**【🔑 重置密碼為 abc123】**]：  
-點擊🔑 重置密碼為 abc123重置密碼""")
+:yellow[**【🔑重置密碼為123】**]：  
+點擊🔑重置密碼為123重置密碼""")
               acc_tabs = st.tabs(["📝 班隊開通", "👤 帳號管理"])
               with acc_tabs[0]:
                     st.subheader("📝 班隊開通")
@@ -1200,9 +1200,9 @@ try:
                                                     c.execute("UPDATE users SET discharge_date=%s, status=%s WHERE id=%s", (new_date, new_status, uid))
                                                 st.rerun()
                                         with col_r:
-                                            if st.button("🔑 重置密碼為 abc123", key=f"r_{uid}", use_container_width=True):
+                                            if st.button("🔑 重置密碼為 123", key=f"r_{uid}", use_container_width=True):
                                                 with db_transaction(success_msg="✅ 密碼已重置為預設！") as c:
-                                                    c.execute("UPDATE users SET password=%s WHERE id=%s", (generate_password_hash('abc123'), uid))
+                                                    c.execute("UPDATE users SET password=%s WHERE id=%s", (generate_password_hash('123'), uid))
                                                 st.rerun()
                     else: st.success("✨ 目前無可管理的訓員資料。")
 
