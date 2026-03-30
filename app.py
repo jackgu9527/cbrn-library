@@ -454,13 +454,13 @@ if 'logged_in' not in st.session_state:
     with tab2:
         st.subheader("班隊註冊", help="""
 :blue[**【班隊註冊】**]  
-:yellow[**【所屬中隊】**]：請填寫報到的中隊  
+:yellow[**【中隊】**]：請填寫報到的中隊  
 :yellow[**【班隊全銜】**]：請填寫受訓的名稱  
 :yellow[**【設定登入帳號】**]：設定登錄頁面登錄帳號  
 :yellow[**【設定登入密碼】**]：設定登錄頁面登錄密碼  
 :yellow[**【結訓日期】**]：填寫受訓的結訓日期   
 :yellow[**【送出註冊申請】**]：點擊送出註冊申請  """)
-        reg_squadron = st.selectbox("所屬中隊", ["學員一中隊", "學員二中隊", "學生一中隊", "學生二中隊"])
+        reg_squadron = st.selectbox("中隊", ["學員一中隊", "學員二中隊", "學生一中隊", "學生二中隊"])
         reg_title = st.text_input("班隊全銜 （消除士兵班115-2期)")
         reg_id = st.text_input("設定登入帳號")
         reg_pw = st.text_input("設定登入密碼", type="password")
@@ -488,18 +488,18 @@ with st.sidebar:
     # 1. 最上方直接顯示身分與職稱 (移除 ID 與多餘分隔線)
     st.markdown(f"### {'🧑‍✈️' if st.session_state.role == 'L1' else '🎓'} {st.session_state.title}")
     
-    # 2. 緊接著顯示中隊選擇或所屬中隊
+    # 2. 緊接著顯示中隊選擇或中隊
     if st.session_state.role == 'L1':
         if len(sq_list) > 1: 
             st.session_state['current_sq'] = st.selectbox("選擇中隊", sq_list, key="global_sq_selector", label_visibility="collapsed")
         else:
             st.session_state['current_sq'] = sq_list[0]
-            st.markdown(f"`{**st.session_state['current_sq']**}`")
+            st.markdown(f"`{st.session_state['current_sq']}`")
         menu_options = ["🏠 首頁", "👥 帳號管理", "📤 借閱審核", "📥 歸還審核", "💬 回報專區", "📊 準則現況", "🔍 綜合查詢", "🗂️ 操作紀錄"]
         if str(st.session_state.squadron).strip() == '大隊部': menu_options.insert(2, "⚙️ 系統管理")
     else:
         st.session_state['current_sq'] = st.session_state.squadron
-        st.markdown(f"`{**st.session_state['current_sq']**}`")
+        st.markdown(f"`{st.session_state['current_sq']}`")
         menu_options = ["🏠 首頁", "📤 準則借閱", "🏷️ 序號登載", "📥 準則歸還", "💬 回報專區", "🔍 綜合查詢", "🚗 車輛登載"]
         
     # 3. 功能導覽 (上下加上自訂的細分隔線)
@@ -1055,7 +1055,7 @@ try:
                 col1, col2, col3 = st.columns(3)
                 with col1:
                     add_role = st.selectbox("身分", ["L1 (幹部)", "L2 (訓員)"], key="add_role")
-                    add_sq = st.selectbox("所屬中隊", ["大隊部", "學員一中隊", "學員二中隊", "學生一中隊", "學生二中隊", "聯合中隊①", "聯合中隊②"], key="add_sq")
+                    add_sq = st.selectbox("中隊", ["大隊部", "學員一中隊", "學員二中隊", "學生一中隊", "學生二中隊", "聯合中隊①", "聯合中隊②"], key="add_sq")
                 with col2:
                     add_title = st.text_input("職務 / 班隊全銜", placeholder="例如：中隊長 或 煙幕班115-1期", key="add_title")
                     add_id = st.text_input("登入帳號", key="add_id")
@@ -1166,7 +1166,7 @@ try:
                         for _, row in reg_df.iterrows():
                             uid = row['id']
                             with st.container(border=True):
-                                st.markdown(f"🎓 **班隊全銜：** `{row['班隊']}`  \n📍 **所屬中隊：** `{row['中隊']}`  \n🆔 **申請帳號：** `{row['帳號']}`  \n📅 **結訓日期：** `{row['結訓日']}`")
+                                st.markdown(f"🎓 **班隊全銜：** `{row['班隊']}`  \n📍 **中隊：** `{row['中隊']}`  \n🆔 **申請帳號：** `{row['帳號']}`  \n📅 **結訓日期：** `{row['結訓日']}`")
                                 col1, col2 = st.columns(2)
                                 with col1:
                                     if st.button("✅ 審核開通", key=f"app_reg_{uid}", type="primary", use_container_width=True):
