@@ -1158,7 +1158,7 @@ try:
 :yellow[**【❌踢退開通】**]：踢退此帳號的使用權 """)
               acc_tabs = st.tabs(["📝 班隊開通", "👤 帳號管理"])
               with acc_tabs[0]:
-                    st.subheader("📝 班隊開通"）
+                    st.subheader("📝 班隊開通")
                     reg_df = pd.read_sql_query("SELECT id, squadron as 中隊, title as 班隊, login_id as 帳號, discharge_date as 結訓日 FROM users WHERE status='待審核' AND squadron = ANY(%s)", conn, params=(target_sq_list,))
                     if not reg_df.empty:
                         for _, row in reg_df.iterrows():
