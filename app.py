@@ -1214,7 +1214,17 @@ try:
                     else: st.success("✨ 目前無可管理的訓員資料。")
 
             elif menu == "📤 借閱審核":
-                st.subheader("📚 借閱準則審核", help="審核訓員提交的準則借閱申請，可修改核准數量或直接踢退。")
+                st.subheader("📚 借閱準則審核", help="""
+:blue[**【📚 借閱準則審核】**]  
+:yellow[**【📌 選擇班隊】**]:在`   `內選擇要審核的班隊  
+:yellow[**【🔽 展開】**]：展開現有班隊借閱資訊  
+:yellow[**【✅ 全審核】**]：審核此班隊全部借閱申請  
+:yellow[**【❌ 全踢退】**]：踢退班隊全部借閱申請  
+:yellow[**【📋調整數量】**]：調整此本借閱準則數量  
+:yellow[**【✅審核】**]：審核此本借閱準則申請  
+:yellow[**【❌踢退】**]：踢退此本借閱準則申請  
+:yellow[**【💾 送出班隊的審核結果】**]：  
+按下:red[💾 送出班隊的審核結果]儲存""")
                 req_df = pd.read_sql_query("SELECT br.id as 單號, br.login_id as 帳號, u.title as 班隊, br.book_name as 書名, br.quantity as 申請數量, u.status as 帳號狀態 FROM borrow_requests br JOIN users u ON br.login_id = u.login_id WHERE br.status='待審核' AND u.squadron = ANY(%s) ORDER BY u.title, br.book_name, br.id", conn, params=(target_sq_list,))
                 
                 if not req_df.empty:
