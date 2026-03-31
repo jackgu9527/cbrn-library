@@ -802,7 +802,10 @@ try:
                             st.warning("⚠️ 尚未輸入或修改任何序號。")
 
         elif menu in ["借閱準則", "📤 借閱準則"] and st.session_state.role == 'L2':
-            st.header("📤 借閱準則申請", help="從庫房挑選所需的準則並送出借閱申請，等待幹幹部審核。")
+            st.header("📤 借閱準則申請", help="""
+:blue[**【📤 借閱準則申請】**]  
+:yellow[**【🎯 設置借閱數量】**]:在`   `內輸入班隊人數  
+:yellow[**【📚 選擇準則】**]： 在`   `內輸入需借閱的準則""")
             c = conn.cursor()
             c.execute("SELECT book_name, COUNT(id) FROM books WHERE status='在庫' GROUP BY book_name")
             available_books = c.fetchall()
