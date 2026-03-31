@@ -1279,7 +1279,7 @@ try:
                 if not abnormal_df.empty:
                     edited_abn_dfs, abn_checks = {}, {}
                     for unit_name in abnormal_df['班隊'].unique():
-                        st.markdown(f"### 🏢 異常單位：【{unit_name}】")
+                        st.markdown(f'<div class="single-line-text" style="font-size:22px; font-weight:bold; margin: 15px 0 10px 0;">【{unit_name}】</div>', unsafe_allow_html=True)
                         unit_df = abnormal_df[abnormal_df['班隊'] == unit_name]
                         for b_name in unit_df['書名'].unique():
                             b_df = unit_df[unit_df['書名'] == b_name].reset_index(drop=True)
