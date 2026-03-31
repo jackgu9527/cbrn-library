@@ -1020,7 +1020,7 @@ try:
         elif menu == "⚙️ 系統管理" and st.session_state.role == 'L1' and str(st.session_state.squadron).strip() == '大隊部':
             st.header("👑 系統管理", help="""
 :blue[**【👑 系統管理】**]  
-:yellow[**【➕ 新增人員】**]:生成配發帳號
+:yellow[**【➕ 新增人員】**]:生成配發帳號  
 :yellow[**【⚙️ 管理帳號】**]：修改現有帳號資訊 """)
             # 👇 --- 新增這個對話框函數 --- 👇
             @st.dialog("⚙️ 編輯與管理帳號")
@@ -1144,7 +1144,7 @@ try:
             st.markdown("---")
             st.subheader("🛠️ 系統除錯", help="""
 :blue[**【🛠️ 系統除錯】**]  
-:yellow[**【🚨 將此帳號除錯】**]:強制將此帳號所有的準則歸還""")
+:yellow[**【🚨 將此帳號除錯】**]:將此帳號所有的準則歸還""")
             with st.expander("展開除錯工具"):
                 ghost_id = st.text_input("輸入除錯帳號)", key="ghost_id_input")
                 if st.button("🚨 將此帳號除錯", type="primary"):
