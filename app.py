@@ -1274,7 +1274,10 @@ try:
                     st.info("目前無待審核的準則。")
 
                 st.markdown("---")
-                st.subheader("🔴 借閱異常警示", help="處理訓員少領或未領齊的異常準則，將其釋放回庫房。")
+                st.subheader("🔴 借閱異常警示", help="""
+:blue[**【🔴 借閱異常警示】**]：訓員未領齊準則，將其退庫  
+:yellow[**【☑️全結案】**]:勾選☑️全結案或選擇單本準則  
+:yellow[**【🔄異常庫存退庫】**]：按🔄異常庫存退庫  """)
                 abnormal_df = pd.read_sql_query("SELECT b.id, u.title as 班隊, b.book_name as 書名, b.serial_number as 序號 FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.status='少領異常' AND u.squadron = ANY(%s) ORDER BY u.title, b.book_name", conn, params=(target_sq_list,))
                 if not abnormal_df.empty:
                     edited_abn_dfs, abn_checks = {}, {}
@@ -1294,7 +1297,7 @@ try:
                                         b_df.insert(0, "✅ 結案", True)
                                         edited_abn_dfs[u_key] = st.data_editor(b_df, hide_index=True, disabled=["id", "班隊", "書名", "序號"], width='stretch', column_config={"✅ 結案": st.column_config.CheckboxColumn("✅ 結案(退庫)"), "id": None, "班隊": None, "書名": None}, key=f"abn_chk_{u_key}")
                     st.markdown("---")
-                    if st.button("🔄 釋放異常庫存", type="primary"):
+                    if st.button("🔄 異常庫存退庫", type="primary"):
                         resolved_ids = []
                         resolved_books_summary = []
                         for unit_name in abnormal_df['班隊'].unique():
