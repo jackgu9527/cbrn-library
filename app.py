@@ -500,7 +500,7 @@ with st.sidebar:
     else:
         st.session_state['current_sq'] = st.session_state.squadron
         st.markdown(f"**{st.session_state['current_sq']}**")
-        menu_options = ["🏠 首頁", "📤 準則借閱", "🏷️ 序號登載", "📥 準則歸還", "💬 回報專區", "🔍 綜合查詢", "🚗 車輛登載"]
+        menu_options = ["🏠 首頁", "📤 借閱準則", "🏷️ 序號登載", "📥 準則歸還", "💬 回報專區", "🔍 綜合查詢", "🚗 車輛登載"]
         
     # 3. 功能導覽 (上下加上自訂的細分隔線)
     st.markdown('<hr class="custom-divider">', unsafe_allow_html=True)
@@ -567,7 +567,7 @@ try:
                     elif days_left <= 3: st.warning(f"⚠️ 結訓倒數：{days_left} 天！")
                     else: st.info(f"📅 距離結訓日還有：{days_left} 天")
 
-                st.markdown("#### 📦 準則借閱總覽")
+                st.markdown("#### 📦 借閱準則總覽")
                 
                 status_items = []
                 with conn.cursor() as c:
@@ -801,8 +801,8 @@ try:
                         else:
                             st.warning("⚠️ 尚未輸入或修改任何序號。")
 
-        elif menu in ["準則借閱", "📤 準則借閱"] and st.session_state.role == 'L2':
-            st.header("📤 準則借閱申請", help="從庫房挑選所需的準則並送出借閱申請，等待幹幹部審核。")
+        elif menu in ["借閱準則", "📤 借閱準則"] and st.session_state.role == 'L2':
+            st.header("📤 借閱準則申請", help="從庫房挑選所需的準則並送出借閱申請，等待幹幹部審核。")
             c = conn.cursor()
             c.execute("SELECT book_name, COUNT(id) FROM books WHERE status='在庫' GROUP BY book_name")
             available_books = c.fetchall()
