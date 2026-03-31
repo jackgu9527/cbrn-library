@@ -1018,7 +1018,10 @@ try:
                 st.success("✨ 您名下目前沒有需要歸還的準則！")
 
         elif menu == "⚙️ 系統管理" and st.session_state.role == 'L1' and str(st.session_state.squadron).strip() == '大隊部':
-            st.header("👑 系統管理", help="系統最高權限可查看與修改所有人員權限。")
+            st.header("👑 系統管理", help="""
+:blue[**【👑 系統管理】**]  
+:yellow[**【➕ 新增人員】**]:生成配發帳號
+:yellow[**【⚙️ 管理帳號】**]：修改現有帳號資訊 """)
             # 👇 --- 新增這個對話框函數 --- 👇
             @st.dialog("⚙️ 編輯與管理帳號")
             def edit_user_dialog(user_row):
@@ -1106,8 +1109,10 @@ try:
                                         if st.button("⚙️ 管理此帳號", key=f"mgr_{uid}", use_container_width=True):
                                             edit_user_dialog(row)
                                                         
-            st.subheader("📥 準則資料庫擴充與同步")
-            if st.button("🔄 從最新 CSV 同步新增準則", type="primary", use_container_width=True):
+            st.subheader("📥 準則同步",help="""
+:blue[**【📥 準則同步】**]  
+:yellow[**【🔄 更新CSV檔】**]:更新準則csv檔同步準則""")
+            if st.button("🔄 更新CSV檔", type="primary", use_container_width=True):
                 if CSV_FILE and os.path.exists(CSV_FILE):
                     try: df_books = pd.read_csv(CSV_FILE, encoding='big5')
                     except UnicodeDecodeError: df_books = pd.read_csv(CSV_FILE, encoding='utf-8')
@@ -1137,10 +1142,12 @@ try:
                 else: st.error("❌ 系統找不到 CSV 檔案！")
                     
             st.markdown("---")
-            st.subheader("🛠️ 系統底層資料除錯", help="強制將指定帳號名下的所有準則退回庫房。")
+            st.subheader("🛠️ 系統除錯", help="""
+:blue[**【🛠️ 系統除錯】**]  
+:yellow[**【🚨 將此帳號除錯】**]:強制將此帳號所有的準則歸還""")
             with st.expander("展開除錯工具"):
-                ghost_id = st.text_input("請輸入需除錯帳號)", key="ghost_id_input")
-                if st.button("🚨 強制將此帳號名下的所有準則退庫", type="primary"):
+                ghost_id = st.text_input("輸入除錯帳號)", key="ghost_id_input")
+                if st.button("🚨 將此帳號除錯", type="primary"):
                     if ghost_id.strip():
                         force_return_dialog(ghost_id)
                     else: st.warning("請先輸入帳號！")
