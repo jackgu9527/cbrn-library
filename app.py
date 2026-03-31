@@ -810,7 +810,7 @@ try:
             if not available_books:
                 st.warning("庫房無可借閱的準則。")
             else:
-                st.subheader("🎯 設置預設借閱數量", help="設定所需借閱準則數量後，準則都會自動帶入此數量")
+                st.subheader("🎯 預設借閱數量", help="設定所需借閱準則數量後，準則都會自動帶入此數量")
                 default_req_qty = st.number_input("請輸入欲借閱的數量 (例如：貴班隊人數)", min_value=1, value=1)
                 st.markdown("---")
                 
@@ -818,7 +818,7 @@ try:
                 if 'cart' not in st.session_state:
                     st.session_state.cart = {}
 
-                st.subheader("📚 第二步：選擇準則", help="填寫所需借閱準則關鍵字選取，可選取多本準則。")
+                st.subheader("📚 選擇準則", help="填寫所需借閱準則關鍵字選取，可選取多本準則。")
                 book_options = [f"{b[0]} (庫存: {b[1]}本)" for b in available_books]
                 
                 # 極速單選加入流
