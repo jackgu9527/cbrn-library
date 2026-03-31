@@ -1275,7 +1275,7 @@ try:
 
                 st.markdown("---")
                 st.subheader("🔴 借閱異常警示", help="""
-:blue[**【🔴 借閱異常警示】**]：訓員未領齊準則，將其退庫  
+:blue[**【🔴 借閱異常警示】**]：訓員未領準則，將其退庫  
 :yellow[**【☑️全結案】**]:勾選☑️全結案或選擇單本準則  
 :yellow[**【🔄異常庫存退庫】**]：按🔄異常庫存退庫  """)
                 abnormal_df = pd.read_sql_query("SELECT b.id, u.title as 班隊, b.book_name as 書名, b.serial_number as 序號 FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.status='少領異常' AND u.squadron = ANY(%s) ORDER BY u.title, b.book_name", conn, params=(target_sq_list,))
