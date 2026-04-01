@@ -1553,11 +1553,11 @@ try:
                     res = pd.read_sql_query(query, conn, params=(f"%{keyword}%",))
                     st.dataframe(res, hide_index=True, use_container_width=True)
                 elif "序號" in search_type:
-                    # 💡 修正：改為 LEFT JOIN，並加上 COALESCE 顯示幽靈帳號的 ID
+                    # 💡 完美修復查詢顯示：遇到庫房的書，直接標示為「庫房」
                     query = """
                     SELECT 
-                        COALESCE(u.squadron, '⚠️ 未知/已刪除') as 中隊, 
-                        COALESCE(u.title, b.owner_id) as 班隊, 
+                        CASE WHEN b.owner_id = '在庫' THEN '庫房' ELSE COALESCE(u.squadron, '⚠️ 未知/已刪除') END as 中隊, 
+                        CASE WHEN b.owner_id = '在庫' THEN '庫房' ELSE COALESCE(u.title, b.owner_id) END as 班隊, 
                         b.book_name as 書名, 
                         b.status as 狀態 
                     FROM books b 
