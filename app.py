@@ -218,15 +218,22 @@ def force_return_dialog(ghost_id):
     st.warning(f"確定要強制將帳號【{ghost_id}】名下的所有準則退回庫房嗎？\n\n此功能僅用於修復系統隱形資料。")
     if st.button("🚨 確定強制退庫", type="primary", use_container_width=True):
         with db_transaction() as c:
-            c.execute("UPDATE books SET status='在庫', owner_id='在庫' WHERE owner_id=%s", (ghost_id.strip(),))
+            # 💡 升級版防嚇人邏輯：
+            # 如果輸入的是'在庫'，只去抓「狀態不是在庫」的異常殭屍書；
+            # 如果輸入的是其他帳號，就正常全抓。
+            if ghost_id.strip() == '在庫':
+                c.execute("UPDATE books SET status='在庫', owner_id='在庫' WHERE owner_id='在庫' AND status != '在庫'")
+            else:
+                c.execute("UPDATE books SET status='在庫', owner_id='在庫' WHERE owner_id=%s", (ghost_id.strip(),))
+                
             reclaimed = c.rowcount
             if reclaimed > 0:
                 now_time = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S")
                 c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", 
                           (now_time, st.session_state.login_id, "上帝模式強制退庫", f"強制收回 {ghost_id} 的 {reclaimed} 本幽靈準則。"))
-                st.session_state['sys_toast'] = f"✅ 已強制收回 {reclaimed} 本幽靈準則！"
+                st.session_state['sys_toast'] = f"✅ 已強制收回 {reclaimed} 本幽靈/異常準則！"
             else:
-                st.warning("⚠️ 系統沒有在底層找到屬於這個帳號的準則。")
+                st.warning("⚠️ 系統沒有找到需要修復的異常準則。")
                 st.session_state['db_locked'] = False
                 st.stop()
         st.rerun()
