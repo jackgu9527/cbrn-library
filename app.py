@@ -1467,7 +1467,7 @@ try:
                                     for _, r in res_df[res_df['unit'] == unit].iterrows(): borrow_items[r['book_name']] = borrow_items.get(r['book_name'], 0) + int(r['qty'])
                                         
                                 if borrow_items:
-                                    unit_msg += "【申請借閱】：\n"
+                                    unit_msg += "【借閱書目】：\n"
                                     for b_name in sorted(borrow_items.keys()): unit_msg += f"{b_name} * {borrow_items[b_name]}\n"
                                 
                                 return_items = []
@@ -1476,7 +1476,7 @@ try:
                                 
                                 if return_items:
                                     if unit_msg: unit_msg += "\n"
-                                    unit_msg += "【申請歸還】：\n"
+                                    unit_msg += "【歸還書目】：\n"
                                     for i in return_items: unit_msg += i
                                     
                                 if unit_msg:
