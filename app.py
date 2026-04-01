@@ -749,7 +749,9 @@ try:
                         success_cnt = 0
                         with db_transaction(success_msg="✅ 序號儲存成功！") as c:
                             for key, data in form_data.items():
-                                raw_input = [s.strip() for s in data['input'].split(',') if s.strip()]
+                                # 💡 終極防呆：把空白、全形逗號、頓號、換行全部自動替換成標準逗號
+                                cleaned_input = re.sub(r'[ \t\n，、]+', ',', data['input'])
+                                raw_input = [s.strip() for s in cleaned_input.split(',') if s.strip()]
                                 b_name = data['b_name']
                                 if data['type'] == 'pending':
                                     p_ids = data['ids']
