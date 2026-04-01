@@ -1603,11 +1603,15 @@ try:
                             qty = len(b_rows)
                             draw_status_card(b_name, qty, st_val)
                             
-                            display_serials = []
-                            for _, s_row in b_rows.iterrows():
-                                if pd.notna(s_row['serial_number']):
-                                    display_serials.append(str(s_row['serial_number']).strip())
-                                    
+                            # 💡 視覺修正：只顯示「已完成登載狀態」的真實序號
+                             display_serials = []
+                             for _, s_row in b_rows.iterrows():
+                                 if pd.notna(s_row['serial_number']):
+                                     sn = str(s_row['serial_number']).strip()
+                                     # 必須是 借閱中、歸還中、遺失待賠，且不是虛擬序號(不含書名)，才顯示！
+                                     if st_val in ['借閱中', '歸還中', '遺失待賠'] and b_name not in sn:
+                                         display_serials.append(sn)
+                                        
                             if display_serials:
                                 serials_text = ", ".join(display_serials)
                                 nested_html = f"""
