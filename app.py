@@ -761,46 +761,39 @@ try:
                                         b_id = p_ids[i]
                                         if i < len(raw_input):
                                             new_s = raw_input[i]
-                                            c.execute("SELECT id, status FROM books WHERE serial_number=%s", (new_s,))
+                                            # 💡 升級：多抓取 owner_id 欄位
+                                            c.execute("SELECT id, status, owner_id FROM books WHERE serial_number=%s", (new_s,))
                                             check = c.fetchone()
-                                            if check and check[1] == '在庫':
-                                                c.execute(f"UPDATE books SET status='借閱中', owner_id='{st.session_state.login_id}' WHERE id={int(check[0])}")
-                                                c.execute(f"UPDATE books SET status='在庫', owner_id='在庫' WHERE id={b_id}")
-                                                success_cnt += 1
-                                            elif not check:
+                                            
+                                            if not check:
+                                                # 資料庫還沒有這個真實序號，直接覆寫虛擬序號
                                                 c.execute("UPDATE books SET serial_number=%s, status='借閱中' WHERE id=%s", (new_s, b_id))
                                                 success_cnt += 1
                                             else:
-                                                st.error(f"❌ 【{b_name}】序號 {new_s} 已被借閱！")
-                                                st.session_state['db_locked'] = False
-                                                st.stop()
-                                        elif data['abnormal']:
-                                            c.execute(f"UPDATE books SET status='少領異常' WHERE id={b_id}")
-                                            success_cnt += 1
-                                            
-                                elif data['type'] == 'correct':
-                                    b_rows = data['rows']
-                                    if len(raw_input) != len(b_rows) and len(raw_input) > 0:
-                                        st.error(f"❌ 【{b_name}】校正數量 ({len(raw_input)}) 與已借閱數量 ({len(b_rows)}) 不符！")
-                                        st.session_state['db_locked'] = False
-                                        st.stop()
-                                    if len(raw_input) == len(b_rows):
-                                        for i, r in enumerate(b_rows):
-                                            b_id = int(r['id'])
-                                            old_s = str(r['serial_number']).strip()
-                                            new_s = raw_input[i]
-                                            if old_s != new_s:
-                                                c.execute("SELECT id, status FROM books WHERE serial_number=%s", (new_s,))
-                                                check = c.fetchone()
-                                                if check and check[1] == '在庫':
-                                                    c.execute(f"UPDATE books SET status='借閱中', owner_id='{st.session_state.login_id}' WHERE id={int(check[0])}")
+                                                target_id, target_status, target_owner = check
+                                                
+                                                if target_id == b_id:
+                                                    # 剛好就是系統預發給自己的這本
+                                                    c.execute("UPDATE books SET status='借閱中' WHERE id=%s", (b_id,))
+                                                    success_cnt += 1
+                                                    
+                                                elif target_status == '在庫':
+                                                    # 一般交換：跟庫房換
+                                                    c.execute(f"UPDATE books SET status='借閱中', owner_id='{st.session_state.login_id}' WHERE id={target_id}")
                                                     c.execute(f"UPDATE books SET status='在庫', owner_id='在庫' WHERE id={b_id}")
                                                     success_cnt += 1
-                                                elif not check:
-                                                    c.execute("UPDATE books SET serial_number=%s WHERE id=%s", (new_s, b_id))
+                                                    
+                                                elif target_status == '保留待領取':
+                                                    # 🚀 超級交換：這本書被系統預發給別人了！
+                                                    # 把這本實體書搶過來給自己 (借閱中)
+                                                    c.execute(f"UPDATE books SET status='借閱中', owner_id='{st.session_state.login_id}' WHERE id={target_id}")
+                                                    # 把自己的「虛擬額度 (b_id)」賠給那個無辜的 target_owner
+                                                    c.execute("UPDATE books SET owner_id=%s WHERE id=%s", (target_owner, b_id))
                                                     success_cnt += 1
+                                                    
                                                 else:
-                                                    st.error(f"❌ 【{b_name}】校正失敗：序號 {new_s} 已被他人借閱！")
+                                                    # 書真的已經被別人確實登載借走了
+                                                    st.error(f"❌ 【{b_name}】序號 {new_s} 已被 {target_owner} 借出！")
                                                     st.session_state['db_locked'] = False
                                                     st.stop()
                         if success_cnt > 0:
@@ -1509,12 +1502,20 @@ try:
                             unit_filter = " AND u.title = ANY(%s)"
                             params.append(inv_selected_units)
                             
+                        # 💡 視覺修正：在 SQL 排除「保留待領取」及「未登載虛擬序號」
                         query = f"""
                         SELECT u.title as unit, 
                                b.book_name, 
                                b.status, 
                                COUNT(b.id) as qty,
-                               STRING_AGG(b.serial_number, ', ') as serials
+                               STRING_AGG(
+                                   CASE 
+                                       WHEN b.status IN ('保留待領取', '少領異常') THEN NULL
+                                       WHEN b.serial_number LIKE b.book_name || '-%' THEN NULL 
+                                       ELSE b.serial_number 
+                                   END, 
+                                   ', '
+                               ) as serials
                         FROM books b 
                         JOIN users u ON b.owner_id = u.login_id 
                         WHERE u.squadron = ANY(%s) 
