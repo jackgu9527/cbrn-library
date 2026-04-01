@@ -1300,7 +1300,7 @@ try:
                                 with st.expander(f"📘 {b_name} (待釋放 {len(b_df)} 本)"):
                                     if not abn_checks[u_key]:
                                         # 🛡️ 4. 批次操作的 UX 減壓：內部展開也預設打勾方便結案
-                                        b_df.insert(0, "✅ 結案", True)
+                                        b_df.insert(0, "✅ 結案", False)
                                         edited_abn_dfs[u_key] = st.data_editor(b_df, hide_index=True, disabled=["id", "班隊", "書名", "序號"], width='stretch', column_config={"✅ 結案": st.column_config.CheckboxColumn("✅ 結案(退庫)"), "id": None, "班隊": None, "書名": None}, key=f"abn_chk_{u_key}")
                     st.markdown("---")
                     if st.button("🔄 異常庫存退庫", type="primary"):
