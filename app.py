@@ -993,7 +993,7 @@ try:
                                 edited_return_dfs[b_name] = None 
                             else:
                                 # 🛡️ 4. 批次操作的 UX 減壓：預設全部打好勾 True！
-                                initial_checks = [st.session_state['l2_partial_return_memory'].get(row['id'], True) for _, row in b_df.iterrows()]
+                                initial_checks = [st.session_state['l2_partial_return_memory'].get(row['id'], False) for _, row in b_df.iterrows()]
                                 b_df.insert(0, "勾選歸還", initial_checks)
                                 edited_return_dfs[b_name] = st.data_editor(b_df, hide_index=True, disabled=["id", "書名", "序號"], width='stretch', column_config={"id": None, "書名": None}, key=f"return_editor_{b_name}")
                 st.markdown("---") 
