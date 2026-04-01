@@ -931,13 +931,13 @@ try:
                     
                     borrow_msg = ""
                     if borrow_items:
-                        borrow_msg += "【申請借閱】：\n"
+                        borrow_msg += "【借閱書目】：\n"
                         df_b = apply_shadow_sort(pd.DataFrame(borrow_items))
                         for _, r in df_b.iterrows(): borrow_msg += f"{r['book_name']} * {r['qty']} ({r['status']})\n"
                     
                     return_msg = ""
                     if return_items:
-                        return_msg += "【申請歸還】：\n"
+                        return_msg += "【歸還書目】：\n"
                         df_r = apply_shadow_sort(pd.DataFrame(return_items))
                         for _, r in df_r.iterrows(): return_msg += f"{r['book_name']} * {r['qty']} (歸還中)\n"
                     
