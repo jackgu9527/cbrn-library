@@ -824,21 +824,29 @@ try:
                 st.subheader("📚 選擇準則")
                 book_options = [f"{b[0]} (庫存: {b[1]}本)" for b in available_books]
                 
-                # 極速單選加入流
+                # ⚡ 極速單選加入流 (極簡版)
                 col_sel, col_add = st.columns([7, 3])
-                with col_sel:
-                    selected_book = st.selectbox("選擇要借閱的準則", ["-- 請輸入關鍵字搜尋 --"] + book_options, label_visibility="collapsed")
-                with col_add:
-                    if st.button("➕ 加入清單", type="secondary", use_container_width=True):
-                        if selected_book != "-- 請輸入關鍵字搜尋 --":
-                            b_name = selected_book.split(" (")[0]
-                            max_qty = int(selected_book.split("庫存: ")[1].replace("本)", ""))
-                            if b_name not in st.session_state.cart:
-                                st.session_state.cart[b_name] = {'qty': min(default_req_qty, max_qty), 'max_qty': max_qty}
-                                st.toast(f"✅ 已加入：{b_name}")
-                            else:
-                                st.toast(f"⚠️ {b_name} 已在清單中！")
-                            st.rerun()
+                
+                # 直接使用 col_sel 與 col_add 呼叫元件，省去冗長的 with 縮排
+                selected_book = col_sel.selectbox("選擇準則", book_options, index=None, placeholder="🔍 請輸入關鍵字搜尋準則...", label_visibility="collapsed", key="book_selector")
+                
+                if col_add.button("➕ 加入清單", type="secondary", use_container_width=True):
+                    if not selected_book:
+                        st.warning("⚠️ 請先輸入或選擇要借閱的準則！")
+                    else:
+                        # 優化字串切割：一次切開書名與庫存數字
+                        b_name, stock_info = selected_book.split(" (庫存: ")
+                        max_qty = int(stock_info.replace("本)", ""))
+                        
+                        if b_name not in st.session_state.cart:
+                            st.session_state.cart[b_name] = {'qty': min(default_req_qty, max_qty), 'max_qty': max_qty}
+                            st.toast(f"✅ 已加入：{b_name}")
+                        else:
+                            st.toast(f"⚠️ {b_name} 已在清單中！")
+                            
+                        # 加入後清空輸入框，並重整畫面
+                        st.session_state.book_selector = None
+                        st.rerun()
 
                 # 完美雙行卡片排版渲染購物車
                 if st.session_state.cart:
