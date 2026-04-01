@@ -857,8 +857,10 @@ try:
                             # 第一行：名稱 (自動縮略)
                             st.markdown(f"<div class='single-line-text' style='font-size: 16px; font-weight: bold; margin-bottom: 8px;' title='幫助說明：{b_name}'>📘 {b_name}</div>", unsafe_allow_html=True)
                             
-                            # 第二行：借閱數量： [ 30 ] ➖ ➕ ｜  [ 🗑️ 移除]
-                            c1, c2, c3, c4, c5, c6 = st.columns([2.5, 2.5, 1, 1, 0.5, 2.5])
+                            # 第二行：借閱數量與移除按鈕
+                            # 💡 修正點：只保留 3 個欄位，並重新分配排版比例 (3 : 4 : 3)
+                            c1, c2, c3 = st.columns([3, 4, 3])
+                            
                             with c1:
                                 st.markdown("<div style='margin-top: 8px; font-size: 14px; color: #475569;'>借閱數量：</div>", unsafe_allow_html=True)
                             with c2:
@@ -867,21 +869,10 @@ try:
                                     st.session_state.cart[b_name]['qty'] = new_qty
                                     st.rerun()
                             with c3:
-                                if st.button("➖", key=f"cart_dec_{b_name}", use_container_width=True):
-                                    if st.session_state.cart[b_name]['qty'] > 1:
-                                        st.session_state.cart[b_name]['qty'] -= 1
-                                        st.rerun()
-                            with c4:
-                                if st.button("➕", key=f"cart_inc_{b_name}", use_container_width=True):
-                                    if st.session_state.cart[b_name]['qty'] < data['max_qty']:
-                                        st.session_state.cart[b_name]['qty'] += 1
-                                        st.rerun()
-                            with c5:
-                                st.markdown("<div style='margin-top: 8px; color: #cbd5e1;'>｜</div>", unsafe_allow_html=True)
-                            with c6:
                                 if st.button("🗑️ 移除", key=f"cart_rm_{b_name}", use_container_width=True):
                                     del st.session_state.cart[b_name]
                                     st.rerun()
+
                     
                     st.markdown("---")
                     # 一次性打包送出邏輯
