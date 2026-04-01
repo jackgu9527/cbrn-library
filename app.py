@@ -805,7 +805,10 @@ try:
             st.header("📤 借閱準則申請", help="""
 :blue[**【📤 借閱準則申請】**]  
 :yellow[**【🎯 設置借閱數量】**]:在`   `內輸入班隊人數  
-:yellow[**【📚 選擇準則】**]： 在`   `內輸入需借閱的準則""")
+:yellow[**【📚 選擇準則】**]：在`   `內輸入需借閱的準則  
+:yellow[**【➕ 加入清單】**]：按➕加入清單將需借閱準則加入  
+:yellow[**【借閱數量】**]：在`   `內按➕或➖調整借閱數量  
+:yellow[**【🚀 提交借閱申請】**]：按:red[🚀提交借閱申請]提交申請""")
             c = conn.cursor()
             c.execute("SELECT book_name, COUNT(id) FROM books WHERE status='在庫' GROUP BY book_name")
             available_books = c.fetchall()
@@ -862,7 +865,7 @@ try:
                             c1, c2, c3 = st.columns([3, 4, 3])
                             
                             with c1:
-                                st.markdown("<div style='margin-top: 8px; font-size: 14px; color: #475569;'>借閱數量：</div>", unsafe_allow_html=True)
+                                st.markdown("<div style='margin-top: 8px; font-size: 14px; color: #475569;'>:red[借閱數量：]</div>", unsafe_allow_html=True)
                             with c2:
                                 new_qty = st.number_input("qty", value=data['qty'], min_value=1, max_value=data['max_qty'], key=f"cart_inp_{b_name}", label_visibility="collapsed")
                                 if new_qty != data['qty']:
@@ -876,7 +879,7 @@ try:
                     
                     st.markdown("---")
                     # 一次性打包送出邏輯
-                    if st.button("🚀 送出借閱申請", type="primary", use_container_width=True):
+                    if st.button("🚀 提交借閱申請", type="primary", use_container_width=True):
                         warnings_list = []
                         borrow_requests = {}
                         
