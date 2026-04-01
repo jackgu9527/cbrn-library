@@ -1546,7 +1546,17 @@ try:
                     res = pd.read_sql_query(query, conn, params=(f"%{keyword}%",))
                     st.dataframe(res, hide_index=True, use_container_width=True)
                 elif "序號" in search_type:
-                    query = "SELECT u.squadron as 中隊, u.title as 班隊, b.book_name as 書名, b.status as 狀態 FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.serial_number = %s"
+                    # 💡 修正：改為 LEFT JOIN，並加上 COALESCE 顯示幽靈帳號的 ID
+                    query = """
+                    SELECT 
+                        COALESCE(u.squadron, '⚠️ 未知/已刪除') as 中隊, 
+                        COALESCE(u.title, b.owner_id) as 班隊, 
+                        b.book_name as 書名, 
+                        b.status as 狀態 
+                    FROM books b 
+                    LEFT JOIN users u ON b.owner_id = u.login_id 
+                    WHERE b.serial_number = %s
+                    """
                     res = pd.read_sql_query(query, conn, params=(keyword,))
                     st.dataframe(res, hide_index=True, use_container_width=True)
                 else:
