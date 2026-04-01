@@ -817,24 +817,25 @@ try:
                 default_req_qty = st.number_input("請輸入欲借閱的數量 (例如：貴班隊人數)", min_value=1, value=1)
                 st.markdown("---")
                 
-                # 🛒 2. 導入「購物車」借閱系統 (Session State 記憶體暫存)
+                # 🛒 2. 導入「購物車」與「選單重置計數器」
                 if 'cart' not in st.session_state:
                     st.session_state.cart = {}
+                if 'clear_key' not in st.session_state:
+                    st.session_state.clear_key = 0
 
                 st.subheader("📚 選擇準則")
                 book_options = [f"{b[0]} (庫存: {b[1]}本)" for b in available_books]
                 
-                # ⚡ 極速單選加入流 (極簡版)
+                # ⚡ 極速單選加入流 (極簡動態 Key 版)
                 col_sel, col_add = st.columns([7, 3])
                 
-                # 直接使用 col_sel 與 col_add 呼叫元件，省去冗長的 with 縮排
-                selected_book = col_sel.selectbox("選擇準則", book_options, index=None, placeholder="🔍 請輸入關鍵字搜尋準則...", label_visibility="collapsed", key="book_selector")
+                # 🔑 注意這裡的 key 加上了 st.session_state.clear_key
+                selected_book = col_sel.selectbox("選擇準則", book_options, index=None, placeholder="🔍 請輸入關鍵字搜尋準則...", label_visibility="collapsed", key=f"book_selector_{st.session_state.clear_key}")
                 
                 if col_add.button("➕ 加入清單", type="secondary", use_container_width=True):
                     if not selected_book:
                         st.warning("⚠️ 請先輸入或選擇要借閱的準則！")
                     else:
-                        # 優化字串切割：一次切開書名與庫存數字
                         b_name, stock_info = selected_book.split(" (庫存: ")
                         max_qty = int(stock_info.replace("本)", ""))
                         
@@ -844,8 +845,8 @@ try:
                         else:
                             st.toast(f"⚠️ {b_name} 已在清單中！")
                             
-                        # 加入後清空輸入框，並重整畫面
-                        st.session_state.book_selector = None
+                        # 🎯 魔法在這裡：將 clear_key + 1，下次重整時就會是一個全新的空白選單！
+                        st.session_state.clear_key += 1
                         st.rerun()
 
                 # 完美雙行卡片排版渲染購物車
