@@ -1079,8 +1079,23 @@ try:
                                 c.execute("""UPDATE users SET login_id=%s, role=%s, squadron=%s, title=%s, status=%s WHERE id=%s""", (new_login, new_role, new_sq, new_ti, new_st, uid))
                         st.rerun()
                 with col_del:
-                    if st.button("🗑️ 徹底刪除", key=f"d_d_{uid}", use_container_width=True):
-                        delete_account_dialog(uid, user_row['title'])
+                    # 改用 Checkbox 進行防呆確認，避免呼叫第二層 Dialog
+                    confirm_delete = st.checkbox("⚠️ 勾選以確認刪除", key=f"chk_del_{uid}")
+                    
+                    if st.button("🗑️ 徹底刪除", key=f"d_d_{uid}", use_container_width=True, disabled=not confirm_delete, type="primary" if confirm_delete else "secondary"):
+                        with db_transaction(success_msg="🗑️ 帳號已永久刪除！") as c:
+                            c.execute("SELECT login_id FROM users WHERE id=%s", (uid,))
+                            user_res = c.fetchone()
+                            if user_res:
+                                login_id = user_res[0]
+                                c.execute("SELECT COUNT(*) FROM books WHERE owner_id=%s AND status != '在庫'", (login_id,))
+                                if c.fetchone()[0] > 0:
+                                    st.error("❌ 刪除失敗！該班隊名下還有尚未歸還的準則，系統拒絕刪除！")
+                                    st.session_state['db_locked'] = False
+                                    st.stop()
+                            
+                            c.execute("DELETE FROM users WHERE id=%s", (uid,))
+                        st.rerun()
             with st.expander("➕ 新增人員", expanded=False):
                 st.markdown("#### 📝 配發帳號")
                 col1, col2, col3 = st.columns(3)
