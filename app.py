@@ -210,6 +210,16 @@ def delete_account_dialog(uid, title):
     st.error(f"將徹底刪除【{title}】的帳號與所有資料！\n\n此動作無法復原，請確認該班隊的準則皆已歸還。")
     if st.button("🚨 確認刪除", use_container_width=True):
         with db_transaction(success_msg="🗑️ 帳號已永久刪除！") as c:
+            c.execute("SELECT login_id FROM users WHERE id=%s", (uid,))
+            user_res = c.fetchone()
+            if user_res:
+                login_id = user_res[0]
+                c.execute("SELECT COUNT(*) FROM books WHERE owner_id=%s AND status != '在庫'", (login_id,))
+                if c.fetchone()[0] > 0:
+                    st.error("❌ 刪除失敗！該班隊名下還有尚未歸還的準則，系統拒絕刪除！")
+                    st.session_state['db_locked'] = False
+                    st.stop()
+            
             c.execute("DELETE FROM users WHERE id=%s", (uid,))
         st.rerun()
 
@@ -275,22 +285,32 @@ def admin_borrow_approve_dialog(selected_unit, final_decisions, df_records):
     if st.button("✅ 確認送出審核", type="primary", use_container_width=True):
         with db_transaction(success_msg="✅ 審核完成！") as c:
             now_time = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S")
+            shortage_flag = False
+            
             for r in df_records:
                 req_id, req_login, req_book, req_qty, req_unit = r['單號'], r['帳號'], r['書名'], r['申請數量'], r['班隊']
-                approve_qty = final_decisions.get(req_id, 0)
+                requested_approve_qty = final_decisions.get(req_id, 0)
                 
-                c.execute("SELECT id FROM books WHERE book_name=%s AND status='在庫' LIMIT %s", (req_book, approve_qty))
+                c.execute("SELECT id FROM books WHERE book_name=%s AND status='在庫' LIMIT %s", (req_book, requested_approve_qty))
                 approved_ids = [b[0] for b in c.fetchall()]
+                
+                actual_approve_qty = len(approved_ids) # 真正能發出去的實際數量
                 
                 if approved_ids: 
                     c.execute(f"UPDATE books SET status='保留待領取', owner_id=%s WHERE id IN ({','.join(map(str, approved_ids))})", (req_login,))
                     
-                if approve_qty > 0:
-                    c.execute("UPDATE borrow_requests SET status=%s WHERE id=%s", (f'已審核(實發{approve_qty}本)', req_id))
-                    c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", (now_time, st.session_state.login_id, "審核借閱", f"審核 {req_book} {approve_qty} 本給 {req_unit}"))
+                if actual_approve_qty > 0:
+                    c.execute("UPDATE borrow_requests SET status=%s WHERE id=%s", (f'已審核(實發{actual_approve_qty}本)', req_id))
+                    c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", (now_time, st.session_state.login_id, "審核借閱", f"審核 {req_book} {actual_approve_qty} 本給 {req_unit}"))
+                    
+                    if requested_approve_qty > actual_approve_qty:
+                        shortage_flag = True
                 else:
-                    c.execute("UPDATE borrow_requests SET status='已踢退(砍單退件)' WHERE id=%s", (req_id,))
+                    c.execute("UPDATE borrow_requests SET status='已踢退(無庫存或退件)' WHERE id=%s", (req_id,))
                     c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", (now_time, st.session_state.login_id, "踢退借閱", f"全數踢退 {req_unit} 的 {req_book} 申請"))
+            
+            if shortage_flag:
+                st.session_state['sys_toast'] = "⚠️ 審核完成！(部分準則因庫存不足，已自動下修實發數量)"
         st.rerun()
 
 @st.dialog("📥 歸還點收確認")
