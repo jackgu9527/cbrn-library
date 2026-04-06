@@ -1548,7 +1548,7 @@ try:
                                STRING_AGG(
                                    CASE 
                                        WHEN b.status IN ('保留待領取', '少領異常') THEN NULL
-                                       WHEN b.serial_number LIKE b.book_name || '-%' THEN NULL 
+                                       WHEN b.serial_number LIKE b.book_name || '-%%' THEN NULL 
                                        ELSE b.serial_number 
                                    END, 
                                    ', '
