@@ -663,22 +663,6 @@ try:
         elif menu in ["車輛登載", "🚗 車輛登載"] and st.session_state.role == 'L1':
             st.header("🚗 車輛管制總表", help="由幹部統一集中管理所有車輛與停車格位置。")
 
-            @st.dialog("🚨 警告：清空並初始化車輛資料")
-            def clear_vehicles_dialog():
-                st.error("確定要 **刪除系統內所有的車輛資料** 嗎？\n此動作將清空所有舊有填寫的資料，且無法復原！")
-                if st.button("🧨 確認全數刪除", type="primary", use_container_width=True):
-                    with db_transaction(success_msg="🗑️ 所有車輛資料已成功清空！") as c:
-                        c.execute("TRUNCATE TABLE vehicles RESTART IDENTITY")
-                        now_time = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S")
-                        c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", (now_time, st.session_state.login_id, "清空車輛", "幹部執行清空全系統舊車輛資料"))
-                    st.session_state['refresh_vehicles'] = True # 觸發資料庫更新
-                    st.rerun()
-
-            col_title, col_clear = st.columns([8, 2])
-            with col_clear:
-                if st.button("🗑️ 清空舊版資料", type="primary", use_container_width=True):
-                    clear_vehicles_dialog()
-
             st.subheader("➕ 新增車輛")
             with st.form("add_vehicle_form", clear_on_submit=True):
                 c1, c2, c3 = st.columns(3)
