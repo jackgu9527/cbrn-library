@@ -363,6 +363,10 @@ def init_db():
         c.execute('''CREATE TABLE IF NOT EXISTS borrow_requests (id SERIAL PRIMARY KEY, login_id TEXT, unit TEXT, book_name TEXT, quantity INTEGER, status TEXT)''')
         c.execute('''CREATE TABLE IF NOT EXISTS action_logs (id SERIAL PRIMARY KEY, timestamp TEXT, user_id TEXT, action TEXT, details TEXT)''')
         c.execute('''CREATE TABLE IF NOT EXISTS vehicles (id SERIAL PRIMARY KEY, account_id TEXT, owner_name TEXT, plate_number TEXT UNIQUE)''')
+        c.execute("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS squadron TEXT")
+        c.execute("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS unit_title TEXT")
+        c.execute("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS parking_lot TEXT")
+        c.execute("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS parking_number TEXT")
         c.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS session_token TEXT")
         c.execute('''CREATE TABLE IF NOT EXISTS system_settings (setting_key TEXT PRIMARY KEY, setting_value TEXT, last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
         c.execute("INSERT INTO system_settings (setting_key, setting_value) VALUES ('daily_report_date', '1970-01-01') ON CONFLICT DO NOTHING")
@@ -522,12 +526,12 @@ with st.sidebar:
         else:
             st.session_state['current_sq'] = sq_list[0]
             st.markdown(f"**{st.session_state['current_sq']}**")
-        menu_options = ["🏠 首頁", "👥 帳號管理", "📤 借閱審核", "📥 歸還審核", "💬 回報專區", "📊 準則現況", "🔍 綜合查詢", "🗂️ 操作紀錄"]
+        menu_options = ["🏠 首頁", "👥 帳號管理", "📤 借閱審核", "📥 歸還審核", "💬 回報專區", "📊 準則現況", "🚗 車輛登載", "🔍 綜合查詢", "🗂️ 操作紀錄"]
         if str(st.session_state.squadron).strip() == '大隊部': menu_options.insert(2, "⚙️ 系統管理")
     else:
         st.session_state['current_sq'] = st.session_state.squadron
         st.markdown(f"**{st.session_state['current_sq']}**")
-        menu_options = ["🏠 首頁", "📤 借閱準則", "🏷️ 序號登載", "📥 準則歸還", "💬 回報專區", "🔍 綜合查詢", "🚗 車輛登載"]
+        menu_options = ["🏠 首頁", "📤 借閱準則", "🏷️ 序號登載", "📥 準則歸還", "💬 回報專區", "🔍 綜合查詢"]
         
     # 3. 功能導覽 (上下加上自訂的細分隔線)
     st.markdown('<hr class="custom-divider">', unsafe_allow_html=True)
