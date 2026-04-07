@@ -803,27 +803,6 @@ try:
                             if st.button("✏️ 編輯", key=f"btn_edit_{row['id']}", use_container_width=True):
                                 edit_vehicle_dialog(row)
 
-            if v_df.empty: 
-                st.info("💡 目前尚無登載任何車輛。")
-            else:
-                for idx, row in v_df.iterrows():
-                    # 🔥 效能優化魔法 3：使用 st.container 取代 st.expander 製作真正的卡片
-                    with st.container(border=True):
-                        o_sq = row['中隊'] if pd.notna(row['中隊']) else "未登錄"
-                        o_unit = row['班隊'] if pd.notna(row['班隊']) else "未登錄"
-                        o_name = row['姓名']
-                        o_plate = row['車號']
-                        o_lot = row['停車場'] if pd.notna(row['停車場']) else "未登錄"
-                        o_num = row['停車號碼'] if pd.notna(row['停車號碼']) else "未登錄"
-
-                        col_info, col_btn = st.columns([8.5, 1.5])
-                        with col_info:
-                            st.markdown(f"**{o_sq} {o_unit}** &nbsp;|&nbsp; 👤 **{o_name}** &nbsp;|&nbsp; 🚘 **{o_plate}**")
-                            st.markdown(f"<span style='color: #a0a0a0; font-size: 14px;'>📍 {o_lot} (車位號: {o_num})</span>", unsafe_allow_html=True)
-                        with col_btn:
-                            st.write("") # 微調按鈕高度對齊
-                            if st.button("✏️ 編輯", key=f"btn_edit_{row['id']}", use_container_width=True):
-                                edit_vehicle_dialog(row)
             
         elif menu in ["序號登載", "🏷️ 序號登載"] and st.session_state.role == 'L2':
             st.header("🏷️ 序號登載與校正", help="""
