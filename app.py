@@ -783,26 +783,36 @@ try:
             if v_df.empty: 
                 st.info("💡 目前尚無登載任何車輛。")
             else:
-                for idx, row in v_df.iterrows():
-                    with st.container(border=True):
-                        o_sq = row['中隊'] if pd.notna(row['中隊']) else "未登錄"
-                        o_unit = row['班隊'] if pd.notna(row['班隊']) else "未登錄"
-                        o_name = row['姓名']
-                        o_plate = row['車號']
-                        o_lot = row['停車場'] if pd.notna(row['停車場']) else "未登錄"
-                        o_num = row['停車號碼'] if pd.notna(row['停車號碼']) else "未登錄"
-                        o_date = row['結訓日期'] if pd.notna(row['結訓日期']) else "未登錄"
+                # 預先處理空值，避免分組時資料遺失
+                v_df['中隊'] = v_df['中隊'].fillna("未登錄").replace("", "未登錄")
+                v_df['班隊'] = v_df['班隊'].fillna("未登錄").replace("", "未登錄")
 
-                        col_info, col_btn = st.columns([8.5, 1.5])
-                        with col_info:
-                            st.markdown(f"**{o_sq} {o_unit}** &nbsp;|&nbsp; 👤 **{o_name}** &nbsp;|&nbsp; 🚘 **{o_plate}**")
-                            # 卡片下方加入結訓日期顯示
-                            st.markdown(f"<span style='color: #a0a0a0; font-size: 14px;'>📍 {o_lot} (車位號: {o_num}) &nbsp;|&nbsp; 📅 結訓日: {o_date}</span>", unsafe_allow_html=True)
-                        with col_btn:
-                            st.write("") 
-                            if st.button("✏️ 編輯", key=f"btn_edit_{row['id']}", use_container_width=True):
-                                edit_vehicle_dialog(row)
+                # 🌟 第一層：中隊展開
+                for sq_name, sq_df in v_df.groupby('中隊', dropna=False):
+                    with st.expander(f"🏢 {sq_name} (共 {len(sq_df)} 輛)"):
+                        
+                        # 🌟 第二層：班隊展開
+                        for unit_name, unit_df in sq_df.groupby('班隊', dropna=False):
+                            with st.expander(f"🔽 {unit_name} (共 {len(unit_df)} 輛)"):
+                                
+                                # 🌟 第三層：卡片資訊
+                                for idx, row in unit_df.iterrows():
+                                    with st.container(border=True):
+                                        o_name = row['姓名']
+                                        o_plate = row['車號']
+                                        o_lot = row['停車場'] if pd.notna(row['停車場']) else "未登錄"
+                                        o_num = row['停車號碼'] if pd.notna(row['停車號碼']) else "未登錄"
+                                        o_date = row['結訓日期'] if pd.notna(row['結訓日期']) else "未登錄"
 
+                                        col_info, col_btn = st.columns([8.5, 1.5])
+                                        with col_info:
+                                            # 因為已經分類在班隊底下，所以卡片內就不再重複顯示中隊跟班隊名稱，讓畫面更清爽
+                                            st.markdown(f"👤 **{o_name}** &nbsp;|&nbsp; 🚘 **{o_plate}**")
+                                            st.markdown(f"<span style='color: #a0a0a0; font-size: 14px;'>📍 {o_lot} (車位號: {o_num}) &nbsp;|&nbsp; 📅 結訓日: {o_date}</span>", unsafe_allow_html=True)
+                                        with col_btn:
+                                            st.write("") 
+                                            if st.button("✏️ 編輯", key=f"btn_edit_{row['id']}", use_container_width=True):
+                                                edit_vehicle_dialog(row)
             
         elif menu in ["序號登載", "🏷️ 序號登載"] and st.session_state.role == 'L2':
             st.header("🏷️ 序號登載與校正", help="""
