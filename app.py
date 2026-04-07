@@ -367,6 +367,7 @@ def init_db():
         c.execute("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS unit_title TEXT")
         c.execute("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS parking_lot TEXT")
         c.execute("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS parking_number TEXT")
+        c.execute("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS discharge_date DATE")
         c.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS session_token TEXT")
         c.execute('''CREATE TABLE IF NOT EXISTS system_settings (setting_key TEXT PRIMARY KEY, setting_value TEXT, last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
         c.execute("INSERT INTO system_settings (setting_key, setting_value) VALUES ('daily_report_date', '1970-01-01') ON CONFLICT DO NOTHING")
@@ -665,7 +666,8 @@ try:
 
             st.subheader("➕ 新增車輛")
             with st.form("add_vehicle_form", clear_on_submit=True):
-                c1, c2, c3 = st.columns(3)
+                # 第一排：中隊、班隊、姓名、結訓日期
+                c1, c2, c3, c4 = st.columns(4)
                 with c1:
                     sq_options = ["學員一中隊", "學員二中隊", "學生一中隊", "學生二中隊"]
                     v_sq = st.selectbox("所屬中隊", sq_options)
@@ -673,14 +675,17 @@ try:
                     v_unit = st.text_input("班隊", placeholder="例如：煙幕班115-1期")
                 with c3:
                     v_name = st.text_input("姓名", placeholder="請輸入駕駛姓名")
-
-                c4, c5, c6 = st.columns(3)
                 with c4:
-                    v_plate = st.text_input("車號", placeholder="例如：ABC-1234")
+                    v_date = st.date_input("結訓日期")
+
+                # 第二排：車號、停車場、停車號碼
+                c5, c6, c7 = st.columns(3)
                 with c5:
+                    v_plate = st.text_input("車號", placeholder="例如：ABC-1234")
+                with c6:
                     lot_options = ["第一停車場", "第二停車場", "第三停車場", "二級廠"]
                     v_lot = st.selectbox("停車場位置", lot_options)
-                with c6:
+                with c7:
                     v_num = st.text_input("停車號碼", placeholder="例如：01")
 
                 submit_v = st.form_submit_button("➕ 新增車輛", type="primary", use_container_width=True)
@@ -693,26 +698,25 @@ try:
                         clean_unit = v_unit.strip()
                         clean_num = v_num.strip()
                         with db_transaction(success_msg=f"✅ 車輛 {clean_plate} ({v_name}) 新增成功！") as c:
-                            c.execute("INSERT INTO vehicles (account_id, owner_name, plate_number, squadron, unit_title, parking_lot, parking_number) VALUES (%s, %s, %s, %s, %s, %s, %s)",
-                                      (st.session_state.login_id, clean_name, clean_plate, v_sq, clean_unit, v_lot, clean_num))
-                        st.session_state['refresh_vehicles'] = True # 觸發資料庫更新
+                            c.execute("INSERT INTO vehicles (account_id, owner_name, plate_number, squadron, unit_title, parking_lot, parking_number, discharge_date) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+                                      (st.session_state.login_id, clean_name, clean_plate, v_sq, clean_unit, v_lot, clean_num, v_date))
+                        st.session_state['refresh_vehicles'] = True 
                         st.rerun()
 
             st.markdown("---")
             st.subheader("📋 管制車輛清單")
             
-            # 🔥 效能優化魔法 1：快取記憶體機制 (只在第一次載入，或經過新增/修改/刪除後，才去連雲端 DB)
+            # 撈取全車輛表 (加入結訓日期)
             if 'vehicle_data' not in st.session_state or st.session_state.get('refresh_vehicles', True):
                 st.session_state['vehicle_data'] = pd.read_sql_query("""
-                    SELECT id, squadron as 中隊, unit_title as 班隊, owner_name as 姓名, plate_number as 車號, parking_lot as 停車場, parking_number as 停車號碼
+                    SELECT id, squadron as 中隊, unit_title as 班隊, owner_name as 姓名, plate_number as 車號, parking_lot as 停車場, parking_number as 停車號碼, discharge_date as 結訓日期
                     FROM vehicles 
                     ORDER BY id DESC
                 """, conn)
-                st.session_state['refresh_vehicles'] = False # 抓完就關閉更新開關
+                st.session_state['refresh_vehicles'] = False 
             
             v_df = st.session_state['vehicle_data']
 
-            # 🔥 效能優化魔法 2：改用獨立彈出視窗編輯，避免渲染幾百個隱藏的輸入框導致系統卡死
             @st.dialog("✏️ 編輯車輛資訊")
             def edit_vehicle_dialog(row):
                 v_id = row['id']
@@ -723,6 +727,12 @@ try:
                 o_lot = row['停車場'] if pd.notna(row['停車場']) else "未登錄"
                 o_num = row['停車號碼'] if pd.notna(row['停車號碼']) else "未登錄"
                 
+                # 處理日期預設值
+                if pd.notna(row['結訓日期']):
+                    o_date = pd.to_datetime(row['結訓日期']).date()
+                else:
+                    o_date = datetime.now(timezone(timedelta(hours=8))).date()
+                
                 ec1, ec2, ec3 = st.columns(3)
                 with ec1:
                     sq_opts = ["學員一中隊", "學員二中隊", "學生一中隊", "學生二中隊"]
@@ -732,14 +742,18 @@ try:
                 with ec3:
                     new_name = st.text_input("👤 駕駛姓名", value=o_name, key=f"d_name_{v_id}")
                     
-                ec4, ec5, ec6 = st.columns(3)
+                ec4, ec5 = st.columns(2)
                 with ec4:
                     new_plate = st.text_input("🚘 車號", value=o_plate, key=f"d_plate_{v_id}")
                 with ec5:
+                    new_date = st.date_input("📅 結訓日期", value=o_date, key=f"d_date_{v_id}")
+
+                ec6, ec7 = st.columns(2)
+                with ec6:
                     lot_opts = ["第一停車場", "第二停車場", "第三停車場", "二級廠"] 
                     l_idx = lot_opts.index(o_lot) if o_lot in lot_opts else 0
                     new_lot = st.selectbox("停車場位置", lot_opts, index=l_idx, key=f"d_lot_{v_id}")
-                with ec6:
+                with ec7:
                     new_num = st.text_input("停車號碼", value=o_num, key=f"d_num_{v_id}")
                     
                 st.write("") 
@@ -751,11 +765,11 @@ try:
                         clean_plate = re.sub(r'[^A-Za-z0-9]', '', str(new_plate)).upper()
                         clean_num = str(new_num).strip()
                         
-                        if clean_name != o_name or clean_plate != o_plate or new_sq != o_sq or clean_unit != o_unit or new_lot != o_lot or clean_num != o_num:
+                        if clean_name != o_name or clean_plate != o_plate or new_sq != o_sq or clean_unit != o_unit or new_lot != o_lot or clean_num != o_num or new_date != o_date:
                             with db_transaction(success_msg="✅ 車輛資料更新成功！") as c:
-                                c.execute("UPDATE vehicles SET owner_name=%s, plate_number=%s, squadron=%s, unit_title=%s, parking_lot=%s, parking_number=%s WHERE id=%s", 
-                                          (clean_name, clean_plate, new_sq, clean_unit, new_lot, clean_num, v_id))
-                            st.session_state['refresh_vehicles'] = True # 觸發資料庫更新
+                                c.execute("UPDATE vehicles SET owner_name=%s, plate_number=%s, squadron=%s, unit_title=%s, parking_lot=%s, parking_number=%s, discharge_date=%s WHERE id=%s", 
+                                          (clean_name, clean_plate, new_sq, clean_unit, new_lot, clean_num, new_date, v_id))
+                            st.session_state['refresh_vehicles'] = True 
                             st.rerun()
                         else:
                             st.warning("⚠️ 資料沒有更動。")
@@ -763,8 +777,31 @@ try:
                     if st.button("🗑️ 刪除", key=f"d_del_{v_id}", use_container_width=True):
                         with db_transaction(success_msg="🗑️ 車輛已刪除！") as c:
                             c.execute("DELETE FROM vehicles WHERE id=%s", (v_id,))
-                        st.session_state['refresh_vehicles'] = True # 觸發資料庫更新
+                        st.session_state['refresh_vehicles'] = True 
                         st.rerun()
+
+            if v_df.empty: 
+                st.info("💡 目前尚無登載任何車輛。")
+            else:
+                for idx, row in v_df.iterrows():
+                    with st.container(border=True):
+                        o_sq = row['中隊'] if pd.notna(row['中隊']) else "未登錄"
+                        o_unit = row['班隊'] if pd.notna(row['班隊']) else "未登錄"
+                        o_name = row['姓名']
+                        o_plate = row['車號']
+                        o_lot = row['停車場'] if pd.notna(row['停車場']) else "未登錄"
+                        o_num = row['停車號碼'] if pd.notna(row['停車號碼']) else "未登錄"
+                        o_date = row['結訓日期'] if pd.notna(row['結訓日期']) else "未登錄"
+
+                        col_info, col_btn = st.columns([8.5, 1.5])
+                        with col_info:
+                            st.markdown(f"**{o_sq} {o_unit}** &nbsp;|&nbsp; 👤 **{o_name}** &nbsp;|&nbsp; 🚘 **{o_plate}**")
+                            # 卡片下方加入結訓日期顯示
+                            st.markdown(f"<span style='color: #a0a0a0; font-size: 14px;'>📍 {o_lot} (車位號: {o_num}) &nbsp;|&nbsp; 📅 結訓日: {o_date}</span>", unsafe_allow_html=True)
+                        with col_btn:
+                            st.write("") 
+                            if st.button("✏️ 編輯", key=f"btn_edit_{row['id']}", use_container_width=True):
+                                edit_vehicle_dialog(row)
 
             if v_df.empty: 
                 st.info("💡 目前尚無登載任何車輛。")
@@ -1671,8 +1708,9 @@ try:
                     st.dataframe(res, hide_index=True, use_container_width=True)
                 else:
                     clean_kw = re.sub(r'[^A-Za-z0-9\u4e00-\u9fa5]', '', keyword).upper()
+                    # 直接從 vehicles 表獨立抓取資料，不再透過 users 表關聯
                     query = """
-                    SELECT squadron as 中隊, unit_title as 班隊, owner_name as 姓名, plate_number as 車號, parking_lot as 停車場, parking_number as 停車號碼 
+                    SELECT squadron as 中隊, unit_title as 班隊, owner_name as 姓名, plate_number as 車號, parking_lot as 停車場, parking_number as 停車號碼, discharge_date as 結訓日期 
                     FROM vehicles 
                     WHERE owner_name ILIKE %s OR plate_number ILIKE %s OR unit_title ILIKE %s
                     """
