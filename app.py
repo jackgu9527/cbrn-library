@@ -660,16 +660,45 @@ try:
                     st.success("✅ 設定已儲存！系統將重新載入...")
                     import time; time.sleep(1); st.session_state.clear(); st.rerun()
 
-        elif menu in ["車輛登載", "🚗 車輛登載"] and st.session_state.role == 'L2':
-            st.header("🚗 車輛登載", help="""
-:blue[**【🚗 車輛登載與管理】**]  
-:yellow[**【姓名】**]：在`   `內輸入駕駛姓名  
-:yellow[**【車號】**]：在`   `內輸入車輛車號  
-:yellow[**【➕ 新增車輛】**]：輸入完成後按下➕ 新增車輛  """)
+        elif menu in ["車輛登載", "🚗 車輛登載"] and st.session_state.role == 'L1':
+            st.header("🚗 車輛管制總表", help="由幹部統一集中管理所有車輛與停車格位置。")
+
+            @st.dialog("🚨 警告：清空並初始化車輛資料")
+            def clear_vehicles_dialog():
+                st.error("確定要 **刪除系統內所有的車輛資料** 嗎？\n此動作將清空所有舊有填寫的資料，且無法復原！")
+                if st.button("🧨 確認全數刪除", type="primary", use_container_width=True):
+                    with db_transaction(success_msg="🗑️ 所有車輛資料已成功清空！") as c:
+                        c.execute("TRUNCATE TABLE vehicles RESTART IDENTITY")
+                        now_time = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S")
+                        c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", (now_time, st.session_state.login_id, "清空車輛", "幹部執行清空全系統舊車輛資料"))
+                    st.session_state['refresh_vehicles'] = True # 觸發資料庫更新
+                    st.rerun()
+
+            col_title, col_clear = st.columns([8, 2])
+            with col_clear:
+                if st.button("🗑️ 清空舊版資料", type="primary", use_container_width=True):
+                    clear_vehicles_dialog()
+
+            st.subheader("➕ 新增車輛")
             with st.form("add_vehicle_form", clear_on_submit=True):
-                col1, col2 = st.columns(2)
-                with col1: v_name = st.text_input("姓名 (Owner Name)", placeholder="請輸入駕駛姓名")
-                with col2: v_plate = st.text_input("車號 (Plate Number)", placeholder="例如：ABC1234")
+                c1, c2, c3 = st.columns(3)
+                with c1:
+                    sq_options = ["學員一中隊", "學員二中隊", "學生一中隊", "學生二中隊"]
+                    v_sq = st.selectbox("所屬中隊", sq_options)
+                with c2:
+                    v_unit = st.text_input("班隊", placeholder="例如：煙幕班115-1期")
+                with c3:
+                    v_name = st.text_input("姓名", placeholder="請輸入駕駛姓名")
+
+                c4, c5, c6 = st.columns(3)
+                with c4:
+                    v_plate = st.text_input("車號", placeholder="例如：ABC-1234")
+                with c5:
+                    lot_options = ["第一停車場", "第二停車場", "第三停車場", "二級廠"]
+                    v_lot = st.selectbox("停車場位置", lot_options)
+                with c6:
+                    v_num = st.text_input("停車號碼", placeholder="例如：01")
+
                 submit_v = st.form_submit_button("➕ 新增車輛", type="primary", use_container_width=True)
                 if submit_v:
                     if not v_name.strip() or not v_plate.strip():
@@ -677,55 +706,103 @@ try:
                     else:
                         clean_plate = re.sub(r'[^A-Za-z0-9]', '', v_plate).upper()
                         clean_name = v_name.strip()
-                        with db_transaction(success_msg=f"✅ 車輛 {clean_plate} 新增成功！") as c:
-                            c.execute("INSERT INTO vehicles (account_id, owner_name, plate_number) VALUES (%s, %s, %s)", (st.session_state.login_id, clean_name, clean_plate))
+                        clean_unit = v_unit.strip()
+                        clean_num = v_num.strip()
+                        with db_transaction(success_msg=f"✅ 車輛 {clean_plate} ({v_name}) 新增成功！") as c:
+                            c.execute("INSERT INTO vehicles (account_id, owner_name, plate_number, squadron, unit_title, parking_lot, parking_number) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                                      (st.session_state.login_id, clean_name, clean_plate, v_sq, clean_unit, v_lot, clean_num))
+                        st.session_state['refresh_vehicles'] = True # 觸發資料庫更新
                         st.rerun()
-            
+
             st.markdown("---")
-            st.subheader("📋 車輛管理", help="""
-:blue[**【📋 車輛管理】**]  
-:yellow[**【👤 駕駛姓名】**]：在`   `內修改駕駛姓名  
-:yellow[**【🚘 車輛車號】**]：在`   `內修改車輛車號  
-:yellow[**【💾 儲存】**]：修改好資料按下:red[**💾 儲存**]  
-:yellow[**【🗑️ 刪除】**]：刪除車輛資訊按下🗑️ 刪除  """)
-            v_df = pd.read_sql_query("SELECT id, owner_name as 姓名, plate_number as 車號 FROM vehicles WHERE account_id=%s ORDER BY id DESC", conn, params=(st.session_state.login_id,))
+            st.subheader("📋 管制車輛清單")
             
+            # 🔥 效能優化魔法 1：快取記憶體機制 (只在第一次載入，或經過新增/修改/刪除後，才去連雲端 DB)
+            if 'vehicle_data' not in st.session_state or st.session_state.get('refresh_vehicles', True):
+                st.session_state['vehicle_data'] = pd.read_sql_query("""
+                    SELECT id, squadron as 中隊, unit_title as 班隊, owner_name as 姓名, plate_number as 車號, parking_lot as 停車場, parking_number as 停車號碼
+                    FROM vehicles 
+                    ORDER BY id DESC
+                """, conn)
+                st.session_state['refresh_vehicles'] = False # 抓完就關閉更新開關
+            
+            v_df = st.session_state['vehicle_data']
+
+            # 🔥 效能優化魔法 2：改用獨立彈出視窗編輯，避免渲染幾百個隱藏的輸入框導致系統卡死
+            @st.dialog("✏️ 編輯車輛資訊")
+            def edit_vehicle_dialog(row):
+                v_id = row['id']
+                o_sq = row['中隊'] if pd.notna(row['中隊']) else "未登錄"
+                o_unit = row['班隊'] if pd.notna(row['班隊']) else "未登錄"
+                o_name = row['姓名']
+                o_plate = row['車號']
+                o_lot = row['停車場'] if pd.notna(row['停車場']) else "未登錄"
+                o_num = row['停車號碼'] if pd.notna(row['停車號碼']) else "未登錄"
+                
+                ec1, ec2, ec3 = st.columns(3)
+                with ec1:
+                    sq_opts = ["學員一中隊", "學員二中隊", "學生一中隊", "學生二中隊"]
+                    new_sq = st.selectbox("所屬中隊", sq_opts, index=sq_opts.index(o_sq) if o_sq in sq_opts else 0, key=f"d_sq_{v_id}")
+                with ec2:
+                    new_unit = st.text_input("班隊", value=o_unit, key=f"d_unit_{v_id}")
+                with ec3:
+                    new_name = st.text_input("👤 駕駛姓名", value=o_name, key=f"d_name_{v_id}")
+                    
+                ec4, ec5, ec6 = st.columns(3)
+                with ec4:
+                    new_plate = st.text_input("🚘 車號", value=o_plate, key=f"d_plate_{v_id}")
+                with ec5:
+                    lot_opts = ["第一停車場", "第二停車場", "第三停車場", "二級廠"] 
+                    l_idx = lot_opts.index(o_lot) if o_lot in lot_opts else 0
+                    new_lot = st.selectbox("停車場位置", lot_opts, index=l_idx, key=f"d_lot_{v_id}")
+                with ec6:
+                    new_num = st.text_input("停車號碼", value=o_num, key=f"d_num_{v_id}")
+                    
+                st.write("") 
+                col_save, col_del = st.columns(2)
+                with col_save:
+                    if st.button("💾 儲存修改", key=f"d_save_{v_id}", type="primary", use_container_width=True):
+                        clean_name = str(new_name).strip()
+                        clean_unit = str(new_unit).strip()
+                        clean_plate = re.sub(r'[^A-Za-z0-9]', '', str(new_plate)).upper()
+                        clean_num = str(new_num).strip()
+                        
+                        if clean_name != o_name or clean_plate != o_plate or new_sq != o_sq or clean_unit != o_unit or new_lot != o_lot or clean_num != o_num:
+                            with db_transaction(success_msg="✅ 車輛資料更新成功！") as c:
+                                c.execute("UPDATE vehicles SET owner_name=%s, plate_number=%s, squadron=%s, unit_title=%s, parking_lot=%s, parking_number=%s WHERE id=%s", 
+                                          (clean_name, clean_plate, new_sq, clean_unit, new_lot, clean_num, v_id))
+                            st.session_state['refresh_vehicles'] = True # 觸發資料庫更新
+                            st.rerun()
+                        else:
+                            st.warning("⚠️ 資料沒有更動。")
+                with col_del:        
+                    if st.button("🗑️ 刪除", key=f"d_del_{v_id}", use_container_width=True):
+                        with db_transaction(success_msg="🗑️ 車輛已刪除！") as c:
+                            c.execute("DELETE FROM vehicles WHERE id=%s", (v_id,))
+                        st.session_state['refresh_vehicles'] = True # 觸發資料庫更新
+                        st.rerun()
+
             if v_df.empty: 
                 st.info("💡 目前尚無登載任何車輛。")
             else:
                 for idx, row in v_df.iterrows():
-                    v_id = row['id']
-                    orig_name = row['姓名']
-                    orig_plate = row['車號']
-                    
-                    with st.expander(f"🚗 {orig_name} - {orig_plate}"):
-                        # 🏭 3. 擴建「UI 卡片工廠」 (車輛卡片)
-                        st.markdown(f"""
-                        <div style="padding: 10px; background-color: rgba(255,255,255,0.05); border-radius: 8px; margin-bottom: 15px;">
-                            <strong style="color: #4da6ff; font-size: 16px;">✏️ 編輯車輛資訊</strong>
-                        </div>
-                        """, unsafe_allow_html=True)
-                        new_name = st.text_input("👤 駕駛姓名", value=orig_name, key=f"v_name_{v_id}")
-                        new_plate = st.text_input("🚘 車輛車號", value=orig_plate, key=f"v_plate_{v_id}")
-                        st.write("") 
-                        
-                        col_save, col_del = st.columns(2)
-                        with col_save:
-                            if st.button("💾 儲存", key=f"v_save_{v_id}", type="primary", use_container_width=True):
-                                clean_name = str(new_name).strip()
-                                clean_plate = re.sub(r'[^A-Za-z0-9]', '', str(new_plate)).upper()
-                                
-                                if clean_name != orig_name or clean_plate != orig_plate:
-                                    with db_transaction(success_msg="✅ 車輛資料更新成功！") as c:
-                                        c.execute("UPDATE vehicles SET owner_name=%s, plate_number=%s WHERE id=%s", (clean_name, clean_plate, v_id))
-                                    st.rerun()
-                                else:
-                                    st.warning("⚠️ 資料沒有更動。")
-                        with col_del:        
-                            if st.button("🗑️ 刪除", key=f"v_del_{v_id}", use_container_width=True):
-                                with db_transaction(success_msg="🗑️ 車輛已刪除！") as c:
-                                    c.execute("DELETE FROM vehicles WHERE id=%s", (v_id,))
-                                st.rerun()
+                    # 🔥 效能優化魔法 3：使用 st.container 取代 st.expander 製作真正的卡片
+                    with st.container(border=True):
+                        o_sq = row['中隊'] if pd.notna(row['中隊']) else "未登錄"
+                        o_unit = row['班隊'] if pd.notna(row['班隊']) else "未登錄"
+                        o_name = row['姓名']
+                        o_plate = row['車號']
+                        o_lot = row['停車場'] if pd.notna(row['停車場']) else "未登錄"
+                        o_num = row['停車號碼'] if pd.notna(row['停車號碼']) else "未登錄"
+
+                        col_info, col_btn = st.columns([8.5, 1.5])
+                        with col_info:
+                            st.markdown(f"**{o_sq} {o_unit}** &nbsp;|&nbsp; 👤 **{o_name}** &nbsp;|&nbsp; 🚘 **{o_plate}**")
+                            st.markdown(f"<span style='color: #a0a0a0; font-size: 14px;'>📍 {o_lot} (車位號: {o_num})</span>", unsafe_allow_html=True)
+                        with col_btn:
+                            st.write("") # 微調按鈕高度對齊
+                            if st.button("✏️ 編輯", key=f"btn_edit_{row['id']}", use_container_width=True):
+                                edit_vehicle_dialog(row)
             
         elif menu in ["序號登載", "🏷️ 序號登載"] and st.session_state.role == 'L2':
             st.header("🏷️ 序號登載與校正", help="""
