@@ -801,7 +801,7 @@ try:
                                         o_name = row['姓名']
                                         o_plate = row['車號']
                                         o_lot = row['停車場'] if pd.notna(row['停車場']) else "未登錄"
-                                        o_num = row['停車號碼'] if pd.notna(row['停車號碼']) else "未登錄"
+                                        o_num = row['停車號碼'] if pd.notna(row['停車號碼']) else "未登錄"<br>
                                         o_date = row['結訓日期'] if pd.notna(row['結訓日期']) else "未登錄"
 
                                         col_info, col_btn = st.columns([8.5, 1.5])
