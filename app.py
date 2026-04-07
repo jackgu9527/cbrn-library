@@ -801,14 +801,14 @@ try:
                                         o_name = row['姓名']
                                         o_plate = row['車號']
                                         o_lot = row['停車場'] if pd.notna(row['停車場']) else "未登錄"
-                                        o_num = row['停車號碼'] if pd.notna(row['停車號碼']) else "未登錄"<br>
+                                        o_num = row['停車號碼'] if pd.notna(row['停車號碼']) else "未登錄"
                                         o_date = row['結訓日期'] if pd.notna(row['結訓日期']) else "未登錄"
 
                                         col_info, col_btn = st.columns([8.5, 1.5])
                                         with col_info:
                                             # 因為已經分類在班隊底下，所以卡片內就不再重複顯示中隊跟班隊名稱，讓畫面更清爽
                                             st.markdown(f"👤 **{o_name}** &nbsp;|&nbsp; 🚘 **{o_plate}**")
-                                            st.markdown(f"<span style='color: #a0a0a0; font-size: 14px;'>📍 {o_lot} (車位號: {o_num}) &nbsp;|&nbsp; 📅 結訓日: {o_date}</span>", unsafe_allow_html=True)
+                                            st.markdown(f"<span style='color: #a0a0a0; font-size: 14px;'>📍 {o_lot} (車位號: {o_num})<br>📅 結訓日: {o_date}</span>", unsafe_allow_html=True)
                                         with col_btn:
                                             st.write("") 
                                             if st.button("✏️ 編輯", key=f"btn_edit_{row['id']}", use_container_width=True):
