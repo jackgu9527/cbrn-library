@@ -1611,12 +1611,11 @@ try:
                 else:
                     clean_kw = re.sub(r'[^A-Za-z0-9\u4e00-\u9fa5]', '', keyword).upper()
                     query = """
-                    SELECT u.squadron as 中隊, u.title as 班隊, v.owner_name as 姓名, v.plate_number as 車號 
-                    FROM vehicles v 
-                    JOIN users u ON v.account_id = u.login_id 
-                    WHERE v.owner_name ILIKE %s OR v.plate_number ILIKE %s
+                    SELECT squadron as 中隊, unit_title as 班隊, owner_name as 姓名, plate_number as 車號, parking_lot as 停車場, parking_number as 停車號碼 
+                    FROM vehicles 
+                    WHERE owner_name ILIKE %s OR plate_number ILIKE %s OR unit_title ILIKE %s
                     """
-                    res = pd.read_sql_query(query, conn, params=(f"%{clean_kw}%", f"%{clean_kw}%"))
+                    res = pd.read_sql_query(query, conn, params=(f"%{clean_kw}%", f"%{clean_kw}%", f"%{clean_kw}%"))
                     if res.empty:
                         st.warning("查無符合條件的車輛，請確認關鍵字是否正確。")
                     else:
