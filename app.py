@@ -663,38 +663,7 @@ try:
 
         elif menu in ["車輛登載", "🚗 車輛登載"] and st.session_state.role == 'L1':
             st.header("🚗 車輛管制總表", help="由幹部統一集中管理所有車輛與停車格位置。")
-            col_title, col_clear, col_wipe, col_num = st.columns([3, 2.5, 2.5, 2])
-            with col_clear:
-                if st.button("🗑️ 清空全部車輛", type="primary", use_container_width=True):
-                    clear_vehicles_dialog()
-            with col_wipe:
-                if st.button("🧽 抹除歷史姓名", type="primary", use_container_width=True):
-                    with db_transaction(success_msg="✅ 所有歷史姓名已徹底從資料庫抹除！") as c:
-                        c.execute("UPDATE vehicles SET owner_name = ''") 
-                    st.session_state['refresh_vehicles'] = True
-                    st.rerun()
-            with col_num:
-                if st.button("🔢 車牌純數字化", type="primary", use_container_width=True):
-                    # 先讀取目前的車輛資料
-                    temp_conn = get_db_connection()
-                    try:
-                        temp_df = pd.read_sql_query("SELECT id, plate_number FROM vehicles", temp_conn)
-                    finally:
-                        release_connection(temp_conn)
-                        
-                    with db_transaction(success_msg="✅ 車牌已全數自動轉換為純數字！") as c:
-                        for _, r in temp_df.iterrows():
-                            o_plate = str(r['plate_number'])
-                            n_plate = re.sub(r'[^0-9]', '', o_plate) # 只保留數字
-                            
-                            if n_plate and n_plate != o_plate:
-                                # 確認沒有重複的純數字車牌才更新 (避免資料庫 UNIQUE 衝突報錯)
-                                c.execute("SELECT id FROM vehicles WHERE plate_number=%s AND id!=%s", (n_plate, r['id']))
-                                if not c.fetchone(): 
-                                    c.execute("UPDATE vehicles SET plate_number=%s WHERE id=%s", (n_plate, r['id']))
-                    st.session_state['refresh_vehicles'] = True
-                    st.rerun()
-
+            
             st.subheader("➕ 新增車輛")
             with st.form("add_vehicle_form", clear_on_submit=True):
                 # 第一排：中隊、班隊、結訓日期 (已移除姓名)
