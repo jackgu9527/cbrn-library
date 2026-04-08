@@ -1690,13 +1690,13 @@ try:
                     st.dataframe(res, hide_index=True, use_container_width=True)
                 else:
                     clean_kw = re.sub(r'[^A-Za-z0-9\u4e00-\u9fa5]', '', keyword).upper()
-                    # 直接從 vehicles 表獨立抓取資料，不再透過 users 表關聯
+                    # 直接從 vehicles 表獨立抓取資料，並拔除姓名顯示與搜尋
                     query = """
-                    SELECT squadron as 中隊, unit_title as 班隊, owner_name as 姓名, plate_number as 車號, parking_lot as 停車場, parking_number as 停車號碼, discharge_date as 結訓日期 
+                    SELECT squadron as 中隊, unit_title as 班隊, plate_number as 車號, parking_lot as 停車場, parking_number as 停車號碼, discharge_date as 結訓日期 
                     FROM vehicles 
-                    WHERE owner_name ILIKE %s OR plate_number ILIKE %s OR unit_title ILIKE %s
+                    WHERE plate_number ILIKE %s OR unit_title ILIKE %s
                     """
-                    res = pd.read_sql_query(query, conn, params=(f"%{clean_kw}%", f"%{clean_kw}%", f"%{clean_kw}%"))
+                    res = pd.read_sql_query(query, conn, params=(f"%{clean_kw}%", f"%{clean_kw}%"))
                     if res.empty:
                         st.warning("查無符合條件的車輛，請確認關鍵字是否正確。")
                     else:
