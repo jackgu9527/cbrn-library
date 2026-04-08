@@ -702,6 +702,10 @@ try:
                                 # 移除 owner_name 寫入
                                 c.execute("INSERT INTO vehicles (account_id, plate_number, squadron, unit_title, parking_lot, parking_number, discharge_date) VALUES (%s, %s, %s, %s, %s, %s, %s)",
                                           (st.session_state.login_id, clean_plate, v_sq, clean_unit, v_lot, clean_num, v_date))
+                                # 👇 寫入操作紀錄
+                                now_time = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S")
+                                c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", 
+                                          (now_time, st.session_state.login_id, "新增車輛", f"新增 {v_sq} {clean_unit} 車輛：{clean_plate}"))
                             st.session_state['refresh_vehicles'] = True 
                             st.rerun()
 
@@ -769,6 +773,10 @@ try:
                             with db_transaction(success_msg="✅ 車輛資料更新成功！") as c:
                                 c.execute("UPDATE vehicles SET plate_number=%s, squadron=%s, unit_title=%s, parking_lot=%s, parking_number=%s, discharge_date=%s WHERE id=%s", 
                                           (clean_plate, new_sq, clean_unit, new_lot, clean_num, new_date, v_id))
+                                # 👇 寫入操作紀錄
+                                now_time = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S")
+                                c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", 
+                                          (now_time, st.session_state.login_id, "編輯車輛", f"修改車輛資訊：{o_plate} ➔ {clean_plate}"))
                             st.session_state['refresh_vehicles'] = True 
                             st.rerun()
                         else:
@@ -777,6 +785,10 @@ try:
                     if st.button("🗑️ 刪除", key=f"d_del_{v_id}", use_container_width=True):
                         with db_transaction(success_msg="🗑️ 車輛已刪除！") as c:
                             c.execute("DELETE FROM vehicles WHERE id=%s", (v_id,))
+                            # 👇 寫入操作紀錄
+                            now_time = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S")
+                            c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", 
+                                      (now_time, st.session_state.login_id, "刪除車輛", f"刪除車號：{o_plate}"))
                         st.session_state['refresh_vehicles'] = True 
                         st.rerun()
 
@@ -1306,6 +1318,10 @@ try:
                                     if st.button("✅ 審核開通", key=f"app_reg_{uid}", type="primary", use_container_width=True):
                                         with db_transaction(success_msg="✅ 已審核開通！") as c:
                                             c.execute("UPDATE users SET status='啟用' WHERE id=%s", (uid,))
+                                            # 👇 寫入操作紀錄
+                                            now_time = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S")
+                                            c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", 
+                                                      (now_time, st.session_state.login_id, "開通帳號", f"核准開通：{row['班隊']} ({row['帳號']})"))
                                         st.rerun()
                                 with col2:
                                     if st.button("❌ 踢退開通", key=f"rej_reg_{uid}", use_container_width=True):
@@ -1332,6 +1348,10 @@ try:
                                                 with db_transaction(success_msg="✅ 結訓日已更新！(若原為凍結已自動復權)") as c:
                                                     new_status = '啟用' if row['狀態'] == '結訓凍結' else row['狀態']
                                                     c.execute("UPDATE users SET discharge_date=%s, status=%s WHERE id=%s", (new_date, new_status, uid))
+                                                    # 👇 寫入操作紀錄
+                                                    now_time = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S")
+                                                    c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", 
+                                                              (now_time, st.session_state.login_id, "修改結訓日", f"將 {row['班隊']} ({row['訓員帳號']}) 結訓日延至 {new_date}"))
                                                 st.rerun()
                                         with col_r:
                                             if st.button("🔑 重置密碼為 123", key=f"r_{uid}", use_container_width=True):
