@@ -460,39 +460,41 @@ if 'logged_in' not in st.session_state:
     with tab1:
         login_id = st.text_input("帳號 (Login ID)")
         password = st.text_input("密碼 (Password)", type="password")
-        if st.button("登入", type="primary"): 
+        if st.button("登入", type="primary"):
+            
             # 👇 新增：維護模式攔截
             if MAINTENANCE_MODE and login_id not in ALLOWED_ADMINS:
                 st.error("🛠️ 系統目前正在進行維護，暫停登入服務！")
             else:
                 conn = get_db_connection()
                 try:
-                user = pd.read_sql_query("SELECT * FROM users WHERE login_id=%s", conn, params=(login_id,))
-                if not user.empty:
-                    db_pass = user.iloc[0]['password']
-                    is_auth = check_password_hash(db_pass, password) if db_pass.startswith('scrypt:') or db_pass.startswith('pbkdf2:') else (db_pass == password)
-                    if is_auth:
-                        if user.iloc[0]['status'] == '待審核': st.warning("⚠️ 您的帳號尚未開通，請等待幹部審核。")
-                        elif user.iloc[0]['status'] == '停權': st.error("🚨 您的帳號因違規停權！請聯絡幹部處理。")
-                        elif user.iloc[0]['status'] == '結訓凍結': st.error("❄️ 您的班隊已結訓，帳號已凍結鎖定！")
-                        else:
-                            new_token = secrets.token_urlsafe(32)
-                            c = conn.cursor()
-                            c.execute("UPDATE users SET session_token=%s WHERE id=%s", (new_token, int(user.iloc[0]['id'])))
-                            conn.commit()
-                            for col in user.columns: st.session_state[col] = user.iloc[0][col]
-                            st.session_state['base_sq_list'] = calculate_permissions(user.iloc[0]['squadron'])
-                            st.session_state['logged_in'] = True
-                            cookie_manager.set('sys_user_token', new_token, expires_at=datetime.now() + timedelta(days=30))
-                            log_action(login_id, "登入", "使用者成功安全登入系統")
-                            import time; time.sleep(0.5); st.rerun()
+                    # 👇 注意：這裡開始的所有程式碼都已經往右推了一格縮排
+                    user = pd.read_sql_query("SELECT * FROM users WHERE login_id=%s", conn, params=(login_id,))
+                    if not user.empty:
+                        db_pass = user.iloc[0]['password']
+                        is_auth = check_password_hash(db_pass, password) if db_pass.startswith('scrypt:') or db_pass.startswith('pbkdf2:') else (db_pass == password)
+                        if is_auth:
+                            if user.iloc[0]['status'] == '待審核': st.warning("⚠️ 您的帳號尚未開通，請等待幹部審核。")
+                            elif user.iloc[0]['status'] == '停權': st.error("🚨 您的帳號因違規停權！請聯絡幹部處理。")
+                            elif user.iloc[0]['status'] == '結訓凍結': st.error("❄️ 您的班隊已結訓，帳號已凍結鎖定！")
+                            else:
+                                new_token = secrets.token_urlsafe(32)
+                                c = conn.cursor()
+                                c.execute("UPDATE users SET session_token=%s WHERE id=%s", (new_token, int(user.iloc[0]['id'])))
+                                conn.commit()
+                                for col in user.columns: st.session_state[col] = user.iloc[0][col]
+                                st.session_state['base_sq_list'] = calculate_permissions(user.iloc[0]['squadron'])
+                                st.session_state['logged_in'] = True
+                                cookie_manager.set('sys_user_token', new_token, expires_at=datetime.now() + timedelta(days=30))
+                                log_action(login_id, "登入", "使用者成功安全登入系統")
+                                import time; time.sleep(0.5); st.rerun()
+                        else: st.error("❌ 帳號或密碼錯誤")
                     else: st.error("❌ 帳號或密碼錯誤")
-                else: st.error("❌ 帳號或密碼錯誤")
-            except Exception as e:
-                conn.rollback()
-                st.error(f"❌ 登入發生錯誤：{e}")
-            finally:
-                release_connection(conn)
+                except Exception as e:
+                    conn.rollback()
+                    st.error(f"❌ 登入發生錯誤：{e}")
+                finally:
+                    release_connection(conn)
 
     with tab2:
         st.subheader("班隊註冊", help="...")
