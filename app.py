@@ -19,7 +19,9 @@ import time
 warnings.filterwarnings('ignore', category=UserWarning, module='pandas')
 
 st.set_page_config(page_title="大隊部準則管理系統", layout="wide")
-
+# 👇 新增：系統維護模式開關
+MAINTENANCE_MODE = True  # 設為 True 開啟維護，設為 False 關閉維護
+ALLOWED_ADMINS = ['admin'] # 填寫在維護期間「仍然可以登入」的帳號 (例如管理員帳號)
 # 🎨 1. 側邊欄視覺革命 & UI 核心樣式注入
 st.markdown("""
     <style>
@@ -439,10 +441,15 @@ if 'logged_in' not in st.session_state and not st.session_state.get('force_logou
         try:
             user_data = pd.read_sql_query("SELECT * FROM users WHERE session_token=%s", conn, params=(str(stored_token),))
             if not user_data.empty and user_data.iloc[0]['status'] not in ['待審核', '停權', '結訓凍結']:
-                for col in user_data.columns: st.session_state[col] = user_data.iloc[0][col]
-                st.session_state['base_sq_list'] = calculate_permissions(user_data.iloc[0]['squadron'])
-                st.session_state['logged_in'] = True
-                st.rerun()
+                
+                # 👇 新增：維護模式攔截
+                if MAINTENANCE_MODE and user_data.iloc[0]['login_id'] not in ALLOWED_ADMINS:
+                    pass # 維護期間，若不在白名單內，不執行自動登入
+                else:
+                    for col in user_data.columns: st.session_state[col] = user_data.iloc[0][col]
+                    st.session_state['base_sq_list'] = calculate_permissions(user_data.iloc[0]['squadron'])
+                    st.session_state['logged_in'] = True
+                    st.rerun()
         except Exception: pass
         finally: release_connection(conn)
 
@@ -453,9 +460,13 @@ if 'logged_in' not in st.session_state:
     with tab1:
         login_id = st.text_input("帳號 (Login ID)")
         password = st.text_input("密碼 (Password)", type="password")
-        if st.button("登入", type="primary"):
-            conn = get_db_connection()
-            try:
+        if st.button("登入", type="primary"): 
+            # 👇 新增：維護模式攔截
+            if MAINTENANCE_MODE and login_id not in ALLOWED_ADMINS:
+                st.error("🛠️ 系統目前正在進行維護，暫停登入服務！")
+            else:
+                conn = get_db_connection()
+                try:
                 user = pd.read_sql_query("SELECT * FROM users WHERE login_id=%s", conn, params=(login_id,))
                 if not user.empty:
                     db_pass = user.iloc[0]['password']
@@ -484,21 +495,17 @@ if 'logged_in' not in st.session_state:
                 release_connection(conn)
 
     with tab2:
-        st.subheader("班隊註冊", help="""
-:blue[**【班隊註冊】**]  
-:yellow[**【中隊】**]：請填寫報到的中隊  
-:yellow[**【班隊全銜】**]：請填寫受訓的名稱  
-:yellow[**【設定登入帳號】**]：設定登錄頁面登錄帳號  
-:yellow[**【設定登入密碼】**]：設定登錄頁面登錄密碼  
-:yellow[**【結訓日期】**]：填寫受訓的結訓日期   
-:yellow[**【送出註冊申請】**]：點擊送出註冊申請  """)
+        st.subheader("班隊註冊", help="...")
         reg_squadron = st.selectbox("中隊", ["學員一中隊", "學員二中隊", "學生一中隊", "學生二中隊"])
         reg_title = st.text_input("班隊全銜 （消除士兵班115-2期)")
         reg_id = st.text_input("設定登入帳號")
         reg_pw = st.text_input("設定登入密碼", type="password")
         reg_date = st.date_input("結訓日期")
-        
-        if st.button("送出註冊申請"):
+        # 👇 新增：維護期間禁用註冊按鈕
+        if MAINTENANCE_MODE:
+            st.warning("🛠️ 系統維護中，暫停開放新帳號註冊！")
+            
+        if st.button("送出註冊申請", disabled=MAINTENANCE_MODE): # 加上 disabled 屬性
             if reg_title and reg_id and reg_pw:
                 with db_transaction(success_msg="✅ 註冊申請已送出！請等待幹部審核後即可登入。") as c:
                     c.execute("SELECT COUNT(*) FROM users WHERE login_id=%s", (reg_id,))
@@ -513,6 +520,15 @@ if 'logged_in' not in st.session_state:
                 st.rerun()
             else: st.warning("請填寫所有欄位")
     st.stop()
+
+# 👇 新增：攔截已經在系統內操作的一般使用者，強制登出
+if st.session_state.get('logged_in'):
+    if MAINTENANCE_MODE and st.session_state.get('login_id') not in ALLOWED_ADMINS:
+        st.session_state.clear()
+        st.session_state['force_logout'] = True
+        st.toast("🛠️ 系統已進入維護模式，您已被強制登出。")
+        time.sleep(1.5)
+        st.rerun()
 
 sq_list = st.session_state.get('base_sq_list', [str(st.session_state.squadron).strip()])
 
