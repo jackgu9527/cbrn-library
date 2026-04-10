@@ -1173,6 +1173,10 @@ try:
                                 c.execute("""UPDATE users SET login_id=%s, password=%s, role=%s, squadron=%s, title=%s, status=%s WHERE id=%s""", (new_login, generate_password_hash(new_pwd), new_role, new_sq, new_ti, new_st, uid))
                             else:
                                 c.execute("""UPDATE users SET login_id=%s, role=%s, squadron=%s, title=%s, status=%s WHERE id=%s""", (new_login, new_role, new_sq, new_ti, new_st, uid))
+                            # 👇 寫入操作紀錄
+                            now_time = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S")
+                            c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", 
+                                      (now_time, st.session_state.login_id, "編輯帳號", f"修改 {new_login} ({new_ti}) 權限與狀態"))
                         st.rerun()
                 with col_del:
                     # 改用 Checkbox 進行防呆確認，避免呼叫第二層 Dialog
@@ -1216,6 +1220,10 @@ try:
                                 st.stop()
                             hashed_pw = generate_password_hash(add_pw)
                             c.execute("INSERT INTO users (login_id, password, role, squadron, title, status) VALUES (%s,%s,%s,%s,%s,%s)", (add_id, hashed_pw, r_val, add_sq, add_title, add_status))
+                            # 👇 寫入操作紀錄
+                            now_time = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S")
+                            c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", 
+                                      (now_time, st.session_state.login_id, "配發帳號", f"建立新帳號：{add_id} ({add_title})"))
                         st.rerun()
                     else: st.warning("⚠️ 請填寫完整資料 (職務/帳號/密碼不可為空)！")
             
@@ -1357,6 +1365,10 @@ try:
                                             if st.button("🔑 重置密碼為 123", key=f"r_{uid}", use_container_width=True):
                                                 with db_transaction(success_msg="✅ 密碼已重置為預設！") as c:
                                                     c.execute("UPDATE users SET password=%s WHERE id=%s", (generate_password_hash('123'), uid))
+                                                    # 👇 寫入操作紀錄
+                                                    now_time = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S")
+                                                    c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", 
+                                                              (now_time, st.session_state.login_id, "重置密碼", f"強制重置 {row['班隊']} ({row['訓員帳號']}) 密碼為 123"))
                                                 st.rerun()
                     else: st.success("✨ 目前無可管理的訓員資料。")
 
