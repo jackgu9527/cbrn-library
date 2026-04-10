@@ -21,7 +21,7 @@ warnings.filterwarnings('ignore', category=UserWarning, module='pandas')
 st.set_page_config(page_title="大隊部準則管理系統", layout="wide")
 # 👇 新增：系統維護模式開關
 MAINTENANCE_MODE = True  # 設為 True 開啟維護，設為 False 關閉維護
-ALLOWED_ADMINS = ['admin'] # 填寫在維護期間「仍然可以登入」的帳號 (例如管理員帳號)
+ALLOWED_ADMINS = ['gu'] # 填寫在維護期間「仍然可以登入」的帳號 (例如管理員帳號)
 # 🎨 1. 側邊欄視覺革命 & UI 核心樣式注入
 st.markdown("""
     <style>
