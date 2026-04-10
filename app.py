@@ -364,7 +364,7 @@ def init_db():
         c.execute('''CREATE TABLE IF NOT EXISTS books (id SERIAL PRIMARY KEY, book_name TEXT, serial_number TEXT UNIQUE, owner_id TEXT, status TEXT)''')
         c.execute('''CREATE TABLE IF NOT EXISTS borrow_requests (id SERIAL PRIMARY KEY, login_id TEXT, unit TEXT, book_name TEXT, quantity INTEGER, status TEXT)''')
         c.execute('''CREATE TABLE IF NOT EXISTS action_logs (id SERIAL PRIMARY KEY, timestamp TEXT, user_id TEXT, action TEXT, details TEXT)''')
-        c.execute('''CREATE TABLE IF NOT EXISTS vehicles (id SERIAL PRIMARY KEY, account_id TEXT, plate_number TEXT UNIQUE)''')
+        c.execute('''CREATE TABLE IF NOT EXISTS vehicles (id SERIAL PRIMARY KEY, account_id TEXT, plate_number TEXT)''')
         c.execute("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS squadron TEXT")
         c.execute("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS unit_title TEXT")
         c.execute("ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS parking_lot TEXT")
