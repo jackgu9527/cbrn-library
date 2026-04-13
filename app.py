@@ -492,10 +492,8 @@ if 'logged_in' not in st.session_state:
                              is_auth = check_password_hash(db_pass, password)
                         except ValueError:
                              is_auth = False
-                        else:
-                         # 發現舊明文密碼，強制攔截 (可由管理員重置)
-                            is_auth = False
-                        if is_auth:
+                             
+                    if is_auth:
                             if user.iloc[0]['status'] == '待審核': st.warning("⚠️ 您的帳號尚未開通，請等待幹部審核。")
                             elif user.iloc[0]['status'] == '停權': st.error("🚨 您的帳號因違規停權！請聯絡幹部處理。")
                             elif user.iloc[0]['status'] == '結訓凍結': st.error("❄️ 您的班隊已結訓，帳號已凍結鎖定！")
