@@ -485,15 +485,15 @@ if 'logged_in' not in st.session_state:
                     user = pd.read_sql_query("SELECT * FROM users WHERE login_id=%s", conn, params=(login_id,))
                     if not user.empty:
                         db_pass = user.iloc[0]['password']
-                    # 👇 強化判斷邏輯：確保只有在格式正確且密碼正確時才放行
-                    is_auth = False
-                    if db_pass and (db_pass.startswith('scrypt:') or db_pass.startswith('pbkdf2:')):
-                        try:
-                             is_auth = check_password_hash(db_pass, password)
-                        except ValueError:
-                             is_auth = False
-                             
-                    if is_auth:
+                        # 👇 強化判斷邏輯：確保只有在格式正確且密碼正確時才放行
+                        is_auth = False
+                        if db_pass and (db_pass.startswith('scrypt:') or db_pass.startswith('pbkdf2:')):
+                            try:
+                                is_auth = check_password_hash(db_pass, password)
+                            except ValueError:
+                                is_auth = False
+                                
+                        if is_auth:
                             if user.iloc[0]['status'] == '待審核': st.warning("⚠️ 您的帳號尚未開通，請等待幹部審核。")
                             elif user.iloc[0]['status'] == '停權': st.error("🚨 您的帳號因違規停權！請聯絡幹部處理。")
                             elif user.iloc[0]['status'] == '結訓凍結': st.error("❄️ 您的班隊已結訓，帳號已凍結鎖定！")
@@ -508,8 +508,10 @@ if 'logged_in' not in st.session_state:
                                 cookie_manager.set('sys_user_token', new_token, expires_at=datetime.now() + timedelta(days=30))
                                 log_action(login_id, "登入", "使用者成功安全登入系統")
                                 import time; time.sleep(0.5); st.rerun()
-                        else: st.error("❌ 帳號或密碼錯誤")
-                    else: st.error("❌ 帳號或密碼錯誤")
+                        else:
+                            st.error("❌ 帳號或密碼錯誤")
+                    else:
+                        st.error("❌ 帳號或密碼錯誤")
                 except Exception as e:
                     conn.rollback()
                     st.error(f"❌ 登入發生錯誤：{e}")
@@ -1348,7 +1350,7 @@ try:
             target_sq = st.session_state.get('current_sq', '')
             
             if menu == "👥 帳號管理":
-              st.subheader("👥 帳號管理中心", help="""
+                st.subheader("👥 帳號管理中心", help="""
 :blue[**【📝 班隊開通】**]  
 :yellow[**【✅審核開通】**]：開通此帳號的使用權  
 :yellow[**【❌踢退開通】**]：踢退此帳號的使用權  
@@ -1357,8 +1359,8 @@ try:
 :yellow[**【💾 儲存】**]：按下 :red[**💾 儲存**]  
 :yellow[**【🔑重置密碼為123】**]：  
 按下🔑重置密碼為123重置密碼""")
-              acc_tabs = st.tabs(["📝 班隊開通", "👤 帳號管理"])
-              with acc_tabs[0]:
+                acc_tabs = st.tabs(["📝 班隊開通", "👤 帳號管理"])
+                with acc_tabs[0]:
                     st.subheader("📝 班隊開通")
                     reg_df = pd.read_sql_query("SELECT id, squadron as 中隊, title as 班隊, login_id as 帳號, discharge_date as 結訓日 FROM users WHERE status='待審核' AND squadron = ANY(%s)", conn, params=(target_sq_list,))
                     if not reg_df.empty:
@@ -1381,7 +1383,7 @@ try:
                                         delete_account_dialog(uid, row['班隊'])
                     else: st.success("✨ 目前無待審核的註冊申請。")
 
-              with acc_tabs[1]:
+                with acc_tabs[1]:
                     st.subheader("👤 帳號管理")
                     l2_users = pd.read_sql_query("SELECT id, squadron as 中隊, title as 班隊, login_id as 訓員帳號, status as 狀態, discharge_date as 結訓日 FROM users WHERE role='L2' AND status IN ('啟用', '結訓凍結') AND squadron = ANY(%s) ORDER BY title", conn, params=(target_sq_list,))
                     if not l2_users.empty:
@@ -1415,13 +1417,12 @@ try:
         
                                                 with db_transaction() as c:
                                                     c.execute("UPDATE users SET password=%s WHERE id=%s", (generate_password_hash(new_raw_pwd), uid))
+                                                    # 👇 寫入操作紀錄 (移入 Transaction，確保紀錄正確寫入)
+                                                    now_time = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S")
+                                                    c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", 
+                                                              (now_time, st.session_state.login_id, "重置密碼", f"強制重置 {row['班隊']} ({row['訓員帳號']}) 密碼為隨機密碼"))
                                                     # 透過日誌紀錄下這次的隨機密碼（或直接在畫面上顯示）
                                                     st.session_state['sys_toast'] = f"✅ 重置成功！新密碼為：{new_raw_pwd} (請立即告知訓員)"
-                                                st.rerun()
-                                                # 👇 寫入操作紀錄
-                                                now_time = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S")
-                                                c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", 
-                                                              (now_time, st.session_state.login_id, "重置密碼", f"強制重置 {row['班隊']} ({row['訓員帳號']}) 密碼為 123"))
                                                 st.rerun()
                     else: st.success("✨ 目前無可管理的訓員資料。")
 
