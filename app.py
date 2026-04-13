@@ -473,7 +473,10 @@ if 'logged_in' not in st.session_state:
                     user = pd.read_sql_query("SELECT * FROM users WHERE login_id=%s", conn, params=(login_id,))
                     if not user.empty:
                         db_pass = user.iloc[0]['password']
-                        is_auth = check_password_hash(db_pass, password) if db_pass.startswith('scrypt:') or db_pass.startswith('pbkdf2:') else (db_pass == password)
+                        try:
+                            is_auth = check_password_hash(db_pass, password)
+                        except ValueError:
+                            is_auth = False # 如果資料庫裡還是舊的明文密碼，強制判定為錯誤
                         if is_auth:
                             if user.iloc[0]['status'] == '待審核': st.warning("⚠️ 您的帳號尚未開通，請等待幹部審核。")
                             elif user.iloc[0]['status'] == '停權': st.error("🚨 您的帳號因違規停權！請聯絡幹部處理。")
