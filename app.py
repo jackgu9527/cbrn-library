@@ -15,6 +15,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import psycopg2.errors 
 from contextlib import contextmanager
 import time
+import html
 
 warnings.filterwarnings('ignore', category=UserWarning, module='pandas')
 
@@ -1262,6 +1263,8 @@ try:
                                     uid = row['id']
                                     # 🏭 3. 擴建「UI 卡片工廠」 (大幅瘦身版：移除原本厚重的 expander)
                                     with st.container(border=True):
+                                        safe_title = html.escape(str(row['title']))
+                                        safe_login_id = html.escape(str(row['login_id']))
                                         st.markdown(f"""
                                         <div style="padding: 10px; background-color: rgba(255,255,255,0.05); border-radius: 8px; margin-bottom: 8px;">
                                             <div style="font-size: 16px; font-weight: bold; margin-bottom: 4px;">👤 {row['title']} <span style="font-size: 12px; color: #a0a0a0;">({row['role']})</span></div>
