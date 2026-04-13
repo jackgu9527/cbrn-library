@@ -1409,9 +1409,17 @@ try:
                                                               (now_time, st.session_state.login_id, "修改結訓日", f"將 {row['班隊']} ({row['訓員帳號']}) 結訓日延至 {new_date}"))
                                                 st.rerun()
                                         with col_r:
-                                            if st.button("🔑 重置密碼為 123", key=f"r_{uid}", use_container_width=True):
-                                                with db_transaction(success_msg="✅ 密碼已重置為預設！") as c:
-                                                    c.execute("UPDATE users SET password=%s WHERE id=%s", (generate_password_hash('123'), uid))
+                                            if st.button("🔑 隨機重置密碼", key=f"r_{uid}", use_container_width=True):
+                                                # 👇 修改點：改用系統隨機生成 8 位數密碼，避免 123 被暴力破解
+                                                import string
+                                                alphabet = string.ascii_letters + string.digits
+                                                new_raw_pwd = ''.join(secrets.choice(alphabet) for i in range(8))
+        
+                                                with db_transaction() as c:
+                                                    c.execute("UPDATE users SET password=%s WHERE id=%s", (generate_password_hash(new_raw_pwd), uid))
+                                                    # 透過日誌紀錄下這次的隨機密碼（或直接在畫面上顯示）
+                                                    st.session_state['sys_toast'] = f"✅ 重置成功！新密碼為：{new_raw_pwd} (請立即告知訓員)"
+                                                st.rerun()
                                                     # 👇 寫入操作紀錄
                                                     now_time = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S")
                                                     c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", 
