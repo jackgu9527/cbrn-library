@@ -428,6 +428,18 @@ def calculate_permissions(user_sq):
 
 cookie_manager = stx.CookieManager(key="main_cookie_auth")
 if st.session_state.get('logout_triggered'):
+    # 👇 新增：登出時，連線至資料庫清空 session_token，徹底銷毀憑證
+    if 'login_id' in st.session_state:
+        conn = get_db_connection()
+        try:
+            with conn.cursor() as c:
+                c.execute("UPDATE users SET session_token = NULL WHERE login_id=%s", (st.session_state.login_id,))
+            conn.commit()
+        except Exception:
+            pass
+        finally:
+            release_connection(conn)
+            
     try: cookie_manager.delete('sys_user_token')
     except KeyError: pass
     st.session_state.clear()
@@ -473,10 +485,16 @@ if 'logged_in' not in st.session_state:
                     user = pd.read_sql_query("SELECT * FROM users WHERE login_id=%s", conn, params=(login_id,))
                     if not user.empty:
                         db_pass = user.iloc[0]['password']
-                        try:
-                            is_auth = check_password_hash(db_pass, password)
-                        except ValueError:
-                            is_auth = False # 如果資料庫裡還是舊的明文密碼，強制判定為錯誤
+                            # 👇 強化判斷邏輯：確保只有在格式正確且密碼正確時才放行
+                            is_auth = False
+                            if db_pass and (db_pass.startswith('scrypt:') or db_pass.startswith('pbkdf2:')):
+                                try:
+                                     is_auth = check_password_hash(db_pass, password)
+                                except ValueError:
+                                     is_auth = False
+                            else:
+                         # 發現舊明文密碼，強制攔截 (可由管理員重置)
+                                is_auth = False
                         if is_auth:
                             if user.iloc[0]['status'] == '待審核': st.warning("⚠️ 您的帳號尚未開通，請等待幹部審核。")
                             elif user.iloc[0]['status'] == '停權': st.error("🚨 您的帳號因違規停權！請聯絡幹部處理。")
