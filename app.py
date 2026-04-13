@@ -329,11 +329,11 @@ def admin_return_approve_dialog(selected_unit, to_stock_ids, to_borrowed_ids, to
             now_time = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S")
             
             if to_stock_ids:
-                id_list_str = ','.join(map(str, to_stock_ids))
-                c.execute(f"SELECT u.title, b.book_name, COUNT(b.id) FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.id IN ({id_list_str}) GROUP BY u.title, b.book_name")
+                # 👇 移除危險的 id_list_str 字串拼貼，改用 ANY(%s) 搭配 tuple 安全傳遞
+                c.execute("SELECT u.title, b.book_name, COUNT(b.id) FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.id = ANY(%s) GROUP BY u.title, b.book_name", (to_stock_ids,))
                 for u_name, b_name, qty in c.fetchall():
                     c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", (now_time, st.session_state.login_id, "準則歸還", f"收訖 {u_name} 歸還 {b_name} {qty} 本"))
-                c.execute(f"UPDATE books SET status='在庫', owner_id='在庫' WHERE id IN ({id_list_str})")
+                c.execute("UPDATE books SET status='在庫', owner_id='在庫' WHERE id = ANY(%s)", (to_stock_ids,))
                 has_action = True
                 
             if to_borrowed_ids:
