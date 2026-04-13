@@ -1502,7 +1502,7 @@ try:
                                     
                         if resolved_ids:
                             with db_transaction(success_msg=f"✅ 成功結案！已釋放 {len(resolved_ids)} 本準則。") as c:
-                                c.execute(f"UPDATE books SET status='在庫', owner_id='在庫' WHERE id IN ({','.join(map(str, resolved_ids))})")
+                                c.execute("UPDATE books SET status='在庫', owner_id='在庫' WHERE id = ANY(%s)", (resolved_ids,))
                                 now_time = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S")
                                 summary_str = "、".join(resolved_books_summary)
                                 c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", (now_time, st.session_state.login_id, "異常處理", f"將少領的 {len(resolved_ids)} 本額度釋放回庫房：{summary_str}"))
