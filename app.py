@@ -485,16 +485,16 @@ if 'logged_in' not in st.session_state:
                     user = pd.read_sql_query("SELECT * FROM users WHERE login_id=%s", conn, params=(login_id,))
                     if not user.empty:
                         db_pass = user.iloc[0]['password']
-                            # 👇 強化判斷邏輯：確保只有在格式正確且密碼正確時才放行
-                            is_auth = False
-                            if db_pass and (db_pass.startswith('scrypt:') or db_pass.startswith('pbkdf2:')):
-                                try:
-                                     is_auth = check_password_hash(db_pass, password)
-                                except ValueError:
-                                     is_auth = False
-                            else:
+                    # 👇 強化判斷邏輯：確保只有在格式正確且密碼正確時才放行
+                    is_auth = False
+                    if db_pass and (db_pass.startswith('scrypt:') or db_pass.startswith('pbkdf2:')):
+                        try:
+                             is_auth = check_password_hash(db_pass, password)
+                        except ValueError:
+                             is_auth = False
+                        else:
                          # 發現舊明文密碼，強制攔截 (可由管理員重置)
-                                is_auth = False
+                            is_auth = False
                         if is_auth:
                             if user.iloc[0]['status'] == '待審核': st.warning("⚠️ 您的帳號尚未開通，請等待幹部審核。")
                             elif user.iloc[0]['status'] == '停權': st.error("🚨 您的帳號因違規停權！請聯絡幹部處理。")
