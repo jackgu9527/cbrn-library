@@ -1420,9 +1420,9 @@ try:
                                                     # 透過日誌紀錄下這次的隨機密碼（或直接在畫面上顯示）
                                                     st.session_state['sys_toast'] = f"✅ 重置成功！新密碼為：{new_raw_pwd} (請立即告知訓員)"
                                                 st.rerun()
-                                                    # 👇 寫入操作紀錄
-                                                    now_time = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S")
-                                                    c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", 
+                                                # 👇 寫入操作紀錄
+                                                now_time = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S")
+                                                c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", 
                                                               (now_time, st.session_state.login_id, "重置密碼", f"強制重置 {row['班隊']} ({row['訓員帳號']}) 密碼為 123"))
                                                 st.rerun()
                     else: st.success("✨ 目前無可管理的訓員資料。")
