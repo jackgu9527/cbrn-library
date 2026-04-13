@@ -510,6 +510,11 @@ if 'logged_in' not in st.session_state:
             
         if st.button("送出註冊申請", disabled=MAINTENANCE_MODE): # 加上 disabled 屬性
             if reg_title and reg_id and reg_pw:
+                # 👇 加上這段帳號格式驗證防護網
+                import re
+                if not re.match(r"^[A-Za-z0-9_]+$", reg_id):
+                    st.error("❌ 帳號格式錯誤：為了系統安全，帳號只能包含大小寫英文、數字與底線 (_)。")
+                    st.stop()
                 with db_transaction(success_msg="✅ 註冊申請已送出！請等待幹部審核後即可登入。") as c:
                     c.execute("SELECT COUNT(*) FROM users WHERE login_id=%s", (reg_id,))
                     if c.fetchone()[0] > 0: 
