@@ -1348,11 +1348,39 @@ try:
 :blue[**【🛠️ 系統除錯】**]  
 :yellow[**【🚨 將此帳號除錯】**]:將此帳號所有的準則歸還""")
             with st.expander("展開除錯工具"):
-                ghost_id = st.text_input("輸入除錯帳號)", key="ghost_id_input")
-                if st.button("🚨 將此帳號除錯", type="primary"):
+                st.subheader("1. 帳號除錯 (強制退庫)")
+                ghost_id = st.text_input("輸入要退庫的帳號", key="ghost_id_input")
+                if st.button("🚨 將此帳號強制退庫", type="primary"):
                     if ghost_id.strip():
                         force_return_dialog(ghost_id)
                     else: st.warning("請先輸入帳號！")
+                
+                st.markdown("---")
+                st.subheader("2. 序號重置 (修正打錯字)")
+                reset_sn = st.text_input("輸入要重置的「真實序號」", placeholder="例如：055510", key="reset_sn_input")
+                if st.button("♻️ 重置為虛擬序號", type="primary"):
+                    if reset_sn.strip():
+                        with db_transaction() as c:
+                            # 檢查序號是否存在
+                            c.execute("SELECT id, book_name FROM books WHERE serial_number=%s", (reset_sn.strip(),))
+                            res = c.fetchone()
+                            if res:
+                                bid, bname = res
+                                # 👇 生成唯一的虛擬序號 (書名-RE-ID)，保證不會跟現有的 -001 衝突
+                                new_virtual_sn = f"{bname}-RE-{bid}"
+                                c.execute("UPDATE books SET serial_number=%s WHERE id=%s", (new_virtual_sn, bid))
+                                
+                                # 寫入操作紀錄
+                                now_time = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S")
+                                c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", 
+                                          (now_time, st.session_state.login_id, "修復序號", f"將錯誤序號 {reset_sn} 重置為 {new_virtual_sn}"))
+                                st.session_state['sys_toast'] = f"✅ 已成功將序號 {reset_sn} 洗白！"
+                            else:
+                                st.error("❌ 系統找不到這個序號，請確認是否輸入正確。")
+                                st.session_state['db_locked'] = False
+                                st.stop()
+                        st.rerun()
+                    else: st.warning("請先輸入序號！")
 
         elif st.session_state.role == 'L1' and menu in ["👥 帳號管理", "📤 借閱審核", "📥 歸還審核", "💬 回報專區"]:
             target_sq = st.session_state.get('current_sq', '')
