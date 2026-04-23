@@ -924,8 +924,8 @@ try:
                                         b_id = p_ids[i]
                                         if i < len(raw_input):
                                             new_s = raw_input[i]
-                                            # 💡 升級：多抓取 owner_id 欄位
-                                            c.execute("SELECT id, status, owner_id FROM books WHERE serial_number=%s", (new_s,))
+                                            # 👇 強化防禦：多抓取 book_name 進行核對，防止器、車調包
+                                            c.execute("SELECT id, status, owner_id, book_name FROM books WHERE serial_number=%s", (new_s,))
                                             check = c.fetchone()
                                             
                                             if not check:
@@ -933,8 +933,16 @@ try:
                                                 c.execute("UPDATE books SET serial_number=%s, status='借閱中' WHERE id=%s", (new_s, b_id))
                                                 success_cnt += 1
                                             else:
-                                                target_id, target_status, target_owner = check
+                                                # 取出多抓的 book_name
+                                                target_id, target_status, target_owner, target_book_name = check
                                                 
+                                                # 👇 第一道防線：如果書名不符，直接亮紅燈擋下，不執行後續交換
+                                                if target_book_name != b_name:
+                                                    st.error(f"❌ 序號衝突！序號 `{new_s}` 目前登記在【{target_book_name}】名下，禁止跨種類登載至【{b_name}】。")
+                                                    st.session_state['db_locked'] = False
+                                                    st.stop()
+                                                
+                                                # 👇 以下保留您原本完美的交換邏輯 (只有書名一樣才會執行到這裡)
                                                 if target_id == b_id:
                                                     # 剛好就是系統預發給自己的這本
                                                     c.execute("UPDATE books SET status='借閱中' WHERE id=%s", (b_id,))
