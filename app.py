@@ -967,6 +967,16 @@ try:
                                                     st.error(f"❌ 【{b_name}】序號 {new_s} 已被 {target_owner} 借出！")
                                                     st.session_state['db_locked'] = False
                                                     st.stop()
+                                    else:
+                                            # 👇 新增：如果訓員輸入的序號數量少於應領數量，且勾選了「借閱異常」
+                                            if data.get('abnormal') == True:
+                                                # 將剩下的額度狀態改為「少領異常」
+                                                c.execute("UPDATE books SET status='少領異常' WHERE id=%s", (b_id,))
+                                                success_cnt += 1
+                                                # 寫入操作紀錄，讓幹部知道是誰回報的
+                                                now_time = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S")
+                                                c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", 
+                                                          (now_time, st.session_state.login_id, "回報借閱異常", f"回報 {b_name} 數量不足，轉入異常警示"))
                         if success_cnt > 0:
                             st.rerun()
                         else:
