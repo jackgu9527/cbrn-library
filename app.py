@@ -776,13 +776,20 @@ try:
                                     b_id = p_ids[i]
                                     if i < len(raw_input):
                                         new_s = raw_input[i]
-                                        c.execute("SELECT id, status, owner_id, book_name FROM books WHERE serial_number=%s", (new_s,))
+                                        # 👇 修改 SQL，JOIN users 表把班隊名稱抓出來
+                                        c.execute("""
+                                            SELECT b.id, b.status, b.owner_id, b.book_name, COALESCE(u.title, b.owner_id) as owner_title
+                                            FROM books b 
+                                            LEFT JOIN users u ON b.owner_id = u.login_id 
+                                            WHERE b.serial_number=%s
+                                        """, (new_s,))
                                         check = c.fetchone()
                                         if not check:
                                             c.execute("UPDATE books SET serial_number=%s, status='借閱中' WHERE id=%s", (new_s, b_id))
                                             success_cnt += 1
                                         else:
-                                            target_id, target_status, target_owner, target_book_name = check
+                                            # 👇 多接一個 target_title 變數
+                                            target_id, target_status, target_owner, target_book_name, target_title = check
                                             if target_book_name != b_name:
                                                 st.error(f"❌ 序號衝突！序號 `{new_s}` 目前登記在【{target_book_name}】名下，禁止跨種類登載至【{b_name}】。")
                                                 st.session_state['db_locked'] = False; st.stop()
@@ -798,7 +805,8 @@ try:
                                                 c.execute("UPDATE books SET owner_id=%s WHERE id=%s", (target_owner, b_id))
                                                 success_cnt += 1
                                             else:
-                                                st.error(f"❌ 【{b_name}】序號 {new_s} 已被 {target_owner} 借出！")
+                                                # 👇 錯誤訊息改為顯示 target_title (班隊名稱)
+                                                st.error(f"❌ 【{b_name}】序號 {new_s} 已被【{target_title}】借出！")
                                                 st.session_state['db_locked'] = False; st.stop()
                                     else:
                                         if data.get('abnormal') == True:
