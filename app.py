@@ -1733,7 +1733,7 @@ try:
                     else:
                         st.success("✨ 準則妥善率 100%！目前中隊無任何遺失之準則！")
 
-            elif menu in ["💬 回報專區", "回報專區"]:
+        elif menu in ["💬 回報專區", "回報專區"]:
                 st.subheader("💬 Line 報表自動生成器", help="自動彙整各班隊的借還書與清點現況，方便複製回報至 LINE 群組。")
                 line_tabs = st.tabs(["🚚 準則借還訊息生成", "📦 準則清點"])
                 
