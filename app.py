@@ -1643,7 +1643,7 @@ try:
                 else:
                     st.success("目前無異常少領通報。")
 
-            elif menu == "📥 歸還審核":
+        elif menu == "📥 歸還審核":
                 st.subheader("📥 準則歸還與遺失", help="點收歸還的準則，或處理已結訓但未歸還的遺失帳務。")
                 ret_tabs = st.tabs(["📥 準則歸還清單", "🚨 遺失準則"])
                 
