@@ -838,7 +838,11 @@ try:
                     st.session_state.clear_key += 1
                     st.rerun()
 
-            if st.session_state.cart:
+            # 👇 開始套用魔法：將購物車與提交按鈕打包成局部渲染區塊
+            @st.fragment
+            def render_shopping_cart():
+                if not st.session_state.cart: return
+                
                 st.markdown("#### 🛒 借閱清單")
                 for b_name, data in list(st.session_state.cart.items()):
                     with st.container(border=True):
@@ -846,14 +850,15 @@ try:
                         c1, c2, c3 = st.columns([3, 4, 3])
                         with c1: st.markdown("<div style='margin-top: 8px; font-size: 14px; color: #475569;'>:red[借閱數量：]</div>", unsafe_allow_html=True)
                         with c2:
+                            # 🚀 因為有 Fragment，這裡按上下調整數量時，側邊欄絕對不會閃爍！
                             new_qty = st.number_input("qty", value=data['qty'], min_value=1, max_value=data['max_qty'], key=f"cart_inp_{b_name}", label_visibility="collapsed")
-                            if new_qty != data['qty']:
-                                st.session_state.cart[b_name]['qty'] = new_qty
-                                st.rerun()
+                            st.session_state.cart[b_name]['qty'] = new_qty
                         with c3:
                             if st.button("🗑️ 移除", key=f"cart_rm_{b_name}", use_container_width=True):
                                 del st.session_state.cart[b_name]
-                                st.rerun()
+                                # 🌟 指定只重整這個 Fragment，而不是整個網頁
+                                st.rerun(scope="fragment")
+                                
                 st.markdown("---")
                 if st.button("🚀 提交申請", type="primary", use_container_width=True):
                     warnings_list = []
@@ -878,7 +883,11 @@ try:
                                 c_trans.execute("INSERT INTO borrow_requests (login_id, unit, book_name, quantity, status) VALUES (%s, %s, %s, %s, %s)", (st.session_state.login_id, st.session_state.title, b_name, qty, '待審核'))
                                 c_trans.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", (now_time, st.session_state.login_id, "申請借閱", f"申請 {b_name} {qty} 本"))
                         st.session_state.cart = {} 
+                        # 提交完成後，執行全域重整以更新畫面狀態
                         st.rerun()
+
+            # 呼叫並畫出這個被保護的局部渲染區塊
+            render_shopping_cart()
 
     elif menu in ["回報專區", "💬 回報專區"]:
         st.subheader("💬 Line 報表自動生成器")
