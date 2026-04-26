@@ -813,7 +813,8 @@ try:
             col_sel, col_add = st.columns([7, 3])
             
             selected_book = col_sel.selectbox("選擇準則", book_options, index=None, placeholder="🔍 請輸入關鍵字搜尋準則...", label_visibility="collapsed", key=f"book_selector_{st.session_state.clear_key}")
-            if col_add.button("➕ 加入清單", type="secondary", use_container_width=True):
+            is_no_book_selected = selected_book is None
+            if col_add.button("➕ 加入清單", type="secondary", use_container_width=True, disabled=is_no_book_selected):
                 if not selected_book: st.warning("⚠️ 請先輸入或選擇要借閱的準則！")
                 else:
                     b_name, stock_info = selected_book.split(" (庫存: ")
@@ -842,7 +843,8 @@ try:
                                     del st.session_state.cart[b_name]
                                     st.rerun(scope="fragment") 
                     st.markdown("---")
-                    if st.button("🚀 提交申請", type="primary", use_container_width=True):
+                    is_processing = st.session_state.get('db_locked', False)
+                    if st.button("🚀 提交申請", type="primary", use_container_width=True, disabled=is_processing):
                         warnings_list = []
                         borrow_requests = {}
                         with get_auto_conn() as auto_conn:
@@ -1040,7 +1042,14 @@ try:
                                 b_df.insert(0, "勾選歸還", initial_checks)
                                 edited_return_dfs[b_name] = st.data_editor(b_df, hide_index=True, disabled=["id", "書名", "序號"], width='stretch', column_config={"id": None, "書名": None}, key=f"return_editor_{b_name}")
                 st.markdown("---") 
-                if st.button("📤 送出目前的勾選項目", type="primary", use_container_width=True):
+                # 👇 升級 2：計算是否有打勾，並檢查系統是否處理中
+                has_selected = any(category_checks.values()) or any(
+                    df is not None and df["勾選歸還"].any() for df in edited_return_dfs.values()
+                )
+                is_processing = st.session_state.get('db_locked', False)
+                
+                # 👇 將按鈕加上 disabled 條件
+                if st.button("📤 送出目前的勾選項目", type="primary", use_container_width=True, disabled=(not has_selected or is_processing)):
                     selected_ids = []
                     for b_name in df_books['書名'].unique():
                         if category_checks[b_name]: selected_ids.extend(df_books[df_books['書名'] == b_name]["id"].tolist())
