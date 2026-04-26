@@ -1968,8 +1968,6 @@ try:
                         "詳細內容": st.column_config.TextColumn("📝 日誌詳情", width="large")
                     }
                 )
-    finally:
-        release_connection(conn)
 
 except Exception as e:
     # 🌟 讓 Streamlit 的控制訊號 (煞車/重整) 正常通過，不觸發崩潰警報
