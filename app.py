@@ -1158,6 +1158,156 @@ try:
             
         render_l2_return_checklist(books_df)
 
+    elif menu in ["系統管理", "⚙️ 系統管理"] and session.role == Role.L1.value and str(session.squadron).strip() == '大隊部':
+        st.header("👑 系統管理")
+        @st.dialog("⚙️ 編輯與管理帳號")
+        def edit_user_dialog(user_row):
+            uid = user_row['id']
+            st.markdown(f"**正在編輯：** `{user_row['title']}` ({user_row['login_id']})")
+            col_edit1, col_edit2 = st.columns(2)
+            with col_edit1:
+                new_login = st.text_input("帳號", value=user_row['login_id'], key=f"d_id_{uid}")
+                new_pwd = st.text_input("密碼 (若不修改請留空)", type="password", placeholder="輸入新密碼", key=f"d_pw_{uid}")
+                role_opts = ["L1", "L2"]
+                new_role = st.selectbox("身分權限", role_opts, index=role_opts.index(user_row['role']) if user_row['role'] in role_opts else 0, key=f"d_ro_{uid}")
+            with col_edit2:
+                new_sq = st.text_input("中隊", value=user_row['squadron'], key=f"d_sq_{uid}")
+                new_ti = st.text_input("職務/班隊", value=user_row['title'], key=f"d_ti_{uid}")
+                status_opts = ["啟用", "待審核", "結訓凍結", "停權"]
+                new_st = st.selectbox("狀態", status_opts, index=status_opts.index(user_row['status']) if user_row['status'] in status_opts else 0, key=f"d_st_{uid}")
+            
+            st.markdown("---")
+            col_save, col_del = st.columns(2)
+            with col_save:
+                if st.button("💾 儲存修改", key=f"d_s_{uid}", type="primary", use_container_width=True):
+                    with db_transaction(success_msg="✅ 更新成功！") as c:
+                        if new_pwd: c.execute("""UPDATE users SET login_id=%s, password=%s, role=%s, squadron=%s, title=%s, status=%s WHERE id=%s""", (new_login, generate_password_hash(new_pwd), new_role, new_sq, new_ti, new_st, uid))
+                        else: c.execute("""UPDATE users SET login_id=%s, role=%s, squadron=%s, title=%s, status=%s WHERE id=%s""", (new_login, new_role, new_sq, new_ti, new_st, uid))
+                        write_sys_log(c, "編輯帳號", f"修改 {new_login} ({new_ti}) 權限與狀態")
+                    st.rerun()
+            with col_del:
+                confirm_delete = st.checkbox("⚠️ 勾選以確認刪除", key=f"chk_del_{uid}")
+                if st.button("🗑️ 徹底刪除", key=f"d_d_{uid}", use_container_width=True, disabled=not confirm_delete, type="primary" if confirm_delete else "secondary"):
+                    with db_transaction(success_msg="🗑️ 帳號已永久刪除！") as c:
+                        c.execute("SELECT login_id FROM users WHERE id=%s", (uid,))
+                        user_res = c.fetchone()
+                        if user_res:
+                            login_id = user_res[0]
+                            c.execute("SELECT COUNT(*) FROM books WHERE owner_id=%s AND status != %s", (login_id, BookStatus.IN_STOCK.value))
+                            if c.fetchone()[0] > 0:
+                                st.error("❌ 刪除失敗！該班隊名下還有尚未歸還的準則，系統拒絕刪除！")
+                                session.unlock_db()
+                                st.stop()
+                        c.execute("DELETE FROM users WHERE id=%s", (uid,))
+                    st.rerun()
+        with st.expander("➕ 新增人員", expanded=False):
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                add_role = st.selectbox("身分", ["L1 (幹部)", "L2 (訓員)"], key="add_role")
+                add_sq = st.selectbox("中隊", ["大隊部", "學員一中隊", "學員二中隊", "學生一中隊", "學生二中隊", "聯合中隊①", "聯合中隊②"], key="add_sq")
+            with col2:
+                add_title = st.text_input("職務 / 班隊全銜", placeholder="例如：中隊長 或 煙幕班115-1期", key="add_title")
+                add_id = st.text_input("登入帳號", key="add_id")
+            with col3:
+                add_pw = st.text_input("登入密碼", key="add_pw")
+                add_status = st.selectbox("初始狀態", ["啟用", "待審核", "結訓凍結"], key="add_status")
+            if st.button("🚀 立即建立帳號", type="primary"):
+                if add_title and add_id and add_pw:
+                    r_val = Role.L1.value if "L1" in add_role else Role.L2.value
+                    with db_transaction(success_msg=f"✅ 成功建立 {r_val} 帳號：{add_title}！") as c:
+                        c.execute("SELECT COUNT(*) FROM users WHERE login_id=%s", (add_id,))
+                        if c.fetchone()[0] > 0: 
+                            st.error("❌ 此帳號已被使用！請更換帳號。")
+                            session.unlock_db()
+                            st.stop()
+                        hashed_pw = generate_password_hash(add_pw)
+                        c.execute("INSERT INTO users (login_id, password, role, squadron, title, status) VALUES (%s,%s,%s,%s,%s,%s)", (add_id, hashed_pw, r_val, add_sq, add_title, add_status))
+                        write_sys_log(c, "配發帳號", f"建立新帳號：{add_id} ({add_title})")
+                    st.rerun()
+                else: st.warning("⚠️ 請填寫完整資料 (職務/帳號/密碼不可為空)！")
+        
+        st.markdown("---")
+        with get_auto_conn() as auto_conn:
+            all_users = pd.read_sql_query("SELECT id, login_id, password, role, squadron, title, status FROM users ORDER BY id", auto_conn)
+            
+        squadrons = [s for s in all_users['squadron'].unique() if pd.notna(s) and str(s).strip() != ""]
+        for sq in squadrons:
+            sq_df = all_users[all_users['squadron'] == sq].copy()
+            with st.expander(f"🔽 {sq} (共 {len(sq_df)} 個帳號)"):
+                sq_df['display_group'] = sq_df.apply(lambda x: "訓員" if x['role'] == Role.L2.value else str(x['title']), axis=1)
+                groups = sq_df['display_group'].unique()
+                if len(groups) > 0:
+                    tabs = st.tabs([f"🎖️ {g} ({len(sq_df[sq_df['display_group']==g])}個)" for g in groups])
+                    for i, g in enumerate(groups):
+                        with tabs[i]:
+                            g_df = sq_df[sq_df['display_group'] == g]
+                            for _, row in g_df.iterrows():
+                                uid = row['id']
+                                with st.container(border=True):
+                                    st.markdown(f"""
+                                    <div style="padding: 10px; background-color: rgba(255,255,255,0.05); border-radius: 8px; margin-bottom: 8px;">
+                                        <div style="font-size: 16px; font-weight: bold; margin-bottom: 4px;">👤 {row['title']} <span style="font-size: 12px; color: #a0a0a0;">({row['role']})</span></div>
+                                        <div style="font-size: 14px; color: #d0d0d0;">🆔 帳號: <code>{row['login_id']}</code> &nbsp; | &nbsp; 🔑 密碼: <code>********</code></div>
+                                        <div style="font-size: 14px; margin-top: 4px;">{'🟢' if row['status']==UserStatus.ACTIVE.value else '🔴'} 狀態: <strong>{row['status']}</strong></div>
+                                    </div>
+                                    """, unsafe_allow_html=True)
+                                    if st.button("⚙️ 管理此帳號", key=f"mgr_{uid}", use_container_width=True): edit_user_dialog(row)
+                                                
+        st.subheader("📥 準則同步")
+        if st.button("🔄 更新CSV檔", type="primary", use_container_width=True):
+            if CSV_FILE and os.path.exists(CSV_FILE):
+                try: df_books = pd.read_csv(CSV_FILE, encoding='big5')
+                except UnicodeDecodeError: df_books = pd.read_csv(CSV_FILE, encoding='utf-8')
+                insert_count, skip_count = 0, 0
+                with db_transaction() as c:
+                    for index, row in df_books.iterrows():
+                        if '書刊名稱' in row and pd.notna(row['書刊名稱']):
+                            raw_title = str(row['書刊名稱']).strip()
+                            pub_date = ""
+                            if '出版日期' in row and pd.notna(row['出版日期']):
+                                raw_date = str(row['出版日期']).strip()
+                                if raw_date.endswith('.0'): raw_date = raw_date[:-2]
+                                pub_date = raw_date
+                            book_title = f"{raw_title} [{pub_date}]" if pub_date else raw_title
+                            qty = int(row['數量']) if '數量' in row and pd.notna(row['數量']) else int(row.get('化訓準則館', 1))
+                            for i in range(1, qty + 1):
+                                serial = f"{book_title}-{i:03d}"
+                                c.execute("SELECT id FROM books WHERE serial_number=%s", (serial,))
+                                if not c.fetchone():
+                                    c.execute("INSERT INTO books (book_name, serial_number, owner_id, status) VALUES (%s, %s, %s, %s)", (book_title, serial, BookStatus.IN_STOCK.value, BookStatus.IN_STOCK.value))
+                                    insert_count += 1
+                                else: skip_count += 1
+                    write_sys_log(c, "CSV 擴充同步", f"新增了 {insert_count} 本準則", custom_uid="SYSTEM_L1")
+                st.success(f"✅ 同步完成！成功新增了 {insert_count} 本，略過了 {skip_count} 本。")
+            else: st.error("❌ 系統找不到 CSV 檔案！")
+                
+        st.markdown("---")
+        st.subheader("🛠️ 系統除錯")
+        with st.expander("展開除錯工具"):
+            ghost_id = st.text_input("輸入要退庫的帳號", key="ghost_id_input")
+            if st.button("🚨 將此帳號強制退庫", type="primary"):
+                if ghost_id.strip(): force_return_dialog(ghost_id)
+                else: st.warning("請先輸入帳號！")
+            st.markdown("---")
+            reset_sn = st.text_input("輸入要重置的「真實序號」", placeholder="例如：055510", key="reset_sn_input")
+            if st.button("♻️ 重置為虛擬序號", type="primary"):
+                if reset_sn.strip():
+                    with db_transaction() as c:
+                        c.execute("SELECT id, book_name FROM books WHERE serial_number=%s", (reset_sn.strip(),))
+                        res = c.fetchone()
+                        if res:
+                            bid, bname = res
+                            new_virtual_sn = f"{bname}-RE-{bid}"
+                            c.execute("UPDATE books SET serial_number=%s WHERE id=%s", (new_virtual_sn, bid))
+                            write_sys_log(c, "修復序號", f"將錯誤序號 {reset_sn} 重置為 {new_virtual_sn}")
+                            st.session_state['sys_toast'] = f"✅ 已成功將序號 {reset_sn} 洗白！"
+                        else:
+                            st.error("❌ 系統找不到這個序號，請確認是否輸入正確。")
+                            session.unlock_db()
+                            st.stop()
+                    st.rerun()
+                else: st.warning("請先輸入序號！")
+                    
     elif menu in ["借閱審核", "📤 借閱審核"] and session.role == Role.L1.value:
         st.subheader("📚 借閱準則審核")
         with get_auto_conn() as auto_conn:
