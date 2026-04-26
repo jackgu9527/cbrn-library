@@ -1534,7 +1534,7 @@ try:
                 else:
                     st.success("✨ 目前無可管理的訓員資料。")
 
-            elif menu == "📤 借閱審核":
+        elif menu == "📤 借閱審核":
                 st.subheader("📚 借閱準則審核", help="""
 :blue[**【📚 借閱準則審核】**]  
 :yellow[**【📌 選擇班隊】**]:在`   `內選擇要審核的班隊  
