@@ -89,13 +89,22 @@ if not csv_candidates:
     csv_candidates = glob.glob(os.path.join(BASE_DIR, '*.csv'))
 CSV_FILE = csv_candidates[0] if csv_candidates else None
 
-@st.cache_resource(ttl=3600)
-def get_pool():
-    return pool.ThreadedConnectionPool(1, 10, st.secrets["DATABASE_URL"], connect_timeout=5)
+# ==========================================
+# 🛡️ 4. 柔性防呆煞車系統 (資料庫連線) - 第一階段優化版
+# ==========================================
+@st.cache_resource
+def init_connection_pool():
+    """全域唯一連線池，限制最大連線數 10，保護 Supabase 額度"""
+    try:
+        return psycopg2.pool.ThreadedConnectionPool(1, 10, st.secrets["DATABASE_URL"], connect_timeout=10)
+    except Exception as e:
+        st.error(f"🚨 連線池初始化失敗：{e}")
+        st.stop()
 
-# 🛡️ 4. 柔性防呆煞車系統 (資料庫連線)
+db_pool = init_connection_pool()
+
 def get_db_connection():
-    db_pool = get_pool()
+    """獲取連線 (相容原有寫法，含自動重試機制)"""
     try:
         conn = db_pool.getconn()
     except psycopg2.pool.PoolError:
@@ -117,14 +126,52 @@ def get_db_connection():
     return conn
 
 def release_connection(conn):
+    """安全歸還連線"""
     try:
-        if conn: get_pool().putconn(conn)
+        if conn: db_pool.putconn(conn)
     except Exception as e:
         send_line_notify(f"🚨 【系統告警】連線池異常！原因：{e}") 
         try: conn.close()
         except Exception: pass
 
+# ==========================================
+# 🚀 新增：全域資料快取 (Cache Data)
+# ==========================================
+@st.cache_data(ttl=300)
+def fetch_inventory_data():
+    """全域快取：準則總表讀取 (5 分鐘自動刷新)"""
+    conn = get_db_connection()
+    try:
+        return pd.read_sql_query("SELECT * FROM books ORDER BY book_name", conn)
+    finally:
+        release_connection(conn)
+
+def clear_inventory_cache():
+    """手動清除快取開關 (有異動時呼叫)"""
+    fetch_inventory_data.clear()
+
+# ==========================================
+# 📡 升級：LINE Messaging API 報警
+# ==========================================
+def send_line_notify(message):
+    """將原 Line Notify 升級為 Messaging API Push 模式 (發送至管理群組)"""
+    try:
+        token = st.secrets.get("LINE_CHANNEL_ACCESS_TOKEN")
+        admin_id = st.secrets.get("LINE_GROUP_ID_ADMIN")
+        if not token or not admin_id: return
+        
+        url = "https://api.line.me/v2/bot/message/push"
+        headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+        payload = {
+            "to": admin_id,
+            "messages": [{"type": "text", "text": f"⚠️ 系統告警：\n{message}"}]
+        }
+        requests.post(url, headers=headers, json=payload, timeout=5)
+    except Exception: pass
+
+# ==========================================
 # 🛡️ 4. 柔性防呆煞車系統 (資料庫交易)
+# ==========================================
 @contextmanager
 def db_transaction(success_msg=None, error_prefix="操作失敗"):
     if st.session_state.get('db_locked', False):
@@ -140,6 +187,7 @@ def db_transaction(success_msg=None, error_prefix="操作失敗"):
         conn.commit()
         if success_msg:
             st.session_state['sys_toast'] = success_msg
+            clear_inventory_cache()  # 🌟 核心優化：只要交易成功，立刻清除記憶體舊資料！
     except IntegrityError:
         conn.rollback()
         st.error(f"❌ {error_prefix}：資料衝突或已存在於系統中！")
@@ -148,20 +196,12 @@ def db_transaction(success_msg=None, error_prefix="操作失敗"):
     except Exception as e:
         conn.rollback()
         st.error(f"❌ {error_prefix}：{e}")
+        send_line_notify(f"❌ {error_prefix}：{e}")  # 🌟 核心優化：出錯時自動用 Messaging API 推播！
         st.session_state['db_locked'] = False
         st.stop()
     finally:
         release_connection(conn)
-        st.session_state['db_locked'] = False
-
-def send_line_notify(message):
-    try:
-        token = st.secrets.get("LINE_NOTIFY_TOKEN")
-        if not token: return
-        headers = {"Authorization": f"Bearer {token}"}
-        data = {"message": message}
-        requests.post("https://notify-api.line.me/api/notify", headers=headers, data=data)
-    except Exception: pass 
+        st.session_state['db_locked'] = False 
 
 def apply_shadow_sort(df, has_unit=False):
     if df.empty or 'status' not in df.columns or 'book_name' not in df.columns: return df
