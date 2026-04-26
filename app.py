@@ -635,6 +635,9 @@ target_sq_list = get_target_sq_list(target_sq)
 
 # 🛑 這裡不再執行全域的 conn = get_db_connection()
 try:
+        # ==========================================
+        # 🏠 首頁模塊：精準連線重構版
+        # ==========================================
         if menu in ["首頁", "🏠 首頁"]:
             st.header("🏠 首頁", help="""
 :blue[**【🏠 首頁】**]
@@ -649,22 +652,25 @@ try:
 :green[**【🟢借閱中】**]：顯示準則狀態序號已登載
 :red[**【🔴歸還中】**]：顯示準則狀況已申請歸還 """)
             
+            # --- 幹部 L1 視角 ---
             if st.session_state.role == 'L1':
                 target_sq = st.session_state.get('current_sq', '')
                 st.markdown(f"**{st.session_state.title}** 長官好，以下為【{target_sq}】今日概況：")
                 
-                with conn.cursor() as c:
-                    c.execute("SELECT COUNT(*) FROM users WHERE status='待審核' AND squadron = ANY(%s)", (target_sq_list,))
-                    pending_reg = c.fetchone()[0]
-                    
-                    c.execute("SELECT COUNT(*) FROM borrow_requests br JOIN users u ON br.login_id = u.login_id WHERE br.status='待審核' AND u.squadron = ANY(%s)", (target_sq_list,))
-                    pending_bor = c.fetchone()[0]
-                    
-                    c.execute("SELECT COUNT(*) FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.status='歸還中' AND u.squadron = ANY(%s)", (target_sq_list,))
-                    pending_ret = c.fetchone()[0]
-                    
-                    c.execute("SELECT COUNT(*) FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.status='少領異常' AND u.squadron = ANY(%s)", (target_sq_list,))
-                    pending_abn = c.fetchone()[0]
+                # 精準連線：只在計算 Metric 時開啟
+                with get_db_connection() as conn:
+                    with conn.cursor() as c:
+                        c.execute("SELECT COUNT(*) FROM users WHERE status='待審核' AND squadron = ANY(%s)", (target_sq_list,))
+                        pending_reg = c.fetchone()[0]
+                        
+                        c.execute("SELECT COUNT(*) FROM borrow_requests br JOIN users u ON br.login_id = u.login_id WHERE br.status='待審核' AND u.squadron = ANY(%s)", (target_sq_list,))
+                        pending_bor = c.fetchone()[0]
+                        
+                        c.execute("SELECT COUNT(*) FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.status='歸還中' AND u.squadron = ANY(%s)", (target_sq_list,))
+                        pending_ret = c.fetchone()[0]
+                        
+                        c.execute("SELECT COUNT(*) FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.status='少領異常' AND u.squadron = ANY(%s)", (target_sq_list,))
+                        pending_abn = c.fetchone()[0]
                 
                 c_m1, c_m2, c_m3, c_m4 = st.columns(4)
                 c_m1.metric("📝 待審核帳號", f"{pending_reg} 件")
@@ -672,6 +678,7 @@ try:
                 c_m3.metric("📤 待歸還準則", f"{pending_ret} 件")
                 c_m4.metric("🔴 借閱異常警示", f"{pending_abn} 件")
                 
+            # --- 訓員 L2 視角 ---
             elif st.session_state.role == 'L2':
                 st.markdown(f"**所屬單位：** {st.session_state.squadron} - {st.session_state.title}")
                 if st.session_state.discharge_date:
@@ -685,14 +692,16 @@ try:
                 st.markdown("#### 📦 借閱準則總覽")
                 
                 status_items = []
-                with conn.cursor() as c:
-                    c.execute("SELECT book_name, SUM(quantity) FROM borrow_requests WHERE login_id=%s AND status='待審核' GROUP BY book_name", (st.session_state.login_id,))
-                    for row in c.fetchall():
-                        status_items.append({'book_name': row[0], 'qty': int(row[1]), 'status': '申請中'})
-                        
-                    c.execute("SELECT book_name, status, COUNT(id) FROM books WHERE owner_id=%s AND status IN ('保留待領取', '借閱中', '歸還中') GROUP BY book_name, status", (st.session_state.login_id,))
-                    for row in c.fetchall():
-                        status_items.append({'book_name': row[0], 'qty': int(row[2]), 'status': row[1]})
+                # 精準連線：撈取個人準則清單
+                with get_db_connection() as conn:
+                    with conn.cursor() as c:
+                        c.execute("SELECT book_name, SUM(quantity) FROM borrow_requests WHERE login_id=%s AND status='待審核' GROUP BY book_name", (st.session_state.login_id,))
+                        for row in c.fetchall():
+                            status_items.append({'book_name': row[0], 'qty': int(row[1]), 'status': '申請中'})
+                            
+                        c.execute("SELECT book_name, status, COUNT(id) FROM books WHERE owner_id=%s AND status IN ('保留待領取', '借閱中', '歸還中') GROUP BY book_name, status", (st.session_state.login_id,))
+                        for row in c.fetchall():
+                            status_items.append({'book_name': row[0], 'qty': int(row[2]), 'status': row[1]})
 
                 if not status_items:
                     st.success("✨ 您目前沒有任何準則。")
@@ -703,45 +712,40 @@ try:
                             
             st.markdown("---")
             with st.expander("⚙️ 帳密設置", expanded=False):
-                st.markdown("#### ⚙️ 個人設定", help="""
-:blue[**【⚙️ 個人設定】**]  
-:yellow[**【修改帳號】**]：在`   `內輸入輸入新帳號  
-:yellow[**【修改密碼】**]：在`   `內輸入輸入新密碼  
-:yellow[**【💾 儲存】**]：修改好帳號密碼按下:red[**💾 儲存**]  """)
+                st.markdown("#### ⚙️ 個人設定")
                 col_i, col_p = st.columns(2)
                 with col_i: new_id = st.text_input("修改帳號", value=st.session_state.login_id, key="daily_id")
                 with col_p: new_pwd = st.text_input("修改密碼", type="password", placeholder="若不修改請空白", key="daily_pw")
                 
                 if st.button("💾 儲存", key="save_daily_settings", type="primary"):
-                    with db_transaction() as c:
+                    # 直接呼叫新的 db_transaction 引擎
+                    with db_transaction(success_msg="✅ 設定已儲存！請重新登入...") as c:
                         uid = int(st.session_state.id)
                         final_id = new_id.strip() if new_id.strip() else st.session_state.login_id
-                        final_title = st.session_state.title
                         
                         c.execute("SELECT COUNT(*) FROM users WHERE login_id=%s AND id!=%s", (final_id, uid))
                         if c.fetchone()[0] > 0: 
                             st.error("❌ 此帳號已被使用！")
-                            st.session_state['db_locked'] = False
                             st.stop()
                             
                         if new_pwd:
                             hashed_pwd = generate_password_hash(new_pwd)
                             pw_update = ", password=%s"
-                            params = [final_id, hashed_pwd, final_title, uid]
+                            params = [final_id, hashed_pwd, st.session_state.title, uid]
                         else:
                             pw_update = ""
-                            params = [final_id, final_title, uid]
+                            params = [final_id, st.session_state.title, uid]
                         
                         old_id = st.session_state.login_id
                         c.execute(f"UPDATE users SET login_id=%s{pw_update}, title=%s WHERE id=%s", tuple(params))
                         
                         if old_id != final_id:
+                            # 批量更新關聯資料
                             c.execute("UPDATE books SET owner_id=%s WHERE owner_id=%s", (final_id, old_id))
                             c.execute("UPDATE borrow_requests SET login_id=%s WHERE login_id=%s", (final_id, old_id))
                             c.execute("UPDATE action_logs SET user_id=%s WHERE user_id=%s", (final_id, old_id))
                             c.execute("UPDATE vehicles SET account_id=%s WHERE account_id=%s", (final_id, old_id))
                             
-                    st.success("✅ 設定已儲存！系統將重新載入...")
                     import time; time.sleep(1); st.session_state.clear(); st.rerun()
 
         elif menu in ["車輛登載", "🚗 車輛登載"] and st.session_state.role == 'L1':
