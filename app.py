@@ -1437,82 +1437,102 @@ try:
         elif st.session_state.role == 'L1' and menu in ["👥 帳號管理", "📤 借閱審核", "📥 歸還審核", "💬 回報專區"]:
             target_sq = st.session_state.get('current_sq', '')
             
-            if menu == "👥 帳號管理":
-                st.subheader("👥 帳號管理中心", help="""
+        # ==========================================
+        # 👥 帳號管理中心：精準連線與交易優化版
+        # ==========================================
+        elif menu == "👥 帳號管理":
+            st.subheader("👥 帳號管理中心", help="""
 :blue[**【📝 班隊開通】**]  
 :yellow[**【✅審核開通】**]：開通此帳號的使用權  
 :yellow[**【❌踢退開通】**]：踢退此帳號的使用權  
 :blue[**【👤 帳號管理】**]  
 :yellow[**【📅 結訓日期】**]：點擊更改結訓日期  
 :yellow[**【💾 儲存】**]：按下 :red[**💾 儲存**]  
-:yellow[**【🔑重置密碼為123】**]：  
-按下🔑重置密碼為123重置密碼""")
-                acc_tabs = st.tabs(["📝 班隊開通", "👤 帳號管理"])
-                with acc_tabs[0]:
-                    st.subheader("📝 班隊開通")
-                    reg_df = pd.read_sql_query("SELECT id, squadron as 中隊, title as 班隊, login_id as 帳號, discharge_date as 結訓日 FROM users WHERE status='待審核' AND squadron = ANY(%s)", conn, params=(target_sq_list,))
-                    if not reg_df.empty:
-                        for _, row in reg_df.iterrows():
-                            uid = row['id']
-                            with st.container(border=True):
-                                st.markdown(f"🎓 **班隊全銜：** `{row['班隊']}`  \n📍 **中隊：** `{row['中隊']}`  \n🆔 **申請帳號：** `{row['帳號']}`  \n📅 **結訓日期：** `{row['結訓日']}`")
-                                col1, col2 = st.columns(2)
-                                with col1:
-                                    if st.button("✅ 審核開通", key=f"app_reg_{uid}", type="primary", use_container_width=True):
-                                        with db_transaction(success_msg="✅ 已審核開通！") as c:
-                                            c.execute("UPDATE users SET status='啟用' WHERE id=%s", (uid,))
-                                            # 👇 寫入操作紀錄
-                                            now_time = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S")
-                                            c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", 
-                                                      (now_time, st.session_state.login_id, "開通帳號", f"核准開通：{row['班隊']} ({row['帳號']})"))
-                                        st.rerun()
-                                with col2:
-                                    if st.button("❌ 踢退開通", key=f"rej_reg_{uid}", use_container_width=True):
-                                        delete_account_dialog(uid, row['班隊'])
-                    else: st.success("✨ 目前無待審核的註冊申請。")
+:yellow[**【🔑重置密碼為隨機】**]：按下按鈕後系統將生成隨機密碼供訓員登入。""")
 
-                with acc_tabs[1]:
-                    st.subheader("👤 帳號管理")
-                    l2_users = pd.read_sql_query("SELECT id, squadron as 中隊, title as 班隊, login_id as 訓員帳號, status as 狀態, discharge_date as 結訓日 FROM users WHERE role='L2' AND status IN ('啟用', '結訓凍結') AND squadron = ANY(%s) ORDER BY title", conn, params=(target_sq_list,))
-                    if not l2_users.empty:
-                        for unit_name in l2_users['班隊'].unique():
-                            u_df = l2_users[l2_users['班隊'] == unit_name]
-                            with st.expander(f"🔽 {unit_name}"):
-                                for _, row in u_df.iterrows():
-                                    uid = row['id']
-                                    with st.container(border=True):
-                                        status_emoji = '🟢' if row['狀態'] == '啟用' else '❄️'
-                                        st.markdown(f"🆔 **登入帳號：** `{row['訓員帳號']}`\n\n{status_emoji} **狀態：** `{row['狀態']}`")
-                                        def_date = pd.to_datetime(row['結訓日']).date() if pd.notna(row['結訓日']) else datetime.now(timezone(timedelta(hours=8))).date()
-                                        new_date = st.date_input("📅 結訓日期 (點擊修改)", value=def_date, key=f"d_{uid}")
-                                        col_s, col_r = st.columns(2)
-                                        with col_s:
-                                            if st.button("💾 儲存", key=f"s_{uid}", type="primary", use_container_width=True):
-                                                with db_transaction(success_msg="✅ 結訓日已更新！(若原為凍結已自動復權)") as c:
-                                                    new_status = '啟用' if row['狀態'] == '結訓凍結' else row['狀態']
-                                                    c.execute("UPDATE users SET discharge_date=%s, status=%s WHERE id=%s", (new_date, new_status, uid))
-                                                    # 👇 寫入操作紀錄
-                                                    now_time = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S")
-                                                    c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", 
-                                                              (now_time, st.session_state.login_id, "修改結訓日", f"將 {row['班隊']} ({row['訓員帳號']}) 結訓日延至 {new_date}"))
-                                                st.rerun()
-                                        with col_r:
-                                            if st.button("🔑 隨機重置密碼", key=f"r_{uid}", use_container_width=True):
-                                                # 👇 修改點：改用系統隨機生成 8 位數密碼，避免 123 被暴力破解
-                                                import string
-                                                alphabet = string.ascii_letters + string.digits
-                                                new_raw_pwd = ''.join(secrets.choice(alphabet) for i in range(8))
-        
-                                                with db_transaction() as c:
-                                                    c.execute("UPDATE users SET password=%s WHERE id=%s", (generate_password_hash(new_raw_pwd), uid))
-                                                    # 👇 寫入操作紀錄 (移入 Transaction，確保紀錄正確寫入)
-                                                    now_time = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S")
-                                                    c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", 
-                                                              (now_time, st.session_state.login_id, "重置密碼", f"強制重置 {row['班隊']} ({row['訓員帳號']}) 密碼為隨機密碼"))
-                                                    # 透過日誌紀錄下這次的隨機密碼（或直接在畫面上顯示）
-                                                    st.session_state['sys_toast'] = f"✅ 重置成功！新密碼為：{new_raw_pwd} (請立即告知訓員)"
-                                                st.rerun()
-                    else: st.success("✨ 目前無可管理的訓員資料。")
+            acc_tabs = st.tabs(["📝 班隊開通", "👤 帳號管理"])
+            
+            # --- Tab 1: 班隊開通 (審核待開通帳號) ---
+            with acc_tabs[0]:
+                st.subheader("📝 班隊開通")
+                # 精準讀取：僅撈取待審核名單
+                with get_db_connection() as conn:
+                    reg_df = pd.read_sql_query(
+                        "SELECT id, squadron as 中隊, title as 班隊, login_id as 帳號, discharge_date as 結訓日 FROM users WHERE status='待審核' AND squadron = ANY(%s)", 
+                        conn, params=(target_sq_list,)
+                    )
+                
+                if not reg_df.empty:
+                    for _, row in reg_df.iterrows():
+                        uid = row['id']
+                        with st.container(border=True):
+                            st.markdown(f"🎓 **班隊全銜：** `{row['班隊']}`  \n📍 **中隊：** `{row['中隊']}`  \n🆔 **申請帳號：** `{row['帳號']}`  \n📅 **結訓日期：** `{row['結訓日']}`")
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                if st.button("✅ 審核開通", key=f"app_reg_{uid}", type="primary", use_container_width=True):
+                                    with db_transaction(success_msg="✅ 已審核開通！") as c:
+                                        c.execute("UPDATE users SET status='啟用' WHERE id=%s", (uid,))
+                                        # 寫入操作紀錄
+                                        now_time = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S")
+                                        c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", 
+                                                  (now_time, st.session_state.login_id, "開通帳號", f"核准開通：{row['班隊']} ({row['帳號']})"))
+                                    st.rerun()
+                            with col2:
+                                if st.button("❌ 踢退開通", key=f"rej_reg_{uid}", use_container_width=True):
+                                    # 呼叫已定義的 Dialog 進行刪除
+                                    delete_account_dialog(uid, row['班隊'])
+                else:
+                    st.success("✨ 目前無待審核的註冊申請。")
+
+            # --- Tab 2: 帳號管理 (管理現有訓員) ---
+            with acc_tabs[1]:
+                st.subheader("👤 帳號管理")
+                # 精準讀取：撈取現有訓員名單
+                with get_db_connection() as conn:
+                    l2_users = pd.read_sql_query(
+                        "SELECT id, squadron as 中隊, title as 班隊, login_id as 訓員帳號, status as 狀態, discharge_date as 結訓日 FROM users WHERE role='L2' AND status IN ('啟用', '結訓凍結') AND squadron = ANY(%s) ORDER BY title", 
+                        conn, params=(target_sq_list,)
+                    )
+                
+                if not l2_users.empty:
+                    for unit_name in l2_users['班隊'].unique():
+                        u_df = l2_users[l2_users['班隊'] == unit_name]
+                        with st.expander(f"🔽 {unit_name} (共 {len(u_df)} 個帳號)"):
+                            for _, row in u_df.iterrows():
+                                uid = row['id']
+                                with st.container(border=True):
+                                    status_emoji = '🟢' if row['狀態'] == '啟用' else '❄️'
+                                    st.markdown(f"🆔 **登入帳號：** `{row['訓員帳號']}`\n\n{status_emoji} **狀態：** `{row['狀態']}`")
+                                    
+                                    # 日期處理防呆
+                                    def_date = pd.to_datetime(row['結訓日']).date() if pd.notna(row['結訓日']) else datetime.now(timezone(timedelta(hours=8))).date()
+                                    new_date = st.date_input("📅 結訓日期 (點擊修改)", value=def_date, key=f"date_edit_{uid}")
+                                    
+                                    col_s, col_r = st.columns(2)
+                                    with col_s:
+                                        if st.button("💾 儲存", key=f"save_user_{uid}", type="primary", use_container_width=True):
+                                            with db_transaction(success_msg="✅ 結訓日已更新！") as c:
+                                                # 如果原為凍結狀態，修改日期後自動復權
+                                                new_status = '啟用' if row['狀態'] == '結訓凍結' else row['狀態']
+                                                c.execute("UPDATE users SET discharge_date=%s, status=%s WHERE id=%s", (new_date, new_status, uid))
+                                                now_time = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S")
+                                                c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", 
+                                                          (now_time, st.session_state.login_id, "修改結訓日", f"將 {row['班隊']} ({row['訓員帳號']}) 結訓日延至 {new_date}"))
+                                            st.rerun()
+                                    with col_r:
+                                        if st.button("🔑 重置隨機密碼", key=f"reset_pw_{uid}", use_container_width=True):
+                                            import string
+                                            alphabet = string.ascii_letters + string.digits
+                                            new_raw_pwd = ''.join(secrets.choice(alphabet) for i in range(8))
+                                            
+                                            with db_transaction(success_msg=f"✅ 重置成功！新密碼：{new_raw_pwd}") as c:
+                                                c.execute("UPDATE users SET password=%s WHERE id=%s", (generate_password_hash(new_raw_pwd), uid))
+                                                now_time = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S")
+                                                c.execute("INSERT INTO action_logs (timestamp, user_id, action, details) VALUES (%s, %s, %s, %s)", 
+                                                          (now_time, st.session_state.login_id, "重置密碼", f"強制重置 {row['班隊']} ({row['訓員帳號']}) 密碼"))
+                                            st.rerun()
+                else:
+                    st.success("✨ 目前無可管理的訓員資料。")
 
             elif menu == "📤 借閱審核":
                 st.subheader("📚 借閱準則審核", help="""
