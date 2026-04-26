@@ -459,26 +459,34 @@ except Exception as e:
     st.error(err_msg)
     st.stop()
 
+# ==========================================
+# 🛡️ 第二階段：極速權限管理與側邊欄引擎
+# ==========================================
+
+@st.cache_data
+def get_target_sq_list(target_sq):
+    """利用記憶體快取權限清單，避免每次打字或切換畫面都重新運算"""
+    target_sq = str(target_sq).strip()
+    if target_sq == '大隊部': 
+        return ['大隊部', '聯合中隊①', '聯合中隊②', '學員一中隊', '學員二中隊', '學生一中隊', '學生二中隊']
+    elif target_sq == '聯合中隊①': 
+        return ['聯合中隊①', '學員一中隊', '學生一中隊']
+    elif target_sq == '聯合中隊②': 
+        return ['聯合中隊②', '學員二中隊', '學生二中隊']
+    return [target_sq]
+
 def calculate_permissions(user_sq):
-    user_sq = str(user_sq).strip()
-    if user_sq == '大隊部': return ['大隊部', '聯合中隊①', '聯合中隊②', '學員一中隊', '學員二中隊', '學生一中隊', '學生二中隊']
-    elif user_sq == '聯合中隊①': return ['聯合中隊①', '學員一中隊', '學生一中隊']
-    elif user_sq == '聯合中隊②': return ['聯合中隊②', '學員二中隊', '學生二中隊']
-    return [user_sq]
+    return get_target_sq_list(user_sq)
 
 cookie_manager = stx.CookieManager(key="main_cookie_auth")
+
+# 登出邏輯 (使用精準連線)
 if st.session_state.get('logout_triggered'):
-    # 👇 新增：登出時，連線至資料庫清空 session_token，徹底銷毀憑證
     if 'login_id' in st.session_state:
-        conn = get_db_connection()
-        try:
+        with get_db_connection() as conn:
             with conn.cursor() as c:
                 c.execute("UPDATE users SET session_token = NULL WHERE login_id=%s", (st.session_state.login_id,))
             conn.commit()
-        except Exception:
-            pass
-        finally:
-            release_connection(conn)
             
     try: cookie_manager.delete('sys_user_token')
     except KeyError: pass
@@ -487,25 +495,27 @@ if st.session_state.get('logout_triggered'):
     st.session_state['sys_toast'] = "👋 登出成功！安全連線已銷毀。"
 
 all_cookies = cookie_manager.get_all()
+
+# 自動登入邏輯 (使用精準連線)
 if 'logged_in' not in st.session_state and not st.session_state.get('force_logout'):
     if all_cookies and 'sys_user_token' in all_cookies:
         stored_token = all_cookies['sys_user_token']
-        conn = get_db_connection()
-        try:
-            user_data = pd.read_sql_query("SELECT * FROM users WHERE session_token=%s", conn, params=(str(stored_token),))
-            if not user_data.empty and user_data.iloc[0]['status'] not in ['待審核', '停權', '結訓凍結']:
-                
-                # 👇 新增：維護模式攔截
-                if MAINTENANCE_MODE and user_data.iloc[0]['login_id'] not in ALLOWED_ADMINS:
-                    pass # 維護期間，若不在白名單內，不執行自動登入
-                else:
-                    for col in user_data.columns: st.session_state[col] = user_data.iloc[0][col]
-                    st.session_state['base_sq_list'] = calculate_permissions(user_data.iloc[0]['squadron'])
-                    st.session_state['logged_in'] = True
-                    st.rerun()
-        except Exception: pass
-        finally: release_connection(conn)
+        with get_db_connection() as conn:
+            try:
+                user_data = pd.read_sql_query("SELECT * FROM users WHERE session_token=%s", conn, params=(str(stored_token),))
+                if not user_data.empty and user_data.iloc[0]['status'] not in ['待審核', '停權', '結訓凍結']:
+                    if MAINTENANCE_MODE and user_data.iloc[0]['login_id'] not in ALLOWED_ADMINS:
+                        pass # 維護期間，若不在白名單內，不執行自動登入
+                    else:
+                        for col in user_data.columns: st.session_state[col] = user_data.iloc[0][col]
+                        st.session_state['base_sq_list'] = calculate_permissions(user_data.iloc[0]['squadron'])
+                        st.session_state['logged_in'] = True
+                        st.rerun()
+            except Exception: pass
 
+# ==========================================
+# 🔑 登入與註冊介面
+# ==========================================
 if 'logged_in' not in st.session_state:
     st.markdown("##  大隊部準則管理系統")
     tab1, tab2 = st.tabs([" 系統登入", " 班隊註冊"])
@@ -514,24 +524,18 @@ if 'logged_in' not in st.session_state:
         login_id = st.text_input("帳號 (Login ID)")
         password = st.text_input("密碼 (Password)", type="password")
         if st.button("登入", type="primary"):
-            
-            # 👇 新增：維護模式攔截
             if MAINTENANCE_MODE and login_id not in ALLOWED_ADMINS:
                 st.error("🛠️ 系統目前正在進行維護，暫停登入服務！")
             else:
                 conn = get_db_connection()
                 try:
-                    # 👇 注意：這裡開始的所有程式碼都已經往右推了一格縮排
                     user = pd.read_sql_query("SELECT * FROM users WHERE login_id=%s", conn, params=(login_id,))
                     if not user.empty:
                         db_pass = user.iloc[0]['password']
-                        # 👇 強化判斷邏輯：確保只有在格式正確且密碼正確時才放行
                         is_auth = False
                         if db_pass and (db_pass.startswith('scrypt:') or db_pass.startswith('pbkdf2:')):
-                            try:
-                                is_auth = check_password_hash(db_pass, password)
-                            except ValueError:
-                                is_auth = False
+                            try: is_auth = check_password_hash(db_pass, password)
+                            except ValueError: is_auth = False
                                 
                         if is_auth:
                             if user.iloc[0]['status'] == '待審核': st.warning("⚠️ 您的帳號尚未開通，請等待幹部審核。")
@@ -548,10 +552,8 @@ if 'logged_in' not in st.session_state:
                                 cookie_manager.set('sys_user_token', new_token, expires_at=datetime.now() + timedelta(days=30))
                                 log_action(login_id, "登入", "使用者成功安全登入系統")
                                 import time; time.sleep(0.5); st.rerun()
-                        else:
-                            st.error("❌ 帳號或密碼錯誤")
-                    else:
-                        st.error("❌ 帳號或密碼錯誤")
+                        else: st.error("❌ 帳號或密碼錯誤")
+                    else: st.error("❌ 帳號或密碼錯誤")
                 except Exception as e:
                     conn.rollback()
                     st.error(f"❌ 登入發生錯誤：{e}")
@@ -565,13 +567,12 @@ if 'logged_in' not in st.session_state:
         reg_id = st.text_input("設定登入帳號")
         reg_pw = st.text_input("設定登入密碼", type="password")
         reg_date = st.date_input("結訓日期")
-        # 👇 新增：維護期間禁用註冊按鈕
+        
         if MAINTENANCE_MODE:
             st.warning("🛠️ 系統維護中，暫停開放新帳號註冊！")
             
-        if st.button("送出註冊申請", disabled=MAINTENANCE_MODE): # 加上 disabled 屬性
+        if st.button("送出註冊申請", disabled=MAINTENANCE_MODE):
             if reg_title and reg_id and reg_pw:
-                # 👇 加上這段帳號格式驗證防護網
                 import re
                 if not re.match(r"^[A-Za-z0-9_]+$", reg_id):
                     st.error("❌ 帳號格式錯誤：為了系統安全，帳號只能包含大小寫英文、數字與底線 (_)。")
@@ -590,7 +591,7 @@ if 'logged_in' not in st.session_state:
             else: st.warning("請填寫所有欄位")
     st.stop()
 
-# 👇 新增：攔截已經在系統內操作的一般使用者，強制登出
+# 攔截維護模式
 if st.session_state.get('logged_in'):
     if MAINTENANCE_MODE and st.session_state.get('login_id') not in ALLOWED_ADMINS:
         st.session_state.clear()
@@ -599,27 +600,27 @@ if st.session_state.get('logged_in'):
         time.sleep(1.5)
         st.rerun()
 
-sq_list = st.session_state.get('base_sq_list', [str(st.session_state.squadron).strip()])
+# ==========================================
+# 🎨 側邊欄渲染
+# ==========================================
+sq_list = st.session_state.get('base_sq_list', [str(st.session_state.get('squadron', '')).strip()])
 
 with st.sidebar:
-    # 1. 最上方直接顯示身分與職稱 (移除 ID 與多餘分隔線)
-    st.markdown(f"### {'🧑‍✈️' if st.session_state.role == 'L1' else '🎓'} {st.session_state.title}")
+    st.markdown(f"### {'🧑‍✈️' if st.session_state.get('role') == 'L1' else '🎓'} {st.session_state.get('title', '')}")
     
-    # 2. 緊接著顯示中隊選擇或中隊
-    if st.session_state.role == 'L1':
+    if st.session_state.get('role') == 'L1':
         if len(sq_list) > 1: 
             st.session_state['current_sq'] = st.selectbox("選擇中隊", sq_list, key="global_sq_selector", label_visibility="collapsed")
         else:
             st.session_state['current_sq'] = sq_list[0]
             st.markdown(f"**{st.session_state['current_sq']}**")
         menu_options = ["🏠 首頁", "👥 帳號管理", "📤 借閱審核", "📥 歸還審核", "💬 回報專區", "📊 準則現況", "🚗 車輛登載", "🔍 綜合查詢", "🗂️ 操作紀錄"]
-        if str(st.session_state.squadron).strip() == '大隊部': menu_options.insert(2, "⚙️ 系統管理")
+        if str(st.session_state.get('squadron', '')).strip() == '大隊部': menu_options.insert(2, "⚙️ 系統管理")
     else:
-        st.session_state['current_sq'] = st.session_state.squadron
+        st.session_state['current_sq'] = st.session_state.get('squadron', '')
         st.markdown(f"**{st.session_state['current_sq']}**")
         menu_options = ["🏠 首頁", "📤 借閱準則", "🏷️ 序號登載", "📥 準則歸還", "💬 回報專區", "🔍 綜合查詢"]
         
-    # 3. 功能導覽 (上下加上自訂的細分隔線)
     st.markdown('<hr class="custom-divider">', unsafe_allow_html=True)
     menu = st.radio("隱藏標題", menu_options, label_visibility="collapsed")
     st.markdown('<hr class="custom-divider">', unsafe_allow_html=True)
@@ -628,15 +629,12 @@ with st.sidebar:
         st.session_state['logout_triggered'] = True
         st.rerun()
 
-target_sq = st.session_state.get('current_sq', str(st.session_state.squadron).strip())
-if target_sq == '大隊部': target_sq_list = ['大隊部', '學員一中隊', '學員二中隊', '學生一中隊', '學生二中隊']
-elif target_sq == '聯合中隊①': target_sq_list = ['聯合中隊①', '學員一中隊', '學生一中隊']
-elif target_sq == '聯合中隊②': target_sq_list = ['聯合中隊②', '學員二中隊', '學生二中隊']
-else: target_sq_list = [target_sq]
+# 目標權限快取計算
+target_sq = st.session_state.get('current_sq', str(st.session_state.get('squadron', '')).strip())
+target_sq_list = get_target_sq_list(target_sq)
 
+# 🛑 這裡不再執行全域的 conn = get_db_connection()
 try:
-    conn = get_db_connection()
-    try:
         if menu in ["首頁", "🏠 首頁"]:
             st.header("🏠 首頁", help="""
 :blue[**【🏠 首頁】**]
