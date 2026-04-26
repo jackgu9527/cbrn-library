@@ -15,8 +15,57 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from contextlib import contextmanager
 import time
 import html
+import html
+from enum import Enum # 👈 新增引入 Enum
 
 warnings.filterwarnings('ignore', category=UserWarning, module='pandas')
+# ==========================================
+# 🏗️ 核心架構：狀態字典 (Enums)
+# ==========================================
+class Role(str, Enum):
+    L1 = "L1"
+    L2 = "L2"
+
+class UserStatus(str, Enum):
+    ACTIVE = "啟用"
+    PENDING = "待審核"
+    FROZEN = "結訓凍結"
+    SUSPENDED = "停權"
+
+class BookStatus(str, Enum):
+    IN_STOCK = "在庫"
+    PENDING_PICKUP = "保留待領取"
+    BORROWED = "借閱中"
+    RETURNING = "歸還中"
+    LOST = "遺失待賠"
+    ABNORMAL = "少領異常"
+# ==========================================
+# 🧠 核心架構：Session 狀態管理器
+# ==========================================
+class SessionManager:
+    """封裝所有 st.session_state 操作，具備防呆與 IDE 自動補齊功能"""
+    @property
+    def login_id(self): return st.session_state.get('login_id')
+    
+    @property
+    def role(self): return st.session_state.get('role')
+    
+    @property
+    def title(self): return st.session_state.get('title')
+
+    @property
+    def squadron(self): return st.session_state.get('squadron')
+
+    @property
+    def is_logged_in(self): return st.session_state.get('logged_in', False)
+    
+    @property
+    def db_locked(self): return st.session_state.get('db_locked', False)
+    
+    def lock_db(self): st.session_state['db_locked'] = True
+    def unlock_db(self): st.session_state['db_locked'] = False
+
+session = SessionManager() # 實例化供全站使用
 
 st.set_page_config(page_title="大隊部準則管理系統", layout="wide")
 MAINTENANCE_MODE = False
