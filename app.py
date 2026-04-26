@@ -1408,9 +1408,3 @@ except Exception as e:
     err_full = f"🚨 【系統發生未知崩潰】\n異常位置：全域攔截器\n錯誤內容：{e}"
     send_line_notify(err_full)
     st.error(f"系統發生預期外錯誤，已同步通報管理員。錯誤代碼：{e}")
-1.檢查代碼這三個有沒有問題，如果都沒問題開始拆分，那需要建新的資夾對吧我們一步步來
-2. 導入 Dataclasses/Pydantic：把撈出來的字典轉成標準的 Python 物件（例如 User 物件、Vehicle 物件），加上完整的型別提示 (Type Hinting)，讓代碼更嚴謹。
-主軸三：職責絕對分離與例外處理 (高階架構)
-1. 淨化 db_transaction：把裡面的 st.error() 和 st.stop() 全部砍掉。讓資料庫層只負責「丟出錯誤 (Raise Exception)」，由 UI 層來接住並顯示。這樣這套 DB 引擎未來就能無縫移植到 FastAPI 或定時排程腳本上。
-2. 建立自定義例外體系 (exceptions.py)：自創如 OutOfStockError (庫存不足)、DuplicateRequestError (重複借閱) 等專屬錯誤類別，精準攔截並給予使用者對應的提示。
-3. LINE Notify 日誌監控：加上 logging，確保 LINE API 壞掉時，伺服器終端機仍會留下紀錄，不再靜默失敗。
