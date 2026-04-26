@@ -6,7 +6,7 @@ import glob
 import psycopg2
 from psycopg2 import pool
 from psycopg2 import IntegrityError
-import psycopg2.extras  # 👈 新增：導入字典游標
+import psycopg2.extras
 import warnings
 import extra_streamlit_components as stx  
 import requests  
@@ -17,7 +17,7 @@ from contextlib import contextmanager
 import time
 import html
 from enum import Enum
-from itertools import groupby  # 👈 新增：內建極速分組工具
+from itertools import groupby
 from operator import itemgetter
 
 warnings.filterwarnings('ignore', category=UserWarning, module='pandas')
@@ -47,25 +47,18 @@ class BookStatus(str, Enum):
 # 🧠 核心架構：Session 狀態管理器
 # ==========================================
 class SessionManager:
-    """封裝所有 st.session_state 操作，具備防呆與 IDE 自動補齊功能"""
     @property
     def login_id(self): return st.session_state.get('login_id')
-    
     @property
     def role(self): return st.session_state.get('role')
-    
     @property
     def title(self): return st.session_state.get('title')
-
     @property
     def squadron(self): return st.session_state.get('squadron')
-
     @property
     def discharge_date(self): return st.session_state.get('discharge_date')
-
     @property
     def is_logged_in(self): return st.session_state.get('logged_in', False)
-    
     @property
     def db_locked(self): return st.session_state.get('db_locked', False)
     
@@ -154,7 +147,6 @@ def get_auto_conn():
     finally: release_connection(conn)
 
 def fetch_all_dict(query, params=None):
-    """⚡ 極速資料獲取引擎：直接返回 List[dict]"""
     with get_auto_conn() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as c:
             c.execute(query, params)
@@ -209,18 +201,24 @@ def db_transaction(success_msg=None, error_prefix="操作失敗"):
 # ==========================================
 # 🛠️ 工具函數區
 # ==========================================
+def apply_shadow_sort(df, has_unit=False):
+    """給報表 DataFrame 專用的排序"""
+    if df.empty or 'status' not in df.columns or 'book_name' not in df.columns: return df
+    df = df.copy()
+    w_map = {BookStatus.ABNORMAL.value: 1, '申請中': 2, UserStatus.PENDING.value: 2, BookStatus.PENDING_PICKUP.value: 3, '已審核': 3, BookStatus.BORROWED.value: 4, BookStatus.RETURNING.value: 5, BookStatus.LOST.value: 6}
+    df['w'] = df['status'].map(lambda x: w_map.get(x, 99))
+    group_cols = ['unit', 'book_name'] if has_unit and 'unit' in df.columns else ['book_name']
+    df['min_w'] = df.groupby(group_cols)['w'].transform('min')
+    sort_order = ['unit', 'min_w', 'book_name', 'w'] if has_unit and 'unit' in df.columns else ['min_w', 'book_name', 'w']
+    return df.sort_values(by=sort_order).reset_index(drop=True)
+
 def apply_shadow_sort_dict(data_list, has_unit=False):
-    """針對 Dictionary List 優化的排序工具"""
+    """給 UI Dictionary 專用的排序"""
     if not data_list: return []
     w_map = {BookStatus.ABNORMAL.value: 1, '申請中': 2, UserStatus.PENDING.value: 2, BookStatus.PENDING_PICKUP.value: 3, '已審核': 3, BookStatus.BORROWED.value: 4, BookStatus.RETURNING.value: 5, BookStatus.LOST.value: 6}
-    
-    for item in data_list:
-        item['w'] = w_map.get(item.get('status', ''), 99)
-    
-    if has_unit:
-        data_list.sort(key=lambda x: (x.get('unit', ''), x['book_name'], x['w']))
-    else:
-        data_list.sort(key=lambda x: (x['book_name'], x['w']))
+    for item in data_list: item['w'] = w_map.get(item.get('status', ''), 99)
+    if has_unit: data_list.sort(key=lambda x: (x.get('unit', ''), x['book_name'], x['w']))
+    else: data_list.sort(key=lambda x: (x['book_name'], x['w']))
     return data_list
 
 def write_sys_log(c, action, details, custom_uid=None):
@@ -230,9 +228,9 @@ def write_sys_log(c, action, details, custom_uid=None):
               (now_time, uid, str(action), str(details)))
 
 def draw_status_card(book_name, qty, status, extra_info=""):
-    style_map = {'申請中': ('🔵', '#4da6ff'), UserStatus.PENDING: ('🔵', '#4da6ff'), BookStatus.PENDING_PICKUP: ('🟡', '#ffb84d'), '已審核': ('🟡', '#ffb84d'), BookStatus.BORROWED: ('🟢', '#4CAF50'), BookStatus.RETURNING: ('🔴', '#ff6666'), BookStatus.ABNORMAL: ('🔴', '#ff6666'), BookStatus.LOST: ('⚫', '#808080'), BookStatus.IN_STOCK: ('⚪', '#ffffff')}
+    style_map = {'申請中': ('🔵', '#4da6ff'), UserStatus.PENDING.value: ('🔵', '#4da6ff'), BookStatus.PENDING_PICKUP.value: ('🟡', '#ffb84d'), '已審核': ('🟡', '#ffb84d'), BookStatus.BORROWED.value: ('🟢', '#4CAF50'), BookStatus.RETURNING.value: ('🔴', '#ff6666'), BookStatus.ABNORMAL.value: ('🔴', '#ff6666'), BookStatus.LOST.value: ('⚫', '#808080'), BookStatus.IN_STOCK.value: ('⚪', '#ffffff')}
     icon, color = style_map.get(status, ('🔹', 'gray'))
-    display_status = "已審核" if status == BookStatus.PENDING_PICKUP else status
+    display_status = "已審核" if status == BookStatus.PENDING_PICKUP.value else status
     html_code = f"""
     <div style="border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; padding: 10px; margin-bottom: 10px; background-color: rgba(0,0,0,0.1);">
         <div class="single-line-text" style="font-size: clamp(14px, 4vw, 18px); font-weight: bold; color: {color}; margin-bottom: 4px;">{icon} {book_name}</div>
@@ -443,7 +441,6 @@ all_cookies = cookie_manager.get_all()
 if not session.is_logged_in and not st.session_state.get('force_logout'):
     if all_cookies and 'sys_user_token' in all_cookies:
         stored_token = all_cookies['sys_user_token']
-        # ⚡ 主軸二：登入狀態使用極速字典游標
         user_dicts = fetch_all_dict("SELECT * FROM users WHERE session_token=%s", (str(stored_token),))
         if user_dicts:
             user_data = user_dicts[0]
@@ -553,7 +550,6 @@ try:
         st.header("🏠 首頁", help="首頁資訊總覽")
         if session.role == Role.L1.value:
             st.markdown(f"**{session.title}** 長官好，以下為【{target_sq}】今日概況：")
-            # ⚡ 主軸二優化：4 條查詢合併為 1 條，極大減輕資料庫壓力
             query = """
                 SELECT 
                     (SELECT COUNT(*) FROM users WHERE status=%s AND squadron = ANY(%s)) as p_reg,
@@ -583,7 +579,6 @@ try:
                 else: st.info(f"📅 距離結訓日還有：{days_left} 天")
 
             st.markdown("#### 📦 借閱準則總覽")
-            # ⚡ 主軸二優化：使用字典清單，捨棄厚重 DataFrame
             status_items = []
             with get_auto_conn() as auto_conn:
                 with auto_conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as c:
@@ -630,7 +625,6 @@ try:
         acc_tabs = st.tabs(["📝 班隊開通", "👤 帳號管理"])
         with acc_tabs[0]:
             st.subheader("📝 班隊開通")
-            # ⚡ 主軸二優化：使用字典清單，捨棄 df.iterrows
             reg_users = fetch_all_dict("SELECT id, squadron as 中隊, title as 班隊, login_id as 帳號, discharge_date as 結訓日 FROM users WHERE status=%s AND squadron = ANY(%s)", (UserStatus.PENDING.value, target_sq_list))
             if reg_users:
                 for row in reg_users:
@@ -650,7 +644,6 @@ try:
 
         with acc_tabs[1]:
             st.subheader("👤 帳號管理")
-            # ⚡ 主軸二優化：使用字典清單與 groupby
             l2_users = fetch_all_dict("SELECT id, squadron as 中隊, title as 班隊, login_id as 訓員帳號, status as 狀態, discharge_date as 結訓日 FROM users WHERE role=%s AND status IN (%s, %s) AND squadron = ANY(%s) ORDER BY title", (Role.L2.value, UserStatus.ACTIVE.value, UserStatus.FROZEN.value, target_sq_list))
             
             @st.fragment
@@ -718,7 +711,6 @@ try:
 
         st.markdown("---")
         st.subheader("📋 管制車輛清單")
-        # ⚡ 主軸二優化：使用字典清單
         if 'vehicle_data' not in st.session_state or st.session_state.get('refresh_vehicles', True):
             st.session_state['vehicle_data'] = fetch_all_dict("SELECT id, squadron as 中隊, unit_title as 班隊, plate_number as 車號, parking_lot as 停車場, parking_number as 停車號碼, discharge_date as 結訓日期 FROM vehicles ORDER BY id DESC")
             st.session_state['refresh_vehicles'] = False 
@@ -1169,7 +1161,7 @@ try:
     elif menu in ["借閱審核", "📤 借閱審核"] and session.role == Role.L1.value:
         st.subheader("📚 借閱準則審核")
         with get_auto_conn() as auto_conn:
-            req_df = pd.read_sql_query("SELECT br.id as 單號, br.login_id as 帳號, u.title as 班隊, br.book_name as 書名, br.quantity as 申請數量, u.status as 帳號狀態 FROM borrow_requests br JOIN users u ON br.login_id = u.login_id WHERE br.status=%s AND u.squadron = ANY(%s) ORDER BY u.title, br.book_name, br.id", auto_conn, params=(UserStatus.PENDING.value, target_sq_list))
+            req_df = pd.read_sql_query(f"SELECT br.id as 單號, br.login_id as 帳號, u.title as 班隊, br.book_name as 書名, br.quantity as 申請數量, u.status as 帳號狀態 FROM borrow_requests br JOIN users u ON br.login_id = u.login_id WHERE br.status='{UserStatus.PENDING.value}' AND u.squadron = ANY(%s) ORDER BY u.title, br.book_name, br.id", auto_conn, params=(target_sq_list,))
             if not req_df.empty:
                 owned_counts = []
                 with auto_conn.cursor() as c:
@@ -1214,7 +1206,7 @@ try:
         st.markdown("---")
         st.subheader("🔴 借閱異常警示")
         with get_auto_conn() as auto_conn:
-            abnormal_df = pd.read_sql_query("SELECT b.id, u.title as 班隊, b.book_name as 書名, b.serial_number as 序號 FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.status=%s AND u.squadron = ANY(%s) ORDER BY u.title, b.book_name", auto_conn, params=(BookStatus.ABNORMAL.value, target_sq_list))
+            abnormal_df = pd.read_sql_query(f"SELECT b.id, u.title as 班隊, b.book_name as 書名, b.serial_number as 序號 FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.status='{BookStatus.ABNORMAL.value}' AND u.squadron = ANY(%s) ORDER BY u.title, b.book_name", auto_conn, params=(target_sq_list,))
         
         @st.fragment
         def render_l1_abnormal(df_abn):
@@ -1248,7 +1240,7 @@ try:
                                 resolved_books_summary.append(f"{unit_name}的{b_name}({len(curr_ids)}本)")
                     if resolved_ids:
                         with db_transaction(success_msg=f"✅ 成功結案！已釋放 {len(resolved_ids)} 本準則。") as c:
-                            c.execute("UPDATE books SET status=%s, owner_id=%s WHERE id = ANY(%s)", (BookStatus.IN_STOCK.value, BookStatus.IN_STOCK.value, resolved_ids))
+                            c.execute(f"UPDATE books SET status='{BookStatus.IN_STOCK.value}', owner_id='{BookStatus.IN_STOCK.value}' WHERE id = ANY(%s)", (resolved_ids,))
                             summary_str = "、".join(resolved_books_summary)
                             write_sys_log(c, "異常處理", f"將少領的 {len(resolved_ids)} 本額度釋放回庫房：{summary_str}")
                         st.rerun(scope="app")
@@ -1259,8 +1251,8 @@ try:
     elif menu in ["歸還審核", "📥 歸還審核"] and session.role == Role.L1.value:
         st.subheader("📥 準則歸還與遺失")
         with get_auto_conn() as auto_conn:
-            return_df = pd.read_sql_query("SELECT b.id, u.title as 班隊, b.book_name as 書名, b.serial_number as 序號, b.owner_id, u.status as 帳號狀態 FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.status=%s AND u.squadron = ANY(%s) ORDER BY u.title, b.book_name", auto_conn, params=(BookStatus.RETURNING.value, target_sq_list))
-            lost_df = pd.read_sql_query("SELECT b.id, u.title as 班隊, b.book_name as 書名, b.serial_number as 序號 FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.status=%s AND u.squadron = ANY(%s) ORDER BY u.title, b.book_name", auto_conn, params=(BookStatus.LOST.value, target_sq_list))
+            return_df = pd.read_sql_query(f"SELECT b.id, u.title as 班隊, b.book_name as 書名, b.serial_number as 序號, b.owner_id, u.status as 帳號狀態 FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.status='{BookStatus.RETURNING.value}' AND u.squadron = ANY(%s) ORDER BY u.title, b.book_name", auto_conn, params=(target_sq_list,))
+            lost_df = pd.read_sql_query(f"SELECT b.id, u.title as 班隊, b.book_name as 書名, b.serial_number as 序號 FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.status='{BookStatus.LOST.value}' AND u.squadron = ANY(%s) ORDER BY u.title, b.book_name", auto_conn, params=(target_sq_list,))
             
         ret_tabs = st.tabs(["📥 準則歸還清單", "🚨 遺失準則"])
         
@@ -1416,3 +1408,9 @@ except Exception as e:
     err_full = f"🚨 【系統發生未知崩潰】\n異常位置：全域攔截器\n錯誤內容：{e}"
     send_line_notify(err_full)
     st.error(f"系統發生預期外錯誤，已同步通報管理員。錯誤代碼：{e}")
+1.檢查代碼這三個有沒有問題，如果都沒問題開始拆分，那需要建新的資夾對吧我們一步步來
+2. 導入 Dataclasses/Pydantic：把撈出來的字典轉成標準的 Python 物件（例如 User 物件、Vehicle 物件），加上完整的型別提示 (Type Hinting)，讓代碼更嚴謹。
+主軸三：職責絕對分離與例外處理 (高階架構)
+1. 淨化 db_transaction：把裡面的 st.error() 和 st.stop() 全部砍掉。讓資料庫層只負責「丟出錯誤 (Raise Exception)」，由 UI 層來接住並顯示。這樣這套 DB 引擎未來就能無縫移植到 FastAPI 或定時排程腳本上。
+2. 建立自定義例外體系 (exceptions.py)：自創如 OutOfStockError (庫存不足)、DuplicateRequestError (重複借閱) 等專屬錯誤類別，精準攔截並給予使用者對應的提示。
+3. LINE Notify 日誌監控：加上 logging，確保 LINE API 壞掉時，伺服器終端機仍會留下紀錄，不再靜默失敗。
