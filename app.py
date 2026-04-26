@@ -244,19 +244,31 @@ def admin_borrow_approve_dialog(selected_unit, final_decisions, df_records):
             for r in df_records:
                 req_id, req_login, req_book, req_qty, req_unit = r['單號'], r['帳號'], r['書名'], r['申請數量'], r['班隊']
                 requested_approve_qty = final_decisions.get(req_id, 0)
-                c.execute("SELECT id FROM books WHERE book_name=%s AND status='在庫' LIMIT %s", (req_book, requested_approve_qty))
-                approved_ids = [b[0] for b in c.fetchall()]
-                actual_approve_qty = len(approved_ids) 
                 
-                if approved_ids: c.execute(f"UPDATE books SET status='保留待領取', owner_id=%s WHERE id IN ({','.join(map(str, approved_ids))})", (req_login,))
-                if actual_approve_qty > 0:
-                    c.execute("UPDATE borrow_requests SET status=%s WHERE id=%s", (f'已審核(實發{actual_approve_qty}本)', req_id))
-                    write_sys_log(c, "審核借閱", f"審核 {req_book} {actual_approve_qty} 本給 {req_unit}")
-                    if requested_approve_qty > actual_approve_qty: shortage_flag = True
+                if requested_approve_qty > 0:
+                    # 🛡️ 神級防護 1：使用 FOR UPDATE SKIP LOCKED 解決併發競爭 (Race Condition)
+                    c.execute("SELECT id FROM books WHERE book_name=%s AND status='在庫' LIMIT %s FOR UPDATE SKIP LOCKED", (req_book, requested_approve_qty))
+                    approved_ids = [b[0] for b in c.fetchall()]
+                    actual_approve_qty = len(approved_ids) 
+                    
+                    if approved_ids: 
+                        # 🛡️ 神級防護 2：使用 ANY(%s) 阻絕 SQL 注入風險
+                        c.execute("UPDATE books SET status='保留待領取', owner_id=%s WHERE id = ANY(%s)", (req_login, approved_ids))
+                        
+                    if actual_approve_qty > 0:
+                        c.execute("UPDATE borrow_requests SET status=%s WHERE id=%s", (f'已審核(實發{actual_approve_qty}本)', req_id))
+                        write_sys_log(c, "審核借閱", f"審核 {req_book} {actual_approve_qty} 本給 {req_unit}")
+                        if requested_approve_qty > actual_approve_qty: shortage_flag = True
+                    else:
+                        # 庫存不足，被其他幹部先搶空了
+                        c.execute("UPDATE borrow_requests SET status='已踢退(無庫存或退件)' WHERE id=%s", (req_id,))
+                        write_sys_log(c, "踢退借閱", f"庫存不足，自動踢退 {req_unit} 的 {req_book} 申請")
                 else:
+                    # 幹部手動選擇踢退
                     c.execute("UPDATE borrow_requests SET status='已踢退(無庫存或退件)' WHERE id=%s", (req_id,))
                     write_sys_log(c, "踢退借閱", f"全數踢退 {req_unit} 的 {req_book} 申請")
-            if shortage_flag: st.session_state['sys_toast'] = "⚠️ 審核完成！(部分準則因庫存不足，已自動下修實發數量)"
+                    
+            if shortage_flag: st.session_state['sys_toast'] = "⚠️ 審核完成！(部分準則因庫存被其他幹部先行核發，已自動下修實發數量)"
         st.rerun()
 
 @st.dialog("📥 歸還點收確認")
@@ -267,22 +279,26 @@ def admin_return_approve_dialog(selected_unit, to_stock_ids, to_borrowed_ids, to
         has_action = False
         with db_transaction(success_msg="✅ 點收審核完成！") as c:
             if to_stock_ids:
+                # 🛡️ 神級防護 2：使用 ANY(%s) 阻絕 SQL 注入風險
                 c.execute("SELECT u.title, b.book_name, COUNT(b.id) FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.id = ANY(%s) GROUP BY u.title, b.book_name", (to_stock_ids,))
                 for u_name, b_name, qty in c.fetchall(): write_sys_log(c, "準則歸還", f"收訖 {u_name} 歸還 {b_name} {qty} 本")
                 c.execute("UPDATE books SET status='在庫', owner_id='在庫' WHERE id = ANY(%s)", (to_stock_ids,))
                 has_action = True
+                
             if to_borrowed_ids:
-                id_list_str = ','.join(map(str, to_borrowed_ids))
-                c.execute(f"SELECT u.title, b.book_name, COUNT(b.id) FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.id IN ({id_list_str}) GROUP BY u.title, b.book_name")
+                # 🛡️ 神級防護 2：使用 ANY(%s) 阻絕 SQL 注入風險
+                c.execute("SELECT u.title, b.book_name, COUNT(b.id) FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.id = ANY(%s) GROUP BY u.title, b.book_name", (to_borrowed_ids,))
                 for u_name, b_name, qty in c.fetchall(): write_sys_log(c, "歸還踢退", f"未收訖 {u_name} 的 {b_name} {qty} 本，退回借閱狀態")
-                c.execute(f"UPDATE books SET status='借閱中' WHERE id IN ({id_list_str})")
+                c.execute("UPDATE books SET status='借閱中' WHERE id = ANY(%s)", (to_borrowed_ids,))
                 has_action = True
+                
             if to_lost_ids:
-                id_list_str = ','.join(map(str, to_lost_ids))
-                c.execute(f"SELECT u.title, b.book_name, COUNT(b.id) FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.id IN ({id_list_str}) GROUP BY u.title, b.book_name")
+                # 🛡️ 神級防護 2：使用 ANY(%s) 阻絕 SQL 注入風險
+                c.execute("SELECT u.title, b.book_name, COUNT(b.id) FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.id = ANY(%s) GROUP BY u.title, b.book_name", (to_lost_ids,))
                 for u_name, b_name, qty in c.fetchall(): write_sys_log(c, "歸還轉遺失", f"未收訖(凍結帳號) {u_name} 的 {b_name} {qty} 本，轉列遺失")
-                c.execute(f"UPDATE books SET status='遺失待賠' WHERE id IN ({id_list_str})")
+                c.execute("UPDATE books SET status='遺失待賠' WHERE id = ANY(%s)", (to_lost_ids,))
                 has_action = True
+                
             if not has_action: 
                 st.session_state['db_locked'] = False; st.stop()
         st.rerun()
@@ -1048,23 +1064,26 @@ try:
                 )
                 is_processing = st.session_state.get('db_locked', False)
                 
-                # 👇 將按鈕加上 disabled 條件
+                # 👇 將按鈕加上 disabled 條件 (您上一輪已經加好的防呆)
                 if st.button("📤 送出目前的勾選項目", type="primary", use_container_width=True, disabled=(not has_selected or is_processing)):
                     selected_ids = []
                     for b_name in df_books['書名'].unique():
                         if category_checks[b_name]: selected_ids.extend(df_books[df_books['書名'] == b_name]["id"].tolist())
                         elif edited_return_dfs[b_name] is not None:
                             edited_df = edited_return_dfs[b_name]
-                            selected_ids.extend(edited_df[edited_df["勾選歸還"] == True]["id"].tolist())
+                            selected_ids.extend(edited_df[edited_df["勾選歸還"] == True]["id"].tolist())                    
                     if selected_ids:
-                        selected_ids = list(set(selected_ids)) 
-                        id_list_str = ','.join(map(str, selected_ids))
+                        selected_ids = list(set(selected_ids))                         
                         with db_transaction(success_msg=f"✅ 已送出 {len(selected_ids)} 本歸還申請！等待幹部審核。") as c:
-                            c.execute(f"SELECT book_name, COUNT(id) FROM books WHERE id IN ({id_list_str}) GROUP BY book_name")
+                            # 🛡️ 神級防護：全面改用 ANY(%s) 傳入 List，效能更好且 100% 防注入
+                            c.execute("SELECT book_name, COUNT(id) FROM books WHERE id = ANY(%s) GROUP BY book_name", (selected_ids,))
                             return_details = c.fetchall()
-                            c.execute(f"UPDATE books SET status='歸還中' WHERE id IN ({id_list_str})")
+                            
+                            c.execute("UPDATE books SET status='歸還中' WHERE id = ANY(%s)", (selected_ids,))
+                            
                             for b_name, qty in return_details:
                                 write_sys_log(c, "申請歸還", f"申請 {st.session_state.title} 歸還 {b_name} {qty} 本")
+                        
                         if 'l2_partial_return_memory' in st.session_state: del st.session_state['l2_partial_return_memory']
                         st.rerun(scope="app")
                     else: st.warning("⚠️ 您尚未勾選任何需要歸還的準則！")
