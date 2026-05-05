@@ -173,14 +173,6 @@ def fetch_all_dict(query, params=None):
             c.execute(query, params)
             return c.fetchall()
 
-@st.cache_data(ttl=300)
-def fetch_inventory_data():
-    with get_auto_conn() as conn:
-        return pd.read_sql_query("SELECT * FROM books ORDER BY book_name", conn)
-
-def clear_inventory_cache():
-    fetch_inventory_data.clear()
-
 def send_line_notify(message):
     try:
         token = st.secrets.get("LINE_CHANNEL_ACCESS_TOKEN")
@@ -203,7 +195,6 @@ def db_transaction(success_msg=None, error_prefix="操作失敗"):
         conn.commit()
         if success_msg:
             st.session_state['sys_toast'] = success_msg
-            clear_inventory_cache() 
     except IntegrityError:
         conn.rollback()
         st.error(f"❌ {error_prefix}：資料衝突或已存在於系統中！")
@@ -1064,20 +1055,26 @@ try:
                     dyn_selected_units = st.multiselect("📌 請加入要回報的班隊 (可多選)：", avail_units, key="dyn_units")
                     
                 if st.button("🚀 生成準則借還訊息", type="primary"):
-                    params = [target_sq_list]; unit_filter = ""
+                    # 💡 完美修復：確保每個 Query 的 params 陣列數量與 SQL 中的 %s 絕對一致
+                    params_req = [target_sq_list, UserStatus.PENDING.value]
+                    params_res = [target_sq_list, BookStatus.PENDING_PICKUP.value]
+                    params_ret = [target_sq_list, BookStatus.RETURNING.value]
+                    unit_filter = ""
+                    
                     if dyn_mode == "班隊" and dyn_selected_units:
                         unit_filter = " AND u.title = ANY(%s)"
-                        params.append(dyn_selected_units)
+                        params_req.append(dyn_selected_units)
+                        params_res.append(dyn_selected_units)
+                        params_ret.append(dyn_selected_units)
                     
-                    query_req = f"SELECT u.title as unit, br.book_name, SUM(br.quantity) as qty FROM borrow_requests br JOIN users u ON br.login_id = u.login_id WHERE u.squadron = ANY(%s) AND br.status='待審核'{unit_filter} GROUP BY u.title, br.book_name"
-                    query_res = f"SELECT u.title as unit, b.book_name, COUNT(b.id) as qty FROM books b JOIN users u ON b.owner_id = u.login_id WHERE u.squadron = ANY(%s) AND b.status='保留待領取'{unit_filter} GROUP BY u.title, b.book_name"
-                    query_ret = f"SELECT u.title as unit, b.book_name, COUNT(b.id) as qty FROM books b JOIN users u ON b.owner_id = u.login_id WHERE u.squadron = ANY(%s) AND b.status='歸還中'{unit_filter} GROUP BY u.title, b.book_name ORDER BY b.book_name"
+                    query_req = f"SELECT u.title as unit, br.book_name, SUM(br.quantity) as qty FROM borrow_requests br JOIN users u ON br.login_id = u.login_id WHERE u.squadron = ANY(%s) AND br.status=%s{unit_filter} GROUP BY u.title, br.book_name"
+                    query_res = f"SELECT u.title as unit, b.book_name, COUNT(b.id) as qty FROM books b JOIN users u ON b.owner_id = u.login_id WHERE u.squadron = ANY(%s) AND b.status=%s{unit_filter} GROUP BY u.title, b.book_name"
+                    query_ret = f"SELECT u.title as unit, b.book_name, COUNT(b.id) as qty FROM books b JOIN users u ON b.owner_id = u.login_id WHERE u.squadron = ANY(%s) AND b.status=%s{unit_filter} GROUP BY u.title, b.book_name ORDER BY b.book_name"
                     
                     with get_auto_conn() as auto_conn:
-                        # 💡 完美修復：拔除多餘參數，SQL 裡只有 1~2 個 %s，所以只丟 params
-                        req_df = pd.read_sql_query(query_req, auto_conn, params=tuple(params))
-                        res_df = pd.read_sql_query(query_res, auto_conn, params=tuple(params))
-                        ret_df = pd.read_sql_query(query_ret, auto_conn, params=tuple(params))
+                        req_df = pd.read_sql_query(query_req, auto_conn, params=tuple(params_req))
+                        res_df = pd.read_sql_query(query_res, auto_auto_conn, params=tuple(params_res))
+                        ret_df = pd.read_sql_query(query_ret, auto_auto_conn, params=tuple(params_ret))
                     
                     now = datetime.now(timezone(timedelta(hours=8)))
                     tw_wd = ["一", "二", "三", "四", "五", "六", "日"][now.weekday()]
@@ -1123,22 +1120,27 @@ try:
                     inv_selected_units = st.multiselect("📌 請加入要回報的班隊 (可多選)：", avail_units, key="inv_units2")
                     
                 if st.button("🚀 生成準則清點訊息", type="primary"):
-                    params = [target_sq_list]; unit_filter = ""
+                    unit_filter = ""
+                    # 💡 完美修復：將 IN 的字串拼貼改為安全的 ANY(%s)
+                    query_params = [
+                        [BookStatus.PENDING_PICKUP.value, BookStatus.ABNORMAL.value], 
+                        target_sq_list, 
+                        [BookStatus.BORROWED.value, BookStatus.RETURNING.value, BookStatus.LOST.value, BookStatus.ABNORMAL.value]
+                    ]
                     if inv_mode == "班隊" and inv_selected_units:
                         unit_filter = " AND u.title = ANY(%s)"
-                        params.append(inv_selected_units)
+                        query_params.append(inv_selected_units)
                         
                     query = f"""
                     SELECT u.title as unit, b.book_name, b.status, COUNT(b.id) as qty,
-                           STRING_AGG(CASE WHEN b.status IN ('{BookStatus.PENDING_PICKUP.value}', '{BookStatus.ABNORMAL.value}') THEN NULL WHEN b.serial_number LIKE b.book_name || '-%%' THEN NULL ELSE b.serial_number END, ', ') as serials
+                           STRING_AGG(CASE WHEN b.status = ANY(%s) THEN NULL WHEN b.serial_number LIKE b.book_name || '-%%' THEN NULL ELSE b.serial_number END, ', ') as serials
                     FROM books b JOIN users u ON b.owner_id = u.login_id 
-                    WHERE u.squadron = ANY(%s) AND b.status IN ('{BookStatus.BORROWED.value}', '{BookStatus.RETURNING.value}', '{BookStatus.LOST.value}', '{BookStatus.ABNORMAL.value}') {unit_filter} 
+                    WHERE u.squadron = ANY(%s) AND b.status = ANY(%s) {unit_filter} 
                     GROUP BY u.title, b.book_name, b.status
                     """
                     
                     with get_auto_conn() as auto_conn:
-                        # 💡 完美修復：刪除暴走的多餘參數，嚴格對齊 %s
-                        inv_df = pd.read_sql_query(query, auto_conn, params=tuple(params))
+                        inv_df = pd.read_sql_query(query, auto_conn, params=tuple(query_params))
                     
                     now = datetime.now(timezone(timedelta(hours=8)))
                     tw_wd = ["一", "二", "三", "四", "五", "六", "日"][now.weekday()]
@@ -1571,7 +1573,8 @@ try:
         if st.button("搜尋") and keyword:
             with get_auto_conn() as auto_conn:
                 if "書名" in search_type:
-                    res = pd.read_sql_query("SELECT u.squadron as 中隊, u.title as 班隊, COUNT(b.id) as 數量 FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.book_name LIKE %s GROUP BY u.squadron, u.title", auto_conn, params=(f"%{keyword}%",))
+                    query = "SELECT u.squadron as 中隊, u.title as 班隊, b.book_name as 書名, COUNT(b.id) as 數量 FROM books b JOIN users u ON b.owner_id = u.login_id WHERE b.book_name LIKE %s GROUP BY u.squadron, u.title, b.book_name"
+                    res = pd.read_sql_query(query, auto_conn, params=(f"%{keyword}%",))
                     st.dataframe(res, hide_index=True, use_container_width=True)
                 elif "序號" in search_type:
                     query = f"""
