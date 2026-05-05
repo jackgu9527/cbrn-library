@@ -1073,8 +1073,8 @@ try:
                     
                     with get_auto_conn() as auto_conn:
                         req_df = pd.read_sql_query(query_req, auto_conn, params=tuple(params_req))
-                        res_df = pd.read_sql_query(query_res, auto_auto_conn, params=tuple(params_res))
-                        ret_df = pd.read_sql_query(query_ret, auto_auto_conn, params=tuple(params_ret))
+                        res_df = pd.read_sql_query(query_res, auto_conn, params=tuple(params_res))
+                        ret_df = pd.read_sql_query(query_ret, auto_conn, params=tuple(params_ret))
                     
                     now = datetime.now(timezone(timedelta(hours=8)))
                     tw_wd = ["一", "二", "三", "四", "五", "六", "日"][now.weekday()]
