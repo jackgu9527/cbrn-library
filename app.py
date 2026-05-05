@@ -1069,14 +1069,15 @@ try:
                         unit_filter = " AND u.title = ANY(%s)"
                         params.append(dyn_selected_units)
                     
-                    query_req = f"SELECT u.title as unit, br.book_name, SUM(br.quantity) as qty FROM borrow_requests br JOIN users u ON br.login_id = u.login_id WHERE u.squadron = ANY(%s) AND br.status='{UserStatus.PENDING.value}'{unit_filter} GROUP BY u.title, br.book_name"
-                    query_res = f"SELECT u.title as unit, b.book_name, COUNT(b.id) as qty FROM books b JOIN users u ON b.owner_id = u.login_id WHERE u.squadron = ANY(%s) AND b.status='{BookStatus.PENDING_PICKUP.value}'{unit_filter} GROUP BY u.title, b.book_name"
-                    query_ret = f"SELECT u.title as unit, b.book_name, COUNT(b.id) as qty FROM books b JOIN users u ON b.owner_id = u.login_id WHERE u.squadron = ANY(%s) AND b.status='{BookStatus.RETURNING.value}'{unit_filter} GROUP BY u.title, b.book_name ORDER BY b.book_name"
+                    query_req = f"SELECT u.title as unit, br.book_name, SUM(br.quantity) as qty FROM borrow_requests br JOIN users u ON br.login_id = u.login_id WHERE u.squadron = ANY(%s) AND br.status='待審核'{unit_filter} GROUP BY u.title, br.book_name"
+                    query_res = f"SELECT u.title as unit, b.book_name, COUNT(b.id) as qty FROM books b JOIN users u ON b.owner_id = u.login_id WHERE u.squadron = ANY(%s) AND b.status='保留待領取'{unit_filter} GROUP BY u.title, b.book_name"
+                    query_ret = f"SELECT u.title as unit, b.book_name, COUNT(b.id) as qty FROM books b JOIN users u ON b.owner_id = u.login_id WHERE u.squadron = ANY(%s) AND b.status='歸還中'{unit_filter} GROUP BY u.title, b.book_name ORDER BY b.book_name"
                     
                     with get_auto_conn() as auto_conn:
-                        req_df = pd.read_sql_query(query_req, auto_conn, params=tuple([*params[:-1], UserStatus.PENDING.value, params[-1]] if len(params)>1 else [params[0], UserStatus.PENDING.value]))
-                        res_df = pd.read_sql_query(query_res, auto_conn, params=tuple([*params[:-1], BookStatus.PENDING_PICKUP.value, params[-1]] if len(params)>1 else [params[0], BookStatus.PENDING_PICKUP.value]))
-                        ret_df = pd.read_sql_query(query_ret, auto_conn, params=tuple([*params[:-1], BookStatus.RETURNING.value, params[-1]] if len(params)>1 else [params[0], BookStatus.RETURNING.value]))
+                        # 💡 完美修復：拔除多餘參數，SQL 裡只有 1~2 個 %s，所以只丟 params
+                        req_df = pd.read_sql_query(query_req, auto_conn, params=tuple(params))
+                        res_df = pd.read_sql_query(query_res, auto_conn, params=tuple(params))
+                        ret_df = pd.read_sql_query(query_ret, auto_conn, params=tuple(params))
                     
                     now = datetime.now(timezone(timedelta(hours=8)))
                     tw_wd = ["一", "二", "三", "四", "五", "六", "日"][now.weekday()]
@@ -1134,11 +1135,10 @@ try:
                     WHERE u.squadron = ANY(%s) AND b.status IN ('{BookStatus.BORROWED.value}', '{BookStatus.RETURNING.value}', '{BookStatus.LOST.value}', '{BookStatus.ABNORMAL.value}') {unit_filter} 
                     GROUP BY u.title, b.book_name, b.status
                     """
-                    query_params = (BookStatus.PENDING_PICKUP.value, BookStatus.ABNORMAL.value, params[0], BookStatus.BORROWED.value, BookStatus.RETURNING.value, BookStatus.LOST.value, BookStatus.ABNORMAL.value)
-                    if len(params) > 1: query_params = query_params + (params[1],)
                     
                     with get_auto_conn() as auto_conn:
-                        inv_df = pd.read_sql_query(query, auto_conn, params=query_params)
+                        # 💡 完美修復：刪除暴走的多餘參數，嚴格對齊 %s
+                        inv_df = pd.read_sql_query(query, auto_conn, params=tuple(params))
                     
                     now = datetime.now(timezone(timedelta(hours=8)))
                     tw_wd = ["一", "二", "三", "四", "五", "六", "日"][now.weekday()]
